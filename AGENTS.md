@@ -34,7 +34,7 @@ Ask before installing anything or spending money, never print keys, and never tr
 
 ## Skills
 
-Skills live in `skills/maintainer/` (for building this project) and `skills/runtime/` (used by agents inside the app). None exist yet. Each one must be original and tested before it merges; see `skills/README.md`. Load the skill that matches your task before starting, and improve it when you learn something.
+Skills live in `skills/maintainer/` (for building this project) and `skills/runtime/` (used by agents inside the app). None exist yet. `skills/plugin/` holds the skills the Local Studio plugin ships; today that is smoothstone, synced from baney75/smoothstone with `scripts/sync-smoothstone.sh`, never edited by hand. Each one must be original and tested before it merges; see `skills/README.md`. Load the skill that matches your task before starting, and improve it when you learn something.
 
 ## Testing and honesty
 
@@ -53,6 +53,9 @@ Gantrel ships on two channels, Stable and Dev (no nightly). See `RELEASES.md`. N
 - `CONTRIBUTING.md`: how to contribute, including design work and coauthorship
 - `TESTING.md`, `SUPPORTED.md`, `BENCHMARKS.md`: accuracy, honest scope and model benchmarks
 - `skills/maintainer/`, `skills/runtime/`: original, tested skills
+- `plugin.toml`, `skills/plugin/`: the Local Studio plugin package and its skills
+- `scripts/sync-smoothstone.sh`: re-imports the smoothstone skill at a pinned commit
+- `tests/plugin/check.sh`: checks the plugin manifest and that the sync is clean
 - `models/`: per-model instructions
 - `tests/`, `benchmarks/results/`: tests and published results
 - `design/`: design exports and notes

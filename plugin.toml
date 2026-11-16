@@ -1,0 +1,10 @@
+id = "gantrel"
+version = "0.1.0"
+description = "Gantrel for Local Studio: design 3D printable parts with a local model and the smoothstone recipes"
+skills = "skills/plugin"
+capabilities = []
+
+[[commands]]
+name = "gantrel"
+description = "Make a printable part"
+skill = "smoothstone"

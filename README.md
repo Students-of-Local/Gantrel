@@ -4,9 +4,41 @@ Gantrel is an open-source 3D design studio built for local AI. It starts with 3D
 
 Think of it as precise parametric CAD (like FreeCAD), freeform modeling and rendering (like Blender), and an agent coding workspace (like t3code) combined into one easy app that a local model can drive.
 
-**First version (planned for Feb 1, 2027):** an agent workspace for 3D printing, built on a fork of [t3code](https://github.com/pingdotgg/t3code). A local model writes and edits parts using existing CAD libraries (build123d or CadQuery), shows them in a 3D viewer with an inline mode, slices them, and sends them to your printer after you confirm. It connects to Klipper, OctoPrint, PrusaLink, Bambu Lab and Creality printers and their cameras, and agents can write adapters for other devices with your approval. Product design comes next. Architecture and building design are out of scope for now.
+**First version (planned for Feb 1, 2027):** an agent workspace for 3D printing. Gantrel ships first as a plugin for [Local Studio](https://github.com/baney75/local-studio), the native local-LLM workspace, and the first piece of that plugin works today (see [Local Studio plugin](#local-studio-plugin)). A local model writes and edits parts using existing CAD libraries (build123d or CadQuery), shows them in a 3D viewer with an inline mode, slices them, and sends them to your printer after you confirm. It connects to Klipper, OctoPrint, PrusaLink, Bambu Lab and Creality printers and their cameras, and agents can write adapters for other devices with your approval. Product design comes next. Architecture and building design are out of scope for now.
 
 The parts and licenses are in [docs/STACK.md](docs/STACK.md), and the printer plan and safety rules are in [docs/PRINTERS.md](docs/PRINTERS.md).
+
+## Local Studio plugin
+
+This repo is a Local Studio plugin package: `plugin.toml` at the root, with its skills in `skills/plugin/`. It adds one command to the Local Studio palette:
+
+- `/gantrel <what you want>` makes a printable part. It loads the [smoothstone](https://github.com/baney75/smoothstone) skill, and the model drives the `stone` CLI: it picks a tested parametric recipe, sets its sizes, builds the STL with OpenSCAD and checks that it prints (watertight, one piece, flat base, walls, overhangs, size). The part lands in `stone-job/` in your project.
+
+Install:
+
+1. Install `stone` (it needs uv and OpenSCAD 2026 or newer):
+
+   ```
+   uv tool install git+https://github.com/baney75/smoothstone@fefce749a2e03f7094307da3347d868593dc63e8
+   ```
+
+2. Put this repo in Local Studio's plugins folder. The folder must be named `gantrel`, the plugin id, so clone or copy it there; a symlink to a folder with another name fails the id check:
+
+   ```
+   git clone https://github.com/baney75/Gantrel ~/.local-studio/plugins/gantrel
+   ```
+
+3. Check it: `local-studio plugin validate ~/.local-studio/plugins/gantrel` prints `OK gantrel 0.1.0 (1 skills, 0 prompts, 1 commands)`.
+
+If `stone` is missing, `/gantrel` tells you the install command and stops; it never installs anything itself.
+
+The skill is a copy of smoothstone's `skill/` folder, pinned to one commit. Pinned smoothstone: `fefce749a2e03f7094307da3347d868593dc63e8` ([skill at that commit](https://github.com/baney75/smoothstone/tree/fefce749a2e03f7094307da3347d868593dc63e8/skill)). Gantrel adds one step to it: check for `stone` first. To move to another smoothstone commit:
+
+```
+scripts/sync-smoothstone.sh <sha or ref>
+```
+
+It re-imports the skill, adds the same step again, and writes the commit to `skills/plugin/smoothstone/UPSTREAM` and this README. `tests/plugin/check.sh` checks the manifest and that a sync at the pinned commit changes nothing.
 
 ## What it will do (planned)
 
@@ -40,7 +72,7 @@ Agents setting this up for someone: start at [docs/agents.md](docs/agents.md) or
 
 ## Status
 
-Early planning. Contributions and ideas are welcome.
+Early planning. The Local Studio plugin above is the first piece that runs; [SUPPORTED.md](SUPPORTED.md) lists what is proven. Contributions and ideas are welcome.
 
 ## License
 
