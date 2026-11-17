@@ -1,10 +1,34 @@
-# Printers and cameras (planned)
+# Printers and cameras
 
-Nothing here is built yet. This is the plan for how Gantrel will connect to 3D printers and their cameras.
+This is the plan for how Gantrel connects to 3D printers and their cameras. The first part exists as
+a command line tool, `gantrel-printer` (source in `src/gantrel_printer/`, skill in
+`skills/plugin/printers/`). The status below says exactly what has been checked and how.
+
+## Status (2026-11-16)
+
+"Fake" means the shared contract suite in `tests/printers/` passed against a fake printer that speaks
+the protocol over real sockets. "Real" means a check against a real printer.
+
+| Part | Status |
+|---|---|
+| Moonraker adapter | Fake: full contract. Real: read-only status on a Creality K2 at 192.168.50.4:7125. Upload, start, pause, resume, cancel and emergency stop are not tried on real hardware. |
+| Creality stock firmware adapter | Fake: full contract. Real: read-only status over WebSocket 9999 on the same K2 (model code F021, DWIN 1.1.7.0). Only state 0 (idle) was seen live; the other state codes and every write command are unverified. |
+| OctoPrint adapter | Fake only. |
+| PrusaLink adapter | Fake only. API key auth only; HTTP digest auth is not built. PrusaLink has no network emergency stop, so estop stops the job and says so. |
+| Bambu Lab LAN adapter | Fake only (MQTT over TLS, implicit FTPS, port 6000 camera). Pair needs --model, pins each service's TLS certificate (MQTT, FTPS, camera) over connections that send no credentials, and every later connection must show its pinned certificate before the access code is sent; an unpinned service is refused. No network emergency stop: estop sends stop and heaters off and says so. X1-series RTSPS video needs a go2rtc relay. |
+| Cameras | Snapshot from the printer's API, or from `--camera-url` for cameras the API doesn't list. Real: K2 chamber camera through the fleet's go2rtc relay (the K2 serves only WebRTC on port 8000). |
+| Discovery | Known-port scan and probes checked against every fake and the real K2. mDNS and Bambu SSDP listening are built but not tested. |
+| Slicing | Profiles for 14 printer models and 5 materials, with rules (ABS and ASA need an enclosure, TPU needs direct drive; `--force` overrides with a printed warning). Slicing needs the printer's --model; it is never guessed from the printer type. PrusaSlicer arguments are checked against a fake slicer. No real slicer has run yet; the OrcaSlicer path is untested. |
+| Starting and resuming | Not in the tools. `gantrel-printer` has no start, resume or confirm command; after an upload it prints the file name on the printer and where a person starts it (the printer's screen, Mainsail or Fluidd, OctoPrint, PrusaLink, Bambu Studio, Creality Print). Files on the printer are named with their content hash and uploads never replace a file. The adapters' start and resume calls and the confirm-token code stay for the app's confirm sheet; nothing calls them yet, and only the fake-printer tests exercise them. |
+
+Gantrel's tools never start or resume a print; a person does that on the printer. This is not a
+security boundary: an agent with shell access can still reach a printer's API directly (for example
+with curl), and a terminal prompt can be faked. The real boundary comes later, with Local Studio
+capability grants and the in-app confirm sheet.
 
 ## Safety rules
 
-- **A print never starts without the user's confirm.** Start needs a confirm token that only the confirm sheet in the app creates, showing the file, printer, material and time. No agent, skill or script can start a print.
+- **A print never starts without the user's confirm.** Start needs a confirm token that only the confirm sheet in the app creates, showing the file, printer, material and time. Until that sheet exists, Gantrel's tools have no start or resume at all: the person starts and resumes prints on the printer itself.
 - **Emergency stop is always visible and works in one press.**
 - **Pause needs no confirm**, because it's a safe action. Resume does.
 - Pairing credentials live in the OS keychain, never in plain config.
@@ -27,6 +51,10 @@ Every printer type is an adapter that implements the same calls: discover, pair,
 | Elegoo (SDCP) and others | Written by an agent from the device's docs (see below) | Reference: [elegoo-homeassistant](https://github.com/danielcherubini/elegoo-homeassistant) (MIT). | 9 |
 
 Slicing uses the OrcaSlicer, PrusaSlicer or Creality Print command line (all AGPL-3.0, run as separate programs).
+
+`gantrel-printer` links only permissive libraries: websockets (BSD-3-Clause), paho-mqtt (EPL-2.0 or
+EDL-1.0; used under EDL-1.0, which is BSD-3-Clause), python-zeroconf (LGPL-2.1) and keyring (MIT).
+HTTP uses the Python standard library, which keeps certifi (MPL-2.0) out.
 
 ## Cameras
 
