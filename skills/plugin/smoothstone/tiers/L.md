@@ -11,7 +11,7 @@ You can drive stone like tier M, and you can also write new recipes when no reci
 - Check every new recipe with: uv run python tools/sheet.py <name>, and look at the previews.
 - In Gantrel the plugin ships this card, not the recipe sources. To write a new recipe, clone
   them first (`git clone https://github.com/baney75/smoothstone && git -C smoothstone checkout fefce749a2e03f7094307da3347d868593dc63e8`),
-  write the recipe in `smoothstone/recipes/`, run the sheet from that folder, and build with
+  write the recipe in `smoothstone/recipes/`, run `uv run python tools/sheet.py <name>` from the `smoothstone` folder (not `recipes/`), and build with
   `STONE_RECIPES=$PWD/smoothstone/recipes stone build`.
 - Stop when the request's part is built with stone and the build says Part ready.
 
