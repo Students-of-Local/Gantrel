@@ -12,7 +12,7 @@ The parts and licenses are in [docs/STACK.md](docs/STACK.md), and the printer pl
 
 This repo is a Local Studio plugin package: `plugin.toml` at the root, with its skills in `skills/plugin/`. It adds one command to the Local Studio palette:
 
-- `/gantrel <what you want>` makes a printable part. It loads the [smoothstone](https://github.com/baney75/smoothstone) skill, and the model drives the `stone` CLI: it picks a tested parametric recipe, sets its sizes, builds the STL with OpenSCAD and checks that it prints (watertight, one piece, flat base, walls, overhangs, size). The part lands in `stone-job/` in your project.
+- `/gantrel <what you want>` asks the model for a printable part. It loads the [smoothstone](https://github.com/baney75/smoothstone) skill, so the model drives the `stone` CLI: it picks a tested parametric recipe, sets its sizes, builds the STL with OpenSCAD and checks that it prints (watertight, one piece, flat base, walls, overhangs, size). The part lands in `stone-job/` in your project. No local model has finished a part through `/gantrel` yet; see [SUPPORTED.md](SUPPORTED.md) for what is proven.
 
 Install:
 
@@ -30,7 +30,7 @@ Install:
 
 3. Check it: `local-studio plugin validate ~/.local-studio/plugins/gantrel` prints `OK gantrel 0.1.0 (1 skills, 0 prompts, 1 commands)`.
 
-If `stone` is missing, `/gantrel` tells you the install command and stops; it never installs anything itself.
+The skill's first step tells the model to check for `stone` and, if it is missing, give you the install command and stop without installing anything. That step is not tested yet on a machine without `stone`.
 
 The skill is a copy of smoothstone's `skill/` folder, pinned to one commit. Pinned smoothstone: `fefce749a2e03f7094307da3347d868593dc63e8` ([skill at that commit](https://github.com/baney75/smoothstone/tree/fefce749a2e03f7094307da3347d868593dc63e8/skill)). Gantrel adds one step to it: check for `stone` first. To move to another smoothstone commit:
 
