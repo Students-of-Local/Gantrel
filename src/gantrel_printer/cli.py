@@ -2,6 +2,9 @@
 
 Every human-readable reply ends with one line, NEXT: <what to do>, so a small model that loses its
 context can carry on. --json replies carry the same hint in a "next" field.
+
+This CLI never starts or resumes a print. A person does that on the printer's screen or its own web
+UI. Pause, cancel and emergency stop are here because they only make a printer safer.
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ from pathlib import Path
 from . import __version__, config, discover as disc, safety, slicing
 from .adapters import ADAPTERS, adapter_class, build
 from .errors import ConfigError, PrinterError, SafetyError
-from .model import READY_STATES, fmt_duration
+from .model import fmt_duration
 
 EXIT_ERROR, EXIT_USAGE, EXIT_SAFETY = 1, 2, 3
 REMOTE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(gcode|bgcode|3mf)$")
@@ -40,7 +43,8 @@ def open_printer(name: str):
 
 
 def save_if_changed(adapter, before: dict) -> None:
-    if adapter.cfg.extra != before or adapter.cfg.tls_fingerprint != before.get("__fp"):
+    extra_before = {k: v for k, v in before.items() if k != "__fp"}
+    if adapter.cfg.extra != extra_before or adapter.cfg.tls_fingerprint != before.get("__fp"):
         printers = config.load_all()
         printers[adapter.cfg.name] = adapter.cfg
         config.save_all(printers)
@@ -71,9 +75,17 @@ def cmd_pair(args):
     cls = adapter_class(args.type)
     if args.name in config.load_all():
         raise SafetyError(f"a printer named {args.name!r} is already paired",
-                          f"Run gantrel-printer unpair {args.name} first; that also voids its jobs and confirms")
+                          f"Run gantrel-printer unpair {args.name} first; that also removes its job records")
     if args.model and args.model not in slicing.PRINTERS:
         raise ConfigError(f"unknown model {args.model!r}", f"Use one of: {', '.join(slicing.PRINTERS)}")
+    if args.type == "bambu":
+        bambu_models = [k for k in slicing.PRINTERS if k.startswith("bambu-")]
+        if args.model not in bambu_models:
+            # Bed size, enclosure and camera all differ by model; never guess (an A1 mini is not a P1S).
+            raise ConfigError("Bambu Lab printers need --model", f"Use one of: {', '.join(bambu_models)}")
+        if args.no_check:
+            raise ConfigError("Bambu Lab pairing must reach the printer to pin its TLS certificates",
+                              "Pair without --no-check while the printer is on")
     cfg = config.PrinterConfig(name=args.name, type=args.type, host=args.host, port=args.port, model=args.model or "",
                                camera_url=args.camera_url or "", stream_url=args.stream_url or "",
                                serial=args.serial or "")
@@ -111,7 +123,7 @@ def cmd_unpair(args):
     config.save_all(printers)
     config.delete_secret(args.name)
     safety.forget_printer(args.name)
-    out(args, {"unpaired": args.name}, f"Removed {args.name}, its saved secret, its jobs and any confirms.",
+    out(args, {"unpaired": args.name}, f"Removed {args.name}, its saved secret and its job records.",
         "gantrel-printer list")
 
 
@@ -134,7 +146,7 @@ def cmd_status(args):
         elif st.state in ("printing",):
             nxt = f"Watch it: gantrel-printer camera {args.name} --out cam.jpg. If it looks wrong: gantrel-printer pause {args.name}"
         elif st.state == "paused":
-            nxt = f"To resume, ask the person to run in their terminal: gantrel-printer confirm --resume {args.name}"
+            nxt = f"Tell the person it is paused. Only they can resume it: {adapter.start_by_hand()}"
         else:
             nxt = f"Check the bed is clear: gantrel-printer camera {args.name} --out cam.jpg"
         out(args, st.to_dict(), st.summary(), nxt)
@@ -167,7 +179,7 @@ def cmd_slice(args):
     cfg = config.get(args.printer)
     printer = slicing.profile_for(cfg.model, cfg.type)
     mat = slicing.material(args.material)
-    s = slicing.settings(printer, mat, args.quality)
+    s = slicing.settings(printer, mat, args.quality, force=args.force)
     model = Path(args.model).expanduser().resolve()
     if not model.is_file():
         raise ConfigError(f"no file at {model}")
@@ -198,7 +210,7 @@ def cmd_upload(args):
                           "Use letters, digits, . _ - only, ending in .gcode, .bgcode or .3mf")
     material = ""
     if args.material:
-        material = slicing.material(args.material).name  # only known materials reach the confirm sheet
+        material = slicing.material(args.material).name  # only known materials are stored
     sha = safety.file_sha256(path)
     stem, ext = requested.rsplit(".", 1)
     # The name on the printer carries the content hash, so a different file never shares a job's name.
@@ -222,81 +234,24 @@ def cmd_upload(args):
                          identity=adapter.identity(), sha256=sha, remote_size=info.get("size"),
                          remote_mtime=info.get("mtime"))
     out(args, {"job": job.id, "printer": args.printer, "remote_name": remote_name, "sha256": job.sha256},
-        f"Uploaded {path.name} to {args.printer} as {remote_name}. Job {job.id}. It has NOT started.",
-        f"Tell the person to run this in their own terminal (agents can't): gantrel-printer confirm {job.id}")
+        f"Uploaded {path.name} to {args.printer} as {remote_name}. It has NOT started.\n"
+        f"Only a person starts a print. {adapter.start_by_hand(remote_name)}",
+        f"Tell the person the file name ({remote_name}) and where to start it, then wait for them to say it "
+        f"started. Then watch it: gantrel-printer camera {args.printer} --out cam.jpg")
 
 
 def cmd_jobs(args):
     jobs = safety.list_jobs()
     text = "\n".join(f"{j.id}  {j.printer:10} {j.remote_name}  {j.material or '?'}  {fmt_duration(j.est_seconds)}"
                      for j in jobs)
-    out(args, {"jobs": [j.__dict__ for j in jobs]}, text or "No jobs.", "gantrel-printer confirm <job> (person only)")
-
-
-def cmd_confirm(args):
-    safety.require_tty()  # refuse before any network call when there is no person at a terminal
-    if args.resume:
-        adapter = open_printer(args.resume)
-        st = adapter.status()
-        if st.state != "paused":
-            raise SafetyError(f"{args.resume} is {st.state}, not paused, so there is nothing to resume")
-        from .adapters.base import resume_job_id
-
-        lines = [f"Resume print on {args.resume} ({adapter.label}, {adapter.cfg.host})", f"Now: {st.summary()}",
-                 "Look at the printer first: is the print still stuck to the bed and the nozzle clear?"]
-        token = safety.confirm_interactive("resume", args.resume, resume_job_id(st), "", adapter.identity(), lines)
-        cmd = f"gantrel-printer resume {args.resume} --token {token}"
-    else:
-        job = safety.load_job(args.job)
-        safety.verify_job_file(job)
-        adapter = open_printer(job.printer)
-        if job.identity != adapter.identity():
-            raise SafetyError(f"printer name {job.printer} now points at a different printer than this job",
-                              "Upload and confirm again")
-        adapter.check_remote(job)
-        try:
-            now = adapter.status()
-            now_text = now.summary()
-            if now.state not in READY_STATES:
-                raise SafetyError(f"{job.printer} is {now.state}, so it can't start a new print")
-        except PrinterError as err:
-            if isinstance(err, SafetyError):
-                raise
-            now_text = f"could not read status ({err.message})"
-        lines = [
-            f"Printer:  {job.printer} ({adapter.label}, {adapter.cfg.host}:{adapter.port})",
-            f"File:     {job.remote_name}  (from {job.local_path})",
-            f"SHA-256:  {job.sha256[:16]}...",
-            f"Material: {job.material or 'unknown'}",
-            f"Time:     {fmt_duration(job.est_seconds)} estimated",
-            f"Now:      {now_text}",
-            "Look at the printer: the bed must be empty and clean, and the right filament loaded.",
-        ]
-        token = safety.confirm_interactive("start", job.printer, job.id, job.sha256, adapter.identity(), lines)
-        cmd = f"gantrel-printer start {job.id} --token {token}"
-    print(f"Confirmed. This token works once, for {safety.TOKEN_TTL_S // 60} minutes:")
-    print(cmd)
-    print("NEXT: run that command now, or paste it to your assistant to run")
-
-
-def cmd_start(args):
-    job = safety.load_job(args.job)
-    adapter = open_printer(job.printer)
-    adapter.start(job, args.token)
-    out(args, {"started": job.id, "printer": job.printer}, f"Started {job.remote_name} on {job.printer}.",
-        f"Watch the first layer: gantrel-printer camera {job.printer} --out cam.jpg")
-
-
-def cmd_resume(args):
-    adapter = open_printer(args.name)
-    adapter.resume(args.token)
-    out(args, {"resumed": args.name}, f"Resumed {args.name}.", f"gantrel-printer status {args.name}")
+    out(args, {"jobs": [j.__dict__ for j in jobs]}, text or "No uploads.",
+        "A person starts a print on the printer itself; see the upload message")
 
 
 def cmd_pause(args):
     open_printer(args.name).pause()
     out(args, {"paused": args.name}, f"Paused {args.name}.",
-        f"Tell the person it is paused. Resuming needs them to run: gantrel-printer confirm --resume {args.name}")
+        f"Tell the person it is paused. Only they can resume it: {open_printer(args.name).start_by_hand()}")
 
 
 def cmd_cancel(args):
@@ -360,24 +315,15 @@ def parser() -> argparse.ArgumentParser:
     sp.add_argument("--quality", default="standard", choices=list(slicing.QUALITY))
     sp.add_argument("--slicer", choices=list(slicing.SLICERS))
     sp.add_argument("--out-dir")
+    sp.add_argument("--force", action="store_true",
+                    help="slice a material the printer can't print well (ABS on an open printer); prints a warning")
     sp = add("upload", cmd_upload, "send a file to the printer (never starts it)")
     sp.add_argument("file")
     sp.add_argument("--printer", required=True)
     sp.add_argument("--material")
     sp.add_argument("--name", help="file name on the printer")
-    add("jobs", cmd_jobs, "uploaded jobs")
-    sp = add("confirm", cmd_confirm, "PERSON ONLY: confirm a job at a terminal and get a one-time start command",
-             json_=False)
-    g = sp.add_mutually_exclusive_group(required=True)
-    g.add_argument("job", nargs="?")
-    g.add_argument("--resume", metavar="PRINTER")
-    sp = add("start", cmd_start, "start a confirmed job (needs the token from confirm)")
-    sp.add_argument("job")
-    sp.add_argument("--token")
-    sp = add("resume", cmd_resume, "resume a paused print (needs the token from confirm --resume)")
-    sp.add_argument("name")
-    sp.add_argument("--token")
-    for name, fn, h in (("pause", cmd_pause, "pause now (safe, no confirm)"),
+    add("jobs", cmd_jobs, "files uploaded with this tool")
+    for name, fn, h in (("pause", cmd_pause, "pause now (safe)"),
                         ("cancel", cmd_cancel, "cancel the current print"),
                         ("estop", cmd_estop, "emergency stop")):
         sp = add(name, fn, h)

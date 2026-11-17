@@ -8,11 +8,12 @@ description: Find, check, slice for and watch the person's 3D printers and their
 ## Goal
 
 The model is sliced with the right profile for this printer and material, the file is on the
-printer, and the person has the exact confirm command to start it. Or: the person sees their
-printer's status and a camera image. Or: a print that looks wrong is paused or stopped.
+printer, and the person knows its name and where to start it. Or: the person sees their printer's
+status and a camera image. Or: a print that looks wrong is paused or stopped.
 
-You can never start or resume a print. Only the person can, by running a confirm command in
-their own terminal. Your shell has no terminal, so confirm refuses if you run it.
+You never start or resume a print. gantrel-printer has no command for it on purpose. The person
+starts and resumes prints on the printer's screen or its own web page. Never try to start one
+another way, such as calling the printer's API with curl.
 
 ## Inputs
 
@@ -48,7 +49,8 @@ For "how is my printer" or "show me the camera", do steps 1, 2, 4 and 5 only, th
    - Run `gantrel-printer discover`. It lists printers it finds.
    - If nothing is found, ask the person for the printer's IP address.
    - Run `gantrel-printer profiles` and pick the --model that matches the printer.
-   - Run `gantrel-printer pair <name> --type <type> --host <ip> --model <model>`.
+   - Run `gantrel-printer pair <name> --type <type> --host <ip> --model <model>`. Always give
+     --model; Bambu Lab printers require it and slicing needs it.
    - If it needs an API key or access code, ask the person to run the pair command
      themselves in a terminal so they type the secret. Never ask them to paste a secret to you.
 4. Run `gantrel-printer status <name>`. The state must be idle, complete or cancelled to start a
@@ -62,28 +64,24 @@ For "how is my printer" or "show me the camera", do steps 1, 2, 4 and 5 only, th
    If it says no slicer is installed, pass on its install advice and stop.
 7. Upload: `gantrel-printer upload <file.gcode> --printer <name> --material <material>`.
    It prints a job id. Uploading never starts the print.
-8. Give the person the exact line from NEXT, for example:
-
-       gantrel-printer confirm 1a2b3c4d
-
-   Tell them: "Run this in your own terminal. It shows the file, printer, material and time,
-   and asks you to type the printer's name. Then it gives you a start command." Do not run it.
-9. If the person pastes back a `gantrel-printer start <job> --token <token>` line, you may run it
-   exactly as given. Never make up, change or reuse a token.
-10. Watch: run `gantrel-printer status <name>` and `gantrel-printer camera <name> --out cam.jpg`
+8. Tell the person the file name the upload printed and where to start it (the upload message
+   says: the printer's screen, its web page, or the maker's app). Ask them to check the bed is
+   empty first. Then wait until they say it started.
+9. Watch: run `gantrel-printer status <name>` and `gantrel-printer camera <name> --out cam.jpg`
     every few minutes during the first layers.
-11. Trouble you see on the camera: follow "First: is this a stop request?" above. Tell the person
-    what you did and what you saw. To resume, they run `gantrel-printer confirm --resume <name>`
-    themselves.
+10. Trouble you see on the camera: follow "First: is this a stop request?" above. Tell the person
+    what you did and what you saw. Only they can resume it, on the printer.
 
 ## Rules and checks
 
 - Every gantrel-printer reply ends with `NEXT: <what to do>`. Follow it. If you lose track,
   run `gantrel-printer status <name>` and read its NEXT line.
-- Never run `confirm`. Never try to get around a REFUSED message. Tell the person what it said.
+- Never start or resume a print, by any route. Never try to get around a REFUSED message. Tell
+  the person what it said.
 - Never print, log or repeat an API key, access code or token you were not handed for a command.
 - Check status and the camera before every print, and the camera again after the first layer.
-- ABS and ASA need an enclosed printer; TPU needs direct drive. If slice refuses, say why.
+- ABS and ASA need an enclosed printer; TPU needs direct drive. If slice refuses, say why. Use
+  --force only when the person asks for it after hearing the warning.
 - If a command prints ERROR, tell the person the error and its advice in plain words.
 
 ## Sources

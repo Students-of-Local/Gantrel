@@ -187,3 +187,58 @@ def test_stale_gcode_is_never_reported_as_the_slice(k2, tmp_path, monkeypatch, c
     err = capsys.readouterr().err
     assert "wrote no output file" in err or "expected exactly 1" in err
     assert (tmp_path / "cube_creality-k2_PLA.gcode").read_text() == "; old slice of something else\n"
+
+
+def test_slicing_needs_a_known_model_and_never_guesses(tmp_path, capsys):
+    """sol-sol-F7: no model means unknown bed and enclosure, so slicing refuses."""
+    with pytest.raises(ConfigError, match="no model set"):
+        slicing.profile_for("", "bambu")
+    assert cli.main(["pair", "plain", "--type", "moonraker", "--host", "127.0.0.1", "--no-check"]) == 0
+    stl = tmp_path / "cube.stl"
+    stl.write_bytes(STL)
+    capsys.readouterr()
+    assert cli.main(["slice", str(stl), "--printer", "plain"]) == cli.EXIT_ERROR
+    assert "no model set" in capsys.readouterr().err
+
+
+def test_bambu_pair_requires_a_bambu_model(capsys):
+    assert cli.main(["pair", "a1", "--type", "bambu", "--host", "127.0.0.1", "--serial", "X",
+                     "--secret-stdin"]) == cli.EXIT_ERROR
+    assert "need --model" in capsys.readouterr().err
+    assert cli.main(["pair", "a1", "--type", "bambu", "--host", "127.0.0.1", "--serial", "X",
+                     "--model", "creality-k2", "--secret-stdin"]) == cli.EXIT_ERROR
+    assert cli.main(["pair", "a1", "--type", "bambu", "--host", "127.0.0.1", "--serial", "X",
+                     "--model", "bambu-a1-mini", "--no-check", "--secret-stdin"]) == cli.EXIT_ERROR
+    assert "pin its TLS certificates" in capsys.readouterr().err
+    assert "a1" not in config.load_all()
+
+
+def test_a1_mini_profile_refuses_abs_unless_forced(tmp_path, fake_slicer, capsys):
+    mini = slicing.PRINTERS["bambu-a1-mini"]
+    assert mini.bed == (180, 180) and not mini.enclosed
+    with pytest.raises(ConfigError, match="needs an enclosed printer"):
+        slicing.settings(mini, slicing.material("ABS"))
+    s = slicing.settings(mini, slicing.material("ABS"), force=True)
+    assert "warping" in s["warning"] and s["bed_mm"] == [180, 180]
+    printers = config.load_all()
+    printers["mini"] = config.PrinterConfig(name="mini", type="bambu", host="127.0.0.1", model="bambu-a1-mini")
+    config.save_all(printers)
+    stl = tmp_path / "cube.stl"
+    stl.write_bytes(STL)
+    assert cli.main(["slice", str(stl), "--printer", "mini", "--material", "ABS"]) == cli.EXIT_ERROR
+    capsys.readouterr()
+    assert cli.main(["slice", str(stl), "--printer", "mini", "--material", "ABS", "--force"]) == 0
+    out = capsys.readouterr().out
+    assert "warning: ABS needs an enclosed printer" in out and "bed_mm: [180, 180]" in out
+
+
+def test_save_if_changed_ignores_its_own_marker(k2, monkeypatch):
+    """first-F3: an unchanged config must not be rewritten on every call."""
+    from gantrel_printer import cli as climod
+
+    adapter = climod.open_printer("k2")
+    before = climod.snapshot_cfg(adapter)
+    writes = []
+    monkeypatch.setattr(config, "save_all", lambda printers: writes.append(1))
+    climod.save_if_changed(adapter, before)
+    assert writes == []

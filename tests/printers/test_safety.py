@@ -1,14 +1,11 @@
-"""Confirm-to-start safety: no agent or script can start or resume a print (docs/PRINTERS.md)."""
+"""Starting and resuming: the CLI has none; the token-gated adapter calls kept for the app's confirm
+sheet still refuse without a valid token (docs/PRINTERS.md)."""
 
 from __future__ import annotations
 
-import os
-import pty
-import re
-import select
-import subprocess
 import sys
 import time
+from pathlib import Path
 
 import pytest
 
@@ -40,21 +37,36 @@ def upload(tmp_path, name="part.gcode", data=GCODE, printer="moon") -> safety.Jo
     return next(j for j in safety.list_jobs() if j.remote_name.startswith(name.rsplit(".", 1)[0] + "-"))
 
 
-def run_cli(*args, **kw):
-    return subprocess.run([sys.executable, "-m", "gantrel_printer.cli", *args], capture_output=True, text=True,
-                          env=os.environ.copy(), timeout=60, **kw)
+def app_start(job_id, token=None):
+    """What the app's confirm sheet will do after a person confirms. Not reachable from the CLI."""
+    try:
+        job = safety.load_job(job_id)
+        build(config.get(job.printer)).start(job, token)
+        return 0
+    except SafetyError as err:
+        print(f"REFUSED: {err}", file=sys.stderr)
+        return cli.EXIT_SAFETY
+
+
+def app_resume(name, token=None):
+    try:
+        build(config.get(name)).resume(token)
+        return 0
+    except SafetyError as err:
+        print(f"REFUSED: {err}", file=sys.stderr)
+        return cli.EXIT_SAFETY
 
 
 def test_start_refuses_without_a_token(printer, tmp_path, capsys):
     job = upload(tmp_path)
-    assert cli.main(["start", job.id]) == cli.EXIT_SAFETY
+    assert app_start(job.id) == cli.EXIT_SAFETY
     assert "needs a confirm token" in capsys.readouterr().err
     assert not printer.started
 
 
 def test_start_refuses_a_made_up_token(printer, tmp_path):
     job = upload(tmp_path)
-    assert cli.main(["start", job.id, "--token", "aaaaaaaaaaaaaaaaaaaaaaaa"]) == cli.EXIT_SAFETY
+    assert app_start(job.id, "aaaaaaaaaaaaaaaaaaaaaaaa") == cli.EXIT_SAFETY
     assert not printer.started
 
 
@@ -62,10 +74,10 @@ def test_token_for_a_different_file_is_refused_and_voided(printer, tmp_path, cap
     a = upload(tmp_path, "a.gcode")
     b = upload(tmp_path, "b.gcode", GCODE + b"G1 X5\n")
     token_a = safety.mint_token("start", "moon", a.id, a.sha256, a.identity)
-    assert cli.main(["start", b.id, "--token", token_a]) == cli.EXIT_SAFETY
+    assert app_start(b.id, token_a) == cli.EXIT_SAFETY
     assert "different job" in capsys.readouterr().err
     # The failed use voided it: it can't start job a either.
-    assert cli.main(["start", a.id, "--token", token_a]) == cli.EXIT_SAFETY
+    assert app_start(a.id, token_a) == cli.EXIT_SAFETY
     assert not printer.started
 
 
@@ -80,7 +92,7 @@ def test_token_bound_to_the_file_hash(printer, tmp_path):
 def test_token_for_a_different_printer_is_refused(printer, tmp_path, capsys):
     job = upload(tmp_path)
     other = safety.mint_token("start", "other-printer", job.id, job.sha256, job.identity)
-    assert cli.main(["start", job.id, "--token", other]) == cli.EXIT_SAFETY
+    assert app_start(job.id, other) == cli.EXIT_SAFETY
     assert "different printer" in capsys.readouterr().err
     assert not printer.started
 
@@ -100,11 +112,11 @@ def test_job_for_another_printer_is_refused(printer, tmp_path):
 def test_token_is_single_use(printer, tmp_path, capsys):
     job = upload(tmp_path)
     token = safety.mint_token("start", "moon", job.id, job.sha256, job.identity)
-    assert cli.main(["start", job.id, "--token", token]) == 0
+    assert app_start(job.id, token) == 0
     assert printer.events == [f"start:{job.remote_name}"]
     assert cli.main(["cancel", "moon"]) == 0
     capsys.readouterr()
-    assert cli.main(["start", job.id, "--token", token]) == cli.EXIT_SAFETY
+    assert app_start(job.id, token) == cli.EXIT_SAFETY
     assert "already used" in capsys.readouterr().err
     assert printer.events == [f"start:{job.remote_name}", "cancel"]
 
@@ -130,97 +142,12 @@ def test_file_changed_after_upload_is_refused(printer, tmp_path):
 
 def test_resume_needs_a_token_but_pause_does_not(printer, tmp_path):
     job = upload(tmp_path)
-    assert cli.main(["start", job.id, "--token", safety.mint_token("start", "moon", job.id, job.sha256, job.identity)]) == 0
+    assert app_start(job.id, safety.mint_token("start", "moon", job.id, job.sha256, job.identity)) == 0
     assert cli.main(["pause", "moon"]) == 0
     assert printer.state == "paused"
-    assert cli.main(["resume", "moon"]) == cli.EXIT_SAFETY
-    assert cli.main(["resume", "moon", "--token", "nope"]) == cli.EXIT_SAFETY
+    assert app_resume("moon") == cli.EXIT_SAFETY
+    assert app_resume("moon", "nope") == cli.EXIT_SAFETY
     assert printer.state == "paused"
-
-
-def test_confirm_refuses_without_a_tty(printer, tmp_path):
-    job = upload(tmp_path)
-    # Like an agent's bash tool: stdin and stdout are pipes. It must refuse before asking anything.
-    r = run_cli("confirm", job.id, input="moon\n")
-    assert r.returncode == cli.EXIT_SAFETY, r
-    assert "REFUSED" in r.stderr and "person at a terminal" in r.stderr
-    assert not list((config.state_dir() / "tokens").glob("*.json"))
-    r = run_cli("confirm", "--resume", "moon", input="moon\n")
-    assert r.returncode == cli.EXIT_SAFETY
-
-
-def test_confirm_refuses_without_a_controlling_terminal():
-    # New session, so /dev/tty can't be opened, as for a daemon or a detached agent.
-    code = ("from gantrel_printer import safety\n"
-            "try:\n    safety.open_tty()\nexcept safety.SafetyError as e:\n    print('refused:', e)\n")
-    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, start_new_session=True,
-                       stdin=subprocess.DEVNULL, timeout=30)
-    assert "refused: no terminal is attached" in r.stdout, r
-
-
-def _confirm_on_a_pty(args: list[str], answer: str) -> tuple[int, str]:
-    """Run confirm the way a person would: a real terminal that is the process's controlling tty."""
-    master, slave = pty.openpty()
-    # The child makes the pty its controlling terminal, then execs the CLI. No preexec_fn: running
-    # Python between fork and exec is unsafe while the fake printer's threads are alive.
-    boot = ("import fcntl, os, sys, termios; fcntl.ioctl(0, termios.TIOCSCTTY, 0); "
-            "os.execv(sys.executable, [sys.executable, '-m', 'gantrel_printer.cli', *sys.argv[1:]])")
-    p = subprocess.Popen([sys.executable, "-c", boot, *args], stdin=slave, stdout=slave, stderr=slave,
-                         start_new_session=True, env=os.environ.copy())
-    os.close(slave)
-    out, sent = b"", False
-    deadline = time.monotonic() + 60
-    while time.monotonic() < deadline:
-        r, _, _ = select.select([master], [], [], 0.5)
-        if r:
-            try:
-                chunk = os.read(master, 4096)
-            except OSError:
-                break
-            if not chunk:
-                break
-            out += chunk
-        if not sent and b"Anything else cancels" in out:
-            os.write(master, answer.encode() + b"\n")
-            sent = True
-        if p.poll() is not None and not r:
-            break
-    os.close(master)
-    return p.wait(10), out.decode("utf-8", "replace")
-
-
-def test_confirm_at_a_real_terminal_mints_a_working_token(printer, tmp_path):
-    job = upload(tmp_path)
-    code, text = _confirm_on_a_pty(["confirm", job.id], "moon")
-    assert code == 0, text
-    for want in ("Printer:  moon", f"File:     {job.remote_name}", "Material: PLA", "Time:     12m 5s estimated"):
-        assert want in text, text
-    m = re.search(rf"gantrel-printer start {job.id} --token (\S+)", text)
-    assert m, text
-    assert not printer.started  # confirm alone never starts anything
-    assert cli.main(["start", job.id, "--token", m.group(1)]) == 0
-    assert printer.events == [f"start:{job.remote_name}"]
-
-
-def test_confirm_with_the_wrong_name_mints_nothing(printer, tmp_path):
-    job = upload(tmp_path)
-    code, text = _confirm_on_a_pty(["confirm", job.id], "yes")
-    assert code == cli.EXIT_SAFETY, text
-    assert "not confirmed" in text
-    assert "--token" not in text
-    assert not list((config.state_dir() / "tokens").glob("*.json"))
-    assert not printer.started
-
-
-def test_confirm_resume_at_a_terminal(printer, tmp_path):
-    job = upload(tmp_path)
-    assert cli.main(["start", job.id, "--token", safety.mint_token("start", "moon", job.id, job.sha256, job.identity)]) == 0
-    assert cli.main(["pause", "moon"]) == 0
-    code, text = _confirm_on_a_pty(["confirm", "--resume", "moon"], "moon")
-    assert code == 0, text
-    token = re.search(r"gantrel-printer resume moon --token (\S+)", text).group(1)
-    assert cli.main(["resume", "moon", "--token", token]) == 0
-    assert printer.state == "printing"
 
 
 def test_klipper_running_a_macro_is_busy_and_start_is_refused(printer, tmp_path):
@@ -250,7 +177,7 @@ def test_token_is_bound_to_the_printer_not_its_name(printer, tmp_path, capsys):
     printers = config.load_all()
     printers["moon"].port = printers["moon"].port + 1  # the name now means another device
     config.save_all(printers)
-    assert cli.main(["start", job.id, "--token", token]) == cli.EXIT_SAFETY
+    assert app_start(job.id, token) == cli.EXIT_SAFETY
     assert "different printer" in capsys.readouterr().err
     # Even a job re-bound to the new device can't use a token confirmed for the old one.
     with pytest.raises(SafetyError, match="different printer"):
@@ -282,7 +209,7 @@ def test_remote_names_carry_the_content_hash_and_never_overwrite(printer, tmp_pa
     assert cli.main(["upload", str(tmp_path / "part.gcode"), "--printer", "moon"]) == cli.EXIT_SAFETY
     assert "never replace" in capsys.readouterr().err
     # Job a still starts exactly its own content.
-    assert cli.main(["start", a.id, "--token", safety.mint_token("start", "moon", a.id, a.sha256, a.identity)]) == 0
+    assert app_start(a.id, safety.mint_token("start", "moon", a.id, a.sha256, a.identity)) == 0
     assert printer.files[printer.current] == GCODE
 
 
@@ -297,16 +224,38 @@ def test_material_must_be_a_known_material(printer, tmp_path, capsys):
     assert safety.list_jobs()[0].material == "PETG"
 
 
-def test_confirm_sheet_strips_control_characters(printer, tmp_path):
-    """second-G2: a path holding escape codes or newlines can't rewrite the confirm sheet."""
-    evil = tmp_path / "a\x1b[2A\x1b[2Kb\nFile:     fake.gcode"
-    evil.mkdir()
-    f = evil / "part.gcode"
+def test_the_cli_has_no_way_to_start_or_resume_a_print(capsys):
+    """Round 2 lead decision (first-F2, sol-sol-F8): the tools never start or resume a print."""
+    subs = set(cli.parser()._subparsers._group_actions[0].choices)
+    assert not subs & {"start", "resume", "confirm"}
+    assert {"pause", "cancel", "estop"} <= subs
+    for argv in (["start", "x"], ["resume", "moon"], ["confirm", "x"]):
+        with pytest.raises(SystemExit) as exc:
+            cli.main(argv)
+        assert exc.value.code == 2
+    import gantrel_printer.cli as mod
+    src = Path(mod.__file__).read_text()
+    assert "mint_token" not in src and ".start(" not in src and ".resume(" not in src
+
+
+def test_upload_says_where_a_person_starts_it_and_starts_nothing(printer, tmp_path, capsys):
+    f = tmp_path / "part.gcode"
     f.write_bytes(GCODE)
     assert cli.main(["upload", str(f), "--printer", "moon"]) == 0
-    job = safety.list_jobs()[0]
-    code, text = _confirm_on_a_pty(["confirm", job.id], "no")
-    assert code == cli.EXIT_SAFETY, text
-    assert "\x1b" not in text
-    assert not any(line.startswith("File:     fake.gcode") for line in text.splitlines())
-    assert "a?[2A?[2Kb?File:" in text
+    text = capsys.readouterr().out
+    remote = next(iter(printer.files))
+    assert "It has NOT started." in text
+    assert f"Start {remote} on the printer's screen or in its web page at http://127.0.0.1:" in text
+    assert "token" not in text and "confirm" not in text
+    assert not printer.started
+
+
+def test_paused_status_tells_the_person_to_resume_on_the_printer(printer, tmp_path, capsys):
+    job = upload(tmp_path)
+    assert app_start(job.id, safety.mint_token("start", "moon", job.id, job.sha256, job.identity)) == 0
+    assert cli.main(["pause", "moon"]) == 0
+    capsys.readouterr()
+    assert cli.main(["status", "moon"]) == 0
+    last = capsys.readouterr().out.strip().splitlines()[-1]
+    assert "Only they can resume it" in last and "confirm" not in last
+    assert printer.state == "paused"

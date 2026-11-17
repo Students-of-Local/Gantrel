@@ -1,23 +1,25 @@
-"""Confirm-to-start safety (docs/PRINTERS.md, Safety rules).
+"""Job records and confirm tokens, kept for the app's confirm sheet. Not wired to anything yet.
 
-No agent or script can start or resume a print. `gantrel-printer confirm` shows the job and makes
-a person type the printer's name at a real terminal (/dev/tty, with stdin and stdout both TTYs).
-Only then does it mint a confirm token that is:
+Gantrel's tools never start or resume a print: the CLI has no start, resume or confirm command, and
+a person starts every print on the printer's screen or its own web UI. Nothing in the CLI mints a
+token, so Adapter.start and Adapter.resume are unreachable from it today.
 
-- single use (a failed or mismatched use also voids it),
-- short lived (TOKEN_TTL_S),
-- bound to one action, one job, the SHA-256 of that job's file, and the printer's identity (type,
-  host, port, serial and TLS pin), not just its name, so re-pairing a name to another printer voids it.
+This is not a security boundary. An agent with shell access can reach a printer's API directly
+(curl to Moonraker, for example), and a terminal prompt can be faked with a pseudo-terminal. The
+real boundary comes later, with Local Studio capability grants and the in-app confirm sheet, which
+will be the only caller of mint_token().
 
-The job's file on the printer has a name that includes its content hash, uploads never replace an
-existing file, and start re-checks the printer's copy (size and modification time) before starting.
+What is here for that sheet:
 
-Adapter.start and Adapter.resume refuse without a token that passes consume_token().
+- tokens: single use (a failed or mismatched use also voids it), short lived (TOKEN_TTL_S), bound to
+  one action, one job, the SHA-256 of that job's file, and the printer's identity (type, host, port,
+  serial, TLS pin);
+- jobs: the file on the printer is named with its content hash, uploads never replace a file, and
+  Adapter.start re-checks the printer's copy (size and modification time).
 
-Limit: this stops an agent that follows instructions, and stops a prompt-injected or confused
-agent from starting a print by itself, because an agent's shell has no TTY. A hostile program
-running as the same user can fake a terminal or edit these files; the in-app confirm sheet is
-the stronger boundary planned for later.
+Known gap before wiring resume (review sol-sol-F8): a resume token binds only to the printer and the
+reported file name, which a later print of the same name would share. Bind it to a print-instance
+id and fail closed before any app uses it.
 """
 
 from __future__ import annotations
@@ -26,7 +28,6 @@ import hashlib
 import json
 import os
 import secrets
-import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -128,7 +129,7 @@ def _token_key(token: str) -> str:
 
 
 def mint_token(action: str, printer: str, job_id: str, file_hash: str, identity: str) -> str:
-    """Only confirm_interactive() calls this, after a person typed the printer name at a TTY."""
+    """For the app's confirm sheet, after a person confirms there. Nothing calls this yet."""
     if action not in ACTIONS:
         raise ValueError(action)
     if not identity:
@@ -148,11 +149,11 @@ def consume_token(token: str | None, action: str, printer: str, job_id: str, fil
     """
     if not token:
         raise SafetyError(f"{action} needs a confirm token",
-                          "A person must run gantrel-printer confirm at a terminal; agents can't start prints")
+                          "Only the app's confirm sheet makes tokens, and it doesn't exist yet")
     key = _token_key(token)
     path = _tokens_dir() / f"{key}.json"
     if not path.exists():
-        raise SafetyError("that confirm token is not valid", "Run gantrel-printer confirm again")
+        raise SafetyError("that confirm token is not valid", "Confirm again")
     used = _tokens_dir() / f"{key}.used"
     try:
         fd = os.open(used, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -170,53 +171,11 @@ def consume_token(token: str | None, action: str, printer: str, job_id: str, fil
                               "The token is now void; confirm this exact job again")
 
 
-# ---------------------------------------------------------------- the human step
-
-
-def require_tty() -> None:
-    if not (sys.stdin.isatty() and sys.stdout.isatty()):
-        raise SafetyError("confirm must be run by a person at a terminal",
-                          "Agents: give the person this exact command to run themselves")
-
-
-class _Tty:
-    """The controlling terminal, read and written directly (it is not seekable, so no buffered r+ file)."""
-
-    def __init__(self, fd: int):
-        self.fd = fd
-
-    def write(self, text: str) -> None:
-        os.write(self.fd, text.encode("utf-8"))
-
-    def flush(self) -> None:
-        pass
-
-    def readline(self, limit: int = 256) -> str:
-        buf = b""
-        while len(buf) < limit:
-            ch = os.read(self.fd, 1)
-            if not ch or ch == b"\n":
-                break
-            buf += ch
-        return buf.decode("utf-8", "replace")
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        os.close(self.fd)
-
-
-def open_tty() -> _Tty:
-    try:
-        return _Tty(os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY))
-    except OSError:
-        raise SafetyError("no terminal is attached (/dev/tty is not available)",
-                          "Run confirm yourself in a terminal window") from None
+# ---------------------------------------------------------------- unpair
 
 
 def forget_printer(printer: str) -> int:
-    """Delete a printer's jobs and outstanding tokens (unpair). Returns how many files went."""
+    """Delete a printer's job records and tokens (unpair). Returns how many files went."""
     n = 0
     for d in (_jobs_dir(), _tokens_dir()):
         for p in d.glob("*.json"):
@@ -227,24 +186,3 @@ def forget_printer(printer: str) -> int:
             except (OSError, ValueError):
                 continue
     return n
-
-
-def confirm_interactive(action: str, printer: str, job_id: str, file_hash: str, identity: str,
-                        lines: list[str]) -> str:
-    """Show lines on the terminal, make the person type the printer name, then mint a token.
-
-    Every line is stripped of control characters first, so nothing stored in a job (a path, a
-    material, a printer message) can move the cursor, clear lines or fake parts of the sheet.
-    """
-    require_tty()
-    from .model import printable
-
-    with open_tty() as tty:
-        tty.write("\n".join(printable(line) for line in lines) + "\n\n")
-        tty.write(f"To {action} this print, type the printer name ({printer}) and press Enter.\n"
-                  "Anything else cancels: ")
-        tty.flush()
-        answer = tty.readline().strip()
-        if answer != printer:
-            raise SafetyError("not confirmed", "Nothing was started")
-    return mint_token(action, printer, job_id, file_hash, identity)

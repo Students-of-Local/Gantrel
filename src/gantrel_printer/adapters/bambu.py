@@ -123,15 +123,24 @@ class BambuAdapter(Adapter):
         return self.cfg.extra.get("tls_pins", {}).get(str(port), "")
 
     def _ctx(self, port: int) -> _PinnedContext:
-        return _pinned_ctx(self._pin_for(port))
+        pin = self._pin_for(port)
+        if not pin:
+            # Never send the access code to a service whose certificate wasn't pinned at pair.
+            raise AuthFailed(f"{self.cfg.name} has no pinned TLS certificate for port {port}",
+                             "Unpair and pair it again so every service's certificate is pinned")
+        return _pinned_ctx(pin)
 
-    def _remember(self, port: int, ctx: _PinnedContext) -> None:
-        """Trust on first use: keep the fingerprint seen on the first good connection to a port."""
-        if ctx.seen and not self._pin_for(port):
-            if port == self.port:
-                self.cfg.tls_fingerprint = ctx.seen
-            else:
-                self.cfg.extra.setdefault("tls_pins", {})[str(port)] = ctx.seen
+    def _handshake_fp(self, port: int) -> str:
+        """TLS handshake only, no credentials sent: the certificate fingerprint a service shows."""
+        ctx = _pinned_ctx("")
+        try:
+            with socket.create_connection((self.cfg.host, port), timeout=5) as raw:
+                with ctx.wrap_socket(raw, server_hostname=self.cfg.host):
+                    pass
+        except (OSError, ssl.SSLError) as err:
+            raise Unreachable(f"no TLS answer from {self.cfg.host}:{port} ({err.__class__.__name__})",
+                              "Check the printer is on and in LAN mode") from None
+        return ctx.seen
 
     def _pin_error(self, port: int) -> AuthFailed:
         return AuthFailed(f"{self.cfg.name}'s TLS certificate on port {port} changed",
@@ -194,7 +203,6 @@ class BambuAdapter(Adapter):
         finally:
             c.loop_stop()
             c.disconnect()
-        self._remember(self.port, ctx)
         return state["print"]
 
     def _command(self, cmd: dict) -> None:
@@ -223,7 +231,17 @@ class BambuAdapter(Adapter):
 
     def pair(self):
         self._require()
-        st = self.status()  # first MQTT connection; _remember pins its certificate
+        # Pin every service's certificate first, over connections that send no credentials. Each later
+        # connection that carries the access code must show exactly its pinned certificate.
+        self.cfg.tls_fingerprint = self._handshake_fp(self.port)
+        pins = {str(self.port): self.cfg.tls_fingerprint, str(self.ftp_port): self._handshake_fp(self.ftp_port)}
+        if self.cfg.model not in RTSP_MODELS:
+            try:
+                pins[str(self.camera_port)] = self._handshake_fp(self.camera_port)
+            except Unreachable:
+                pass  # no LAN liveview on 6000; snapshot will say to pair again once it is on
+        self.cfg.extra["tls_pins"] = pins
+        st = self.status()
         return {"state": st.state, "tls_fingerprint": self.cfg.tls_fingerprint[:16] + "..."}
 
     def status(self) -> Status:
@@ -262,7 +280,6 @@ class BambuAdapter(Adapter):
         except (OSError, ssl.SSLError, ftplib.Error) as err:
             raise Unreachable(f"file transfer with {self.cfg.name} failed ({err.__class__.__name__})",
                               "Check the printer has an SD card or storage inserted") from None
-        self._remember(self.ftp_port, ctx)
         return out
 
     def upload(self, local_path: Path, remote_name: str) -> str:
@@ -309,6 +326,11 @@ class BambuAdapter(Adapter):
         return ("Bambu printers have no network emergency stop. Sent stop and turned the nozzle and bed heaters "
                 "off. For a true emergency stop switch the printer off at its power switch")
 
+    def start_by_hand(self, remote_name: str = "") -> str:
+        what = f"Start {remote_name}" if remote_name else "Start or resume it"
+        return (f"{what} on the printer's screen (Print files), or from Bambu Studio's Device tab on the same "
+                "network.")
+
     def camera(self) -> Camera:
         if self.cfg.camera_url:
             return Camera(self.cfg.camera_url, self.cfg.stream_url)
@@ -343,7 +365,6 @@ class BambuAdapter(Adapter):
         except (OSError, ssl.SSLError) as err:
             raise Unreachable(f"{self.cfg.name}'s camera did not answer ({err.__class__.__name__})",
                               "Check LAN Mode Liveview is on") from None
-        self._remember(self.camera_port, ctx)
         return write_image(data, out)
 
 

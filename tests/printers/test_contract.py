@@ -61,7 +61,8 @@ def make_rig(kind: str, tls_cert) -> Rig:
         # As after pair: the MQTT certificate is pinned.
         cfg = PrinterConfig(name=name, type=kind, host="127.0.0.1", port=fb.mqtt, serial="01S00FAKE",
                             model="bambu-p1s", tls_fingerprint=cert_fp(tls_cert[0]),
-                            extra={"ftp_port": fb.ftp, "camera_port": fb.cam})
+                            extra={"ftp_port": fb.ftp, "camera_port": fb.cam,
+                                   "tls_pins": {str(p): cert_fp(tls_cert[0]) for p in (fb.mqtt, fb.ftp, fb.cam)}})
         rig = Rig(kind, brain, cfg, SECRET)
         rig.fake = fb
         return rig
@@ -137,7 +138,7 @@ def test_unreachable_printer(rig):
     s = socket.create_server(("127.0.0.1", 0))
     port = s.getsockname()[1]
     s.close()
-    cfg = PrinterConfig(name="gone", type=rig.type, host="127.0.0.1", port=port, serial="X")
+    cfg = PrinterConfig(name="gone", type=rig.type, host="127.0.0.1", port=port, serial="X", tls_fingerprint="0" * 64)
     with pytest.raises(Unreachable):
         build(cfg, SECRET).status()
 
@@ -301,3 +302,41 @@ def test_bambu_wrong_pin_sends_nothing(tmp_path, tls_cert):
         with pytest.raises(AuthFailed, match="certificate"):
             call()
     assert fb.logins == []
+
+
+def test_bambu_pair_pins_every_service_before_any_credential(tmp_path, tls_cert, tls_cert2):
+    """sol-sol-F2: start from the config pair produces. If FTPS or the camera later show another
+    certificate, the access code must not be sent there."""
+    brain = fakes.Brain(secret=SECRET)
+    fb = fakes.FakeBambu(brain, "01S00FAKE", *tls_cert)
+    cfg = PrinterConfig(name="bambu", type="bambu", host="127.0.0.1", port=fb.mqtt, serial="01S00FAKE",
+                        model="bambu-p1s", extra={"ftp_port": fb.ftp, "camera_port": fb.cam})
+    a = build(cfg, SECRET)
+    a.pair()
+    pin = cert_fp(tls_cert[0])
+    assert cfg.tls_fingerprint == pin
+    assert cfg.extra["tls_pins"] == {str(fb.mqtt): pin, str(fb.ftp): pin, str(fb.cam): pin}
+    logins_after_pair = list(fb.logins)
+    fb.ctxs = [fakes._tls_server_ctx(*tls_cert2)]  # an interceptor answers from now on
+    f = tmp_path / "x.gcode"
+    f.write_bytes(GCODE)
+    for call in (a.status, lambda: a.upload(f, "x.gcode"), lambda: a.snapshot(tmp_path / "c.jpg")):
+        with pytest.raises(AuthFailed, match="certificate"):
+            call()
+    assert fb.logins == logins_after_pair
+
+
+def test_bambu_refuses_a_service_with_no_pin(tmp_path, tls_cert):
+    brain = fakes.Brain(secret=SECRET)
+    fb = fakes.FakeBambu(brain, "01S00FAKE", *tls_cert)
+    pin = cert_fp(tls_cert[0])
+    cfg = PrinterConfig(name="bambu", type="bambu", host="127.0.0.1", port=fb.mqtt, serial="01S00FAKE",
+                        model="bambu-p1s", tls_fingerprint=pin,
+                        extra={"ftp_port": fb.ftp, "camera_port": fb.cam, "tls_pins": {str(fb.mqtt): pin}})
+    a = build(cfg, SECRET)
+    f = tmp_path / "x.gcode"
+    f.write_bytes(GCODE)
+    for call in (lambda: a.upload(f, "x.gcode"), lambda: a.snapshot(tmp_path / "c.jpg")):
+        with pytest.raises(AuthFailed, match="no pinned TLS certificate"):
+            call()
+    assert [svc for svc, _ in fb.logins] == []

@@ -124,6 +124,9 @@ class OctoPrintAdapter(Adapter):
         return ("Sent M112 emergency stop through OctoPrint. Most firmware turns off heaters and motors and "
                 "needs a power cycle or reset before printing again")
 
+    def web_ui(self) -> str:
+        return f"{self.base}/ (OctoPrint)"
+
     def camera(self) -> Camera:
         if self.cfg.camera_url:
             return Camera(self.cfg.camera_url, self.cfg.stream_url)

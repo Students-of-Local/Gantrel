@@ -86,9 +86,6 @@ PRINTERS: dict[str, PrinterProfile] = {p.key: p for p in (
                    accel=1000, direct_drive=False, start_gcode=MARLIN_START, end_gcode=MARLIN_END),
 )}
 
-# Default profile per adapter type when a printer has no model set.
-TYPE_DEFAULT = {"moonraker": "generic-klipper", "creality": "creality-k1", "bambu": "bambu-p1s",
-                "prusalink": "prusa-mk4", "octoprint": "generic-marlin"}
 
 
 @dataclass(frozen=True)
@@ -128,7 +125,11 @@ QUALITY = {
 
 
 def profile_for(model: str, type_name: str) -> PrinterProfile:
-    key = model or TYPE_DEFAULT.get(type_name, "generic-marlin")
+    """The printer's profile. Never guessed from the adapter type: bed size and enclosure differ by model."""
+    key = model
+    if not key:
+        raise ConfigError("this printer has no model set, so its bed size and enclosure are unknown",
+                          f"Unpair and pair it again with --model, one of: {', '.join(PRINTERS)}")
     if key not in PRINTERS:
         raise ConfigError(f"no slicing profile for model {key!r}",
                           f"Pair the printer with --model set to one of: {', '.join(PRINTERS)}")
@@ -142,15 +143,18 @@ def material(name: str) -> Material:
     return m
 
 
-def settings(printer: PrinterProfile, mat: Material, quality: str = "standard") -> dict:
+def settings(printer: PrinterProfile, mat: Material, quality: str = "standard", force: bool = False) -> dict:
     if quality not in QUALITY:
         raise ConfigError(f"unknown quality {quality!r}", f"Use one of: {', '.join(QUALITY)}")
+    warnings = []
     if mat.needs_enclosure and not printer.enclosed:
-        raise ConfigError(f"{mat.name} needs an enclosed printer and {printer.label} is open",
-                          "Use PLA or PETG on this printer, or add an enclosure and pick an enclosed model")
+        warnings.append(f"{mat.name} needs an enclosed printer and {printer.label} is open: expect warping, "
+                        "cracked layers and fumes in the room")
     if mat.name == "TPU" and not printer.direct_drive:
-        raise ConfigError(f"TPU needs a direct drive extruder and {printer.label} is Bowden",
-                          "Use PLA or PETG on this printer")
+        warnings.append(f"TPU needs a direct drive extruder and {printer.label} is Bowden: it will likely jam")
+    if warnings and not force:
+        raise ConfigError(warnings[0], "Use PLA or PETG on this printer. If the person has an enclosure or "
+                                       "accepts the risk, they can ask for --force")
     q = QUALITY[quality]
     speed = min(printer.max_speed, mat.max_speed)
     return {
@@ -167,6 +171,7 @@ def settings(printer: PrinterProfile, mat: Material, quality: str = "standard") 
         "travel_speed_mms": printer.max_speed, "accel_mms2": printer.accel, "retract_mm": mat.retract_mm,
         "supports": "auto, for overhangs flatter than 50 degrees from horizontal", "brim": "auto for small footprints",
         "bed_mm": list(printer.bed), "max_height_mm": printer.height, "note": mat.note,
+        **({"warning": "; ".join(warnings)} if warnings else {}),
     }
 
 

@@ -151,6 +151,10 @@ class CrealityAdapter(Adapter):
         return ("Sent M112 emergency stop over the Creality socket. Klipper shuts down; restart it from the "
                 "printer screen before printing again")
 
+    def start_by_hand(self, remote_name: str = "") -> str:
+        what = f"Start {remote_name}" if remote_name else "Start or resume it"
+        return f"{what} on the printer's touch screen (local files), or from Creality Print on the same network."
+
     def camera(self) -> Camera:
         if self.cfg.camera_url:
             return Camera(self.cfg.camera_url, self.cfg.stream_url)

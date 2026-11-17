@@ -148,6 +148,13 @@ class MoonrakerAdapter(Adapter):
         return ("Sent Klipper emergency stop (M112): heaters and motors are off and Klipper is shut down. "
                 "Restart the firmware from the printer screen or the web UI before using it again")
 
+    def web_ui(self) -> str:
+        if self.port not in (7125,):
+            return f"http://{self.cfg.host}:{self.port}/ (Mainsail or Fluidd)"
+        if self.cfg.model.startswith("creality-k"):
+            return f"http://{self.cfg.host}:4408/ (Fluidd)"
+        return f"http://{self.cfg.host}/ (Mainsail or Fluidd)"
+
     def camera(self) -> Camera:
         if self.cfg.camera_url:
             return Camera(self.cfg.camera_url, self.cfg.stream_url)

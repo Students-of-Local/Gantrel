@@ -114,6 +114,9 @@ class PrusaLinkAdapter(Adapter):
         return ("PrusaLink has no network emergency stop, so the job was stopped (the printer parks and "
                 "turns its heaters off). For a true emergency stop press the reset button on the printer")
 
+    def web_ui(self) -> str:
+        return f"{self.base}/ (PrusaLink)"
+
     def camera(self) -> Camera:
         return Camera(self.cfg.camera_url or f"{self.base}/api/v1/cameras/snap", self.cfg.stream_url)
 

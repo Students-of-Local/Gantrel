@@ -1,8 +1,8 @@
 """The adapter contract (docs/PRINTERS.md, Adapter contract).
 
-Every printer type subclasses Adapter. start() and resume() are final here: they check the confirm
-token and the printer's state before calling the adapter's _start() or _resume(), so no adapter
-can start or resume a print without a person's confirm.
+Every printer type subclasses Adapter. start() and resume() are final here and need a confirm token;
+they exist for the app's confirm sheet and are not reachable from the CLI, which never starts or
+resumes a print (see safety.py for what that does and does not protect against).
 """
 
 from __future__ import annotations
@@ -156,6 +156,16 @@ class Adapter(ABC):
         return {}
 
     # ------------------------------------------------------------ helpers
+
+    def web_ui(self) -> str:
+        """The printer's own web page, if it has one."""
+        return ""
+
+    def start_by_hand(self, remote_name: str = "") -> str:
+        """Where a person starts or resumes a print. Gantrel's tools never do it."""
+        what = f"Start {remote_name}" if remote_name else "Start or resume it"
+        ui = self.web_ui()
+        return f"{what} on the printer's screen" + (f" or in its web page at {ui}" if ui else "") + "."
 
     def describe(self) -> str:
         return f"{self.cfg.name}: {self.label} at {self.cfg.host}:{self.port}"
