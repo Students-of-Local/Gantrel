@@ -35,6 +35,8 @@ These are packaging checks, not design results. Each one passed on 2026-11-16 wi
 | Repetier-Server | `repetier` | Fake |
 | Marlin over USB, including other Anycubic printers | `serial` | Fake |
 
+Calibration prints (`gantrel-printer calibrate <printer> first-layer|temp-tower|retraction|flow`) are checked by tests for every filament printer profile: moves inside the bed, nozzle temperatures inside the material's range, tower bands as stated. None has been printed on a real printer yet.
+
 ## Not supported yet
 
 - Making a part through `/gantrel` on LFM2.5-8B-A1B or LFM2.5-24B-A2B. In 5 runs the 8B always ran `stone status` first, then lost the request: three times it asked the user what to make, once it ran `stone new` and then wandered through the job files, once it printed the NEXT line as text instead of running it. The 24B on parish1 (split across CPU and GPU) never sent a token within Eukhe's 300 and 600 s stream timeouts, in 2 runs straight to Ollama and 2 through the controller.

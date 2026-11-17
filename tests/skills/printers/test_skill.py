@@ -43,3 +43,14 @@ def test_stop_requests_come_before_the_print_workflow():
     for cmd in ("gantrel-printer estop <name>", "gantrel-printer pause <name>", "gantrel-printer cancel <name>"):
         assert cmd in first
     assert "tell the person and stop." not in text
+
+
+def test_skill_teaches_every_calibration_kind_and_that_it_never_starts():
+    from gantrel_printer.calibrate import KINDS
+
+    text = SKILL.read_text()
+    assert "gantrel-printer calibrate <name> <kind>" in text
+    for kind in KINDS:
+        assert f"| {kind} |" in text
+    section = text[text.index("## Calibration prints"):text.index("## Rules and checks")]
+    assert "It never starts a print" in section and "--upload" in section

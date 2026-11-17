@@ -397,8 +397,10 @@ class FakeCreality:
 
 # ---------------------------------------------------------------- Bambu Lab (MQTT TLS, FTPS, camera)
 
+# Real firmware keeps gcode_state FAILED after a person stops a print, until the next print starts.
 BAMBU_STATE = {"idle": "IDLE", "printing": "RUNNING", "paused": "PAUSE", "complete": "FINISH",
-               "cancelled": "IDLE", "error": "FAILED"}
+               "cancelled": "FAILED", "error": "FAILED"}
+BAMBU_USER_CANCEL = 0x0300400C  # print_error after a stop on the screen, in the app or over MQTT
 
 
 def _tls_server_ctx(cert: str, key: str) -> ssl.SSLContext:
@@ -437,6 +439,9 @@ class FakeBambu:
         self.connections = 0
         self.logins: list[tuple[str, int]] = []  # (service, index of the certificate it arrived on)
         self.ignored: list[dict] = []
+        # Report overrides for tests: print_error (None: the firmware's own value) and the HMS list.
+        self.print_error: int | None = None
+        self.hms: list[dict] = []
         self.mqtt = self._listen(self._mqtt_client)
         self.ftp = self._listen(self._ftp_client)
         self.cam = self._listen(self._cam_client)
@@ -472,7 +477,12 @@ class FakeBambu:
                           "mc_remaining_time": 10, "nozzle_temper": 215.0, "nozzle_target_temper": 215.0,
                           "bed_temper": 60.0, "bed_target_temper": 60.0, "chamber_temper": 30.0,
                           "subtask_name": b.current, "layer_num": 1, "total_layer_num": 10,
-                          "print_error": 0, "command": "push_status"}}
+                          "print_error": self._print_error(), "hms": self.hms, "command": "push_status"}}
+
+    def _print_error(self) -> int:
+        if self.print_error is not None:
+            return self.print_error
+        return {"cancelled": BAMBU_USER_CANCEL, "error": 0x0500C011}.get(self.brain.state, 0)
 
     # MQTT 3.1.1: just enough of a broker for one printer.
     def _mqtt_client(self, s):

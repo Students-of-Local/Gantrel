@@ -11,15 +11,17 @@ will be the only caller of mint_token().
 
 What is here for that sheet:
 
-- tokens: single use (a failed or mismatched use also voids it), short lived (TOKEN_TTL_S), bound to
-  one action, one job, the SHA-256 of that job's file, and the printer's identity (type, host, port,
-  serial, TLS pin);
+- tokens: single use, short lived (TOKEN_TTL_S), bound to one action, one job record, the SHA-256 of
+  that job's file, and the printer's identity (type, host, port, serial, TLS pin). Adapter.start and
+  Adapter.resume spend the token before any other check, so a failed or mismatched use voids it;
+- start tokens bind to the job the person confirmed; resume tokens bind to the job record of the
+  print the printer is paused on (job_for_print), and a print with no Gantrel job record can't be
+  resumed with a token at all;
 - jobs: the file on the printer is named with its content hash, uploads never replace a file, and
   Adapter.start re-checks the printer's copy (size and modification time).
 
-Known gap before wiring resume (review sol-sol-F8): a resume token binds only to the printer and the
-reported file name, which a later print of the same name would share. Bind it to a print-instance
-id and fail closed before any app uses it.
+What a token can't tell apart: the same job record printed twice inside one token's lifetime. The
+person confirmed that exact file on that exact printer, and the token still works only once.
 """
 
 from __future__ import annotations
@@ -104,6 +106,20 @@ def list_jobs() -> list[Job]:
     return sorted(jobs, key=lambda j: j.created, reverse=True)
 
 
+def job_for_print(printer: str, identity: str, reported_file: str) -> Job:
+    """The job record of the print a printer reports, matched by the content-hash name on the printer.
+
+    Raises SafetyError when Gantrel has no record of it (a print started from elsewhere): fail closed.
+    """
+    name = (reported_file or "").replace("\\", "/").rsplit("/", 1)[-1]
+    matches = [j for j in list_jobs() if name and j.printer == printer and j.identity == identity
+               and j.remote_name == name]
+    if not matches:
+        raise SafetyError(f"Gantrel has no job record for the print on {printer} ({name or 'no file reported'})",
+                          "Only prints uploaded with Gantrel can be resumed from the app; resume it on the printer")
+    return matches[0]  # newest: a file uploaded again after a delete gets a new record
+
+
 def verify_job_file(job: Job) -> None:
     """The local file must still be the one that was uploaded and confirmed."""
     try:
@@ -139,6 +155,18 @@ def mint_token(action: str, printer: str, job_id: str, file_hash: str, identity:
               "expires": time.time() + TOKEN_TTL_S}
     _write_private(_tokens_dir() / f"{_token_key(token)}.json", record)
     return token
+
+
+def void_token(token: str | None) -> None:
+    """Spend a token without using it, for a request refused before its binding could be checked."""
+    if not token:
+        return
+    key = _token_key(token)
+    if (_tokens_dir() / f"{key}.json").exists():
+        try:
+            os.close(os.open(_tokens_dir() / f"{key}.used", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+        except FileExistsError:
+            pass
 
 
 def consume_token(token: str | None, action: str, printer: str, job_id: str, file_hash: str,

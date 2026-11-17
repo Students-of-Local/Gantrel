@@ -141,17 +141,19 @@ class Material:
     needs_enclosure: bool = False
     retract_mm: float = 0.8
     note: str = ""
+    # The nozzle temperatures worth trying for this material, low to high (calibrate temp-tower).
+    nozzle_range: tuple[int, int] = (190, 230)
 
 
 MATERIALS: dict[str, Material] = {m.name: m for m in (
     Material("PLA", 215, 220, 60, 65, 100, 100, 300, note="Easiest. Keep the lid or door open on enclosed printers."),
-    Material("PETG", 240, 245, 75, 80, 30, 60, 200, retract_mm=1.0,
+    Material("PETG", 240, 245, 75, 80, 30, 60, 200, retract_mm=1.0, nozzle_range=(220, 255),
              note="Strings a little. Use a textured or PEI bed; glue on smooth PEI so it doesn't bond too hard."),
-    Material("ABS", 255, 260, 100, 100, 0, 20, 200, chamber=45, needs_enclosure=True,
+    Material("ABS", 255, 260, 100, 100, 0, 20, 200, chamber=45, needs_enclosure=True, nozzle_range=(235, 265),
              note="Needs an enclosed printer and good ventilation; fumes."),
-    Material("ASA", 260, 265, 100, 100, 0, 30, 200, chamber=45, needs_enclosure=True,
+    Material("ASA", 260, 265, 100, 100, 0, 30, 200, chamber=45, needs_enclosure=True, nozzle_range=(240, 270),
              note="UV resistant ABS. Needs an enclosure and ventilation."),
-    Material("TPU", 225, 225, 45, 45, 60, 100, 30, retract_mm=0.4,
+    Material("TPU", 225, 225, 45, 45, 60, 100, 30, retract_mm=0.4, nozzle_range=(210, 235),
              note="Flexible. Print slowly; direct drive printers only."),
 )}
 
@@ -241,7 +243,9 @@ def prusa_args(s: dict, printer: PrinterProfile) -> list[str]:
     if printer.filament_mm != 1.75:
         a += ["--filament-diameter", str(printer.filament_mm)]
     if printer.flavor == "klipper":
-        a += ["--use-relative-e-distances", "--use-firmware-retraction", "--max-print-speed",
+        # Plain G1 E retracts, never G10/G11 firmware retraction: the retract_mm printed above is then
+        # what the printer does, and a printer.cfg without [firmware_retraction] still retracts.
+        a += ["--use-relative-e-distances", "--max-print-speed",
               str(s["infill_speed_mms"]), "--machine-max-acceleration-extruding", str(s["accel_mms2"])]
     if printer.start_gcode:
         a += ["--start-gcode", printer.start_gcode.replace("{chamber_temperature[0]}", str(s["chamber_c"]))]
@@ -251,7 +255,9 @@ def prusa_args(s: dict, printer: PrinterProfile) -> list[str]:
 
 
 def orca_overrides(s: dict, printer: PrinterProfile) -> tuple[dict, dict, dict]:
-    machine = {"type": "machine", "name": "gantrel-machine", "inherits": printer.orca_machine, "from": "User"}
+    machine = {"type": "machine", "name": "gantrel-machine", "inherits": printer.orca_machine, "from": "User",
+               # Slicer retracts (G1 E), never G10/G11, at the retract_mm Gantrel prints.
+               "use_firmware_retraction": "0", "retraction_length": [str(s["retract_mm"])]}
     process = {"type": "process", "name": "gantrel-process", "from": "User",
                "inherits": f"{s['layer_height_mm']:.2f}mm Standard @{printer.orca_machine.split(' 0.4')[0]}",
                "layer_height": str(s["layer_height_mm"]), "initial_layer_print_height": str(s["first_layer_height_mm"]),
