@@ -13,11 +13,14 @@ import argparse
 import copy
 import getpass
 import json
+import os
 import re
+import subprocess
 import sys
+import time
 from pathlib import Path
 
-from . import __version__, calibrate, config, discover as disc, safety, slicing
+from . import __version__, calibrate, config, discover as disc, guard as vguard, monitor, notify, safety, slicing
 from .adapters import ADAPTERS, adapter_class, build
 from .errors import ConfigError, PrinterError, SafetyError
 from .model import fmt_duration
@@ -331,6 +334,179 @@ def cmd_estop(args):
         f"Tell the person what happened now. Then: gantrel-printer status {args.name}")
 
 
+def cmd_watch(args):
+    if args.interval <= 0:
+        raise ConfigError("--interval must be more than 0 seconds")
+    if args.consecutive is not None and args.consecutive < 1:
+        raise ConfigError("--consecutive must be 1 or more")
+    adapter = open_printer(args.name)
+    opts = monitor.WatchOptions(interval=args.interval, guard=args.guard, timelapse=args.timelapse,
+                                notify=args.notify, start_timeout=args.start_timeout, duration=args.duration,
+                                any_state=args.any_state)
+    guard = None
+    if args.guard:
+        guard = vguard.VisionGuard.from_settings(args.vision_url, args.vision_model, args.consecutive)
+        guard.check()
+    notifier = notify.Notifier.from_settings() if args.notify else None
+    if args.background:
+        return watch_in_background(args)
+    job_dir = None
+    if args.job_dir:  # set only by watch --background for its own child process
+        job_dir = Path(args.job_dir).resolve()
+        if job_dir.parent != monitor.jobs_root(args.name).resolve() or not monitor.JOB_RE.match(job_dir.name):
+            raise ConfigError("--job-dir must be a job folder made by watch --background")
+    quiet = getattr(args, "json", False)
+
+    def log(line):
+        if not quiet:
+            print(line, flush=True)
+
+    if guard and not quiet:
+        print(f"Guard on: {guard.model} through Fonsviva at {guard.host}; pauses after {guard.consecutive} "
+              "failed frames in a row.\n"
+              + vguard.EXPERIMENTAL, flush=True)
+    res = monitor.run(adapter, opts, guard=guard, notifier=notifier, job_dir=job_dir, log=log)
+    nxt = {
+        "finished": "Tell the person the print finished" + (f"; the timelapse is {res.timelapse}" if res.timelapse
+                                                           else "") + ". Ask them to check the part",
+        "paused_by_guard": f"Tell the person the guard paused {args.name} and why (see pause.json in {res.job_dir}). "
+                           "Only they can resume it, on the printer, after looking at the print",
+        "failed": f"Tell the person {args.name} reports an error. Then: gantrel-printer status {args.name}",
+        "cancelled": "Tell the person the print was cancelled",
+        "ended": f"Tell the person the print on {args.name} is no longer running, and ask whether it finished",
+        "lost": f"Tell the person Gantrel lost contact with {args.name}. Then: gantrel-printer status {args.name}",
+        "unreachable": f"gantrel-printer status {args.name}",
+        "not_started": f"Ask the person to start the print on the printer, then run gantrel-printer watch {args.name} "
+                       "again",
+        "stopped": f"gantrel-printer frames {args.name}",
+        "time_up": f"Look at the frames in {res.job_dir}, or list jobs: gantrel-printer frames {args.name}",
+    }.get(res.outcome, f"gantrel-printer status {args.name}")
+    text = f"Watch of {args.name} ended: {res.outcome}. {res.frames} frames in {res.job_dir}."
+    if res.pause:
+        text += f"\nPaused because: {res.pause['reason']}"
+    if args.timelapse:
+        text += f"\nTimelapse: {res.timelapse or res.timelapse_note}"
+    out(args, {"printer": args.name, "outcome": res.outcome, "job_dir": str(res.job_dir), "frames": res.frames,
+               "timelapse": res.timelapse, "timelapse_note": res.timelapse_note, "pause": res.pause or None},
+        text, nxt)
+
+
+def watch_in_background(args):
+    """Start the same watch as its own process and return at once, so a chat or agent isn't blocked for hours."""
+    if monitor.is_locked(args.name):
+        raise SafetyError(f"{args.name} is already being watched", f"See it with: gantrel-printer frames {args.name}")
+    job_dir = monitor.new_job_dir(args.name)
+    argv = [sys.executable, "-m", "gantrel_printer.cli", "watch", args.name, "--interval", str(args.interval),
+            "--start-timeout", str(args.start_timeout), "--job-dir", str(job_dir)]
+    if args.duration:
+        argv += ["--duration", str(args.duration)]
+    for flag in ("guard", "timelapse", "notify", "any_state"):
+        if getattr(args, flag):
+            argv.append("--" + flag.replace("_", "-"))
+    for flag, val in (("--vision-url", args.vision_url), ("--vision-model", args.vision_model),
+                      ("--consecutive", args.consecutive)):
+        if val:
+            argv += [flag, str(val)]
+    log = open(job_dir / "watch.log", "a")
+    proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                            start_new_session=True, env=os.environ.copy())
+    time.sleep(1.5)
+    if proc.poll() not in (None, 0):
+        raise PrinterError(f"the background watch stopped at once: {(job_dir / 'watch.log').read_text()[-300:]}")
+    out(args, {"printer": args.name, "job_dir": str(job_dir), "pid": proc.pid, "background": True},
+        f"Watching {args.name} in the background (process {proc.pid}). Frames and log: {job_dir}",
+        f"Tell the person Gantrel is watching. Check on it any time with: gantrel-printer frames {args.name}")
+
+
+def job_rows(name: str) -> list[dict]:
+    root = monitor.jobs_root(name)
+    rows = []
+    running = monitor.is_locked(name)
+    for d in sorted((p for p in root.iterdir() if p.is_dir()), reverse=True) if root.is_dir() else []:
+        try:
+            job = json.loads((d / "job.json").read_text())
+        except (OSError, ValueError):
+            job = {}
+        outcome = job.get("outcome", "unknown")
+        if outcome == "running" and not running:
+            outcome = "stopped unexpectedly"
+        rows.append({"job": d.name, "dir": str(d), "started": job.get("started", ""), "outcome": outcome,
+                     "frames": len(list((d / "frames").glob("*"))) if (d / "frames").is_dir() else 0,
+                     "timelapse": str(d / "timelapse.mp4") if (d / "timelapse.mp4").is_file() else "",
+                     "paused_because": (job.get("pause") or {}).get("reason", "")})
+    return rows
+
+
+def cmd_frames(args):
+    config.get(args.name)
+    if args.timelapse:
+        d = monitor.jobs_root(args.name) / args.timelapse
+        if not monitor.JOB_RE.match(args.timelapse) or not d.is_dir():
+            raise ConfigError(f"no watch job {args.timelapse!r} for {args.name}", f"See them: gantrel-printer frames {args.name}")
+        path, note = monitor.make_timelapse(d)
+        out(args, {"job": args.timelapse, "timelapse": str(path or ""), "note": note},
+            f"Timelapse: {path}" if path else note, f"gantrel-printer frames {args.name}")
+        return
+    rows = job_rows(args.name)
+    lines = [f"{r['job']}  {r['outcome']:22} {r['frames']:5} frames  {r['dir']}"
+             + (f"\n    timelapse {r['timelapse']}" if r["timelapse"] else "")
+             + (f"\n    paused because: {r['paused_because']}" if r["paused_because"] else "") for r in rows]
+    out(args, {"printer": args.name, "jobs": rows}, "\n".join(lines) or f"No watch jobs for {args.name} yet.",
+        f"Open a job folder to see its frames, or watch a print: gantrel-printer watch {args.name} --timelapse"
+        if rows else f"After the person starts a print: gantrel-printer watch {args.name} --timelapse --background")
+
+
+def cmd_watch_config(args):
+    data = config.load_watch_settings()
+    vision = data.setdefault("vision", {})
+    note = data.setdefault("notify", {})
+    if args.vision_url:
+        vguard.check_local(args.vision_url)
+        vision["url"] = args.vision_url
+    if args.vision_model:
+        vision["model"] = args.vision_model
+    if args.consecutive is not None:
+        if args.consecutive < 1:
+            raise ConfigError("--consecutive must be 1 or more")
+        vision["consecutive"] = args.consecutive
+    if args.fonsviva_key_stdin and args.notify_url_stdin:
+        raise ConfigError("--fonsviva-key-stdin and --notify-url-stdin both read stdin",
+                          "Run watch-config once for each")
+    if args.fonsviva_key_stdin:
+        key = sys.stdin.readline().strip()
+        if not key:
+            raise ConfigError("no Fonsviva key on stdin", "Pipe Gantrel's Fonsviva app key in; it is never printed")
+        config.set_secret(config.FONSVIVA_KEY, key)
+    url = None
+    if args.notify_url_stdin:
+        url = sys.stdin.readline().strip()
+    if url:
+        n = notify.Notifier(url, args.notify_kind or "auto")
+        config.set_secret(config.NOTIFY_KEY, url)
+        note["kind"] = n.kind
+        note["target"] = notify.shown(url)
+    if args.notify_kind and not url:
+        note["kind"] = args.notify_kind
+    if args.attach_frame is not None:
+        note["attach_frame"] = args.attach_frame
+    if args.clear_notify:
+        config.delete_secret(config.NOTIFY_KEY)
+        data["notify"] = note = {}
+    config.save_watch_settings(data)
+    has_url = bool(config.get_secret(config.NOTIFY_KEY))
+    has_key = bool(config.get_secret(config.FONSVIVA_KEY))
+    text = (f"Vision model: {vision.get('model', vguard.DEFAULT_MODEL)} through Fonsviva at "
+            f"{vision.get('url', vguard.DEFAULT_URL)}, pause after "
+            f"{vision.get('consecutive', vguard.DEFAULT_CONSECUTIVE)} failed frames in a row.\n"
+            f"Fonsviva key: {'saved in the OS keyring' if has_key else 'not set'}.\n"
+            + (f"Notices: {note.get('kind', 'auto')} to {note.get('target', 'a saved URL')}, frame attached: "
+               f"{ {True: 'yes', False: 'no', None: 'only to a local address'}[note.get('attach_frame')] }."
+               if has_url else "Notices: not set."))
+    out(args, {"vision": vision, "fonsviva_key": has_key, "notify": {**note, "set": has_url}}, text,
+        "gantrel-printer watch <name> --timelapse --background" + (" --notify" if has_url else "")
+        + " (add --guard only if the person asks for the experimental failure guard)")
+
+
 # ---------------------------------------------------------------- parser
 
 
@@ -404,6 +580,41 @@ def parser() -> argparse.ArgumentParser:
                         ("estop", cmd_estop, "emergency stop")):
         sp = add(name, fn, h)
         sp.add_argument("name")
+    sp = add("watch", cmd_watch, "watch a running print: frames, status, failure guard, timelapse, notices")
+    sp.add_argument("name")
+    sp.add_argument("--interval", type=float, default=30.0, help="seconds between frames (default 30)")
+    sp.add_argument("--guard", action="store_true",
+                    help="experimental: check each frame with a local vision model and pause after repeated failures")
+    sp.add_argument("--timelapse", action="store_true", help="make timelapse.mp4 when the print ends (needs ffmpeg)")
+    sp.add_argument("--notify", action="store_true", help="send a notice when it ends (set up with watch-config)")
+    sp.add_argument("--vision-url", help=f"Fonsviva's OpenAI-compatible endpoint on your network "
+                                         f"(default {vguard.DEFAULT_URL})")
+    sp.add_argument("--vision-model", help=f"vision model name (default {vguard.DEFAULT_MODEL})")
+    sp.add_argument("--consecutive", type=int, help="failed frames in a row before the guard pauses (default 2)")
+    sp.add_argument("--start-timeout", type=float, default=600.0,
+                    help="seconds to wait for the print to start (default 600)")
+    sp.add_argument("--duration", type=float, metavar="SECONDS", help="stop after this many seconds")
+    sp.add_argument("--any-state", action="store_true",
+                    help="take frames even when no print is running (to check the camera); the guard still "
+                         "judges only frames taken while printing")
+    sp.add_argument("--background", action="store_true", help="run as its own process and return at once")
+    sp.add_argument("--job-dir", help=argparse.SUPPRESS)
+    sp = add("frames", cmd_frames, "list a printer's watch jobs (frames, timelapse, guard pauses)")
+    sp.add_argument("name")
+    sp.add_argument("--timelapse", metavar="JOB", help="(re)make the timelapse for one job")
+    sp = add("watch-config", cmd_watch_config, "set the vision model and where notices go")
+    sp.add_argument("--vision-url", help=f"Fonsviva's OpenAI-compatible endpoint (default {vguard.DEFAULT_URL})")
+    sp.add_argument("--vision-model")
+    sp.add_argument("--consecutive", type=int)
+    sp.add_argument("--fonsviva-key-stdin", action="store_true",
+                    help="read Gantrel's Fonsviva app key from stdin; it is kept in the OS keyring and never shown")
+    sp.add_argument("--notify-url-stdin", action="store_true",
+                    help="read the ntfy topic or webhook URL from stdin; it is kept in the OS keyring")
+    sp.add_argument("--notify-kind", choices=list(notify.KINDS))
+    sp.add_argument("--attach-frame", dest="attach_frame", action="store_true", default=None,
+                    help="send the last frame with notices, even to a target outside your network")
+    sp.add_argument("--no-attach-frame", dest="attach_frame", action="store_false")
+    sp.add_argument("--clear-notify", action="store_true", help="forget the notice target")
     return p
 
 

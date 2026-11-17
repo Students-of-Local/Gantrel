@@ -1,0 +1,309 @@
+{
+ "summary": {
+  "model": "gemma3:4b",
+  "host": "abbey1 (GTX 1650 SUPER 4 GB, Ollama 0.40.15)",
+  "date": "2026-11-17",
+  "frames": {
+   "good": 13,
+   "failed": 15
+  },
+  "accuracy": 0.714,
+  "failed_caught": "7/15",
+  "false_failed_on_good": 0,
+  "good_called_ok": 13,
+  "malformed": 0,
+  "unreachable": 0,
+  "latency_s": {
+   "median": 127.9,
+   "max": 486.9
+  },
+  "by_kind": {
+   "detached": "0/6",
+   "empty_bed": "0/2",
+   "spaghetti": "7/7"
+  },
+  "passes_gate": false
+ },
+ "frames": [
+  {
+   "file": "good/k2-real-finished-vase.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The bed shows a dark, continuous layer of plastic, appearing to be a solid object.",
+   "source": "model",
+   "latency_s": 136.99,
+   "raw": "{\"reason\": \"The bed shows a dark, continuous layer of plastic, appearing to be a solid object.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-00.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The nozzle is on top of a brown layer, and the layer appears smooth.",
+   "source": "model",
+   "latency_s": 156.94,
+   "raw": "{\"reason\": \"The nozzle is on top of a brown layer, and the layer appears smooth.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-01.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The print appears to be building a solid object on the bed with a visible nozzle.",
+   "source": "model",
+   "latency_s": 89.17,
+   "raw": "{\"reason\": \"The print appears to be building a solid object on the bed with a visible nozzle.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-02.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "A yellow layer is being deposited onto the bed.",
+   "source": "model",
+   "latency_s": 90.09,
+   "raw": "{\"reason\": \"A yellow layer is being deposited onto the bed.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-03.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The print appears to be a solid gear being built layer by layer on the bed.",
+   "source": "model",
+   "latency_s": 123.11,
+   "raw": "{\"reason\": \"The print appears to be a solid gear being built layer by layer on the bed.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-04.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The nozzle is depositing plastic onto the bed, forming a layer.",
+   "source": "model",
+   "latency_s": 87.16,
+   "raw": "{\"reason\": \"The nozzle is depositing plastic onto the bed, forming a layer.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-05.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The print appears to be a solid block on the bed with smooth sides.",
+   "source": "model",
+   "latency_s": 149.89,
+   "raw": "{\"reason\": \"The print appears to be a solid block on the bed with smooth sides.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-06.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The print appears to be a solid block of plastic with smooth sides on the bed, and the nozzle is on top of it.",
+   "source": "model",
+   "latency_s": 14.3,
+   "raw": "{\"reason\": \"The print appears to be a solid block of plastic with smooth sides on the bed, and the nozzle is on top of it.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-07.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "A solid, brown object is being printed on the bed.",
+   "source": "model",
+   "latency_s": 486.94,
+   "raw": "{\"reason\": \"A solid, brown object is being printed on the bed.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-08.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The nozzle is depositing plastic onto the bed, forming a layer.",
+   "source": "model",
+   "latency_s": 96.3,
+   "raw": "{\"reason\": \"The nozzle is depositing plastic onto the bed, forming a layer.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-09.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "A green gear is being printed on the bed.",
+   "source": "model",
+   "latency_s": 98.93,
+   "raw": "{\"reason\": \"A green gear is being printed on the bed.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-10.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The print appears to be a solid block on the bed with smooth sides.",
+   "source": "model",
+   "latency_s": 112.66,
+   "raw": "{\"reason\": \"The print appears to be a solid block on the bed with smooth sides.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-11.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The print appears to be building a solid object on the bed.",
+   "source": "model",
+   "latency_s": 144.84,
+   "raw": "{\"reason\": \"The print appears to be building a solid object on the bed.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "failed/spaghetti-12.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "The bed is covered in a tangled mess of plastic strands.",
+   "source": "model",
+   "latency_s": 238.34,
+   "raw": "{\"reason\": \"The bed is covered in a tangled mess of plastic strands.\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/spaghetti-13.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "The bed is covered in a tangled mess of plastic strands.",
+   "source": "model",
+   "latency_s": 237.39,
+   "raw": "{\"reason\": \"The bed is covered in a tangled mess of plastic strands.\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/spaghetti-14.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "The bed is covered in loose, tangled strands of plastic.",
+   "source": "model",
+   "latency_s": 232.35,
+   "raw": "{\"reason\": \"The bed is covered in loose, tangled strands of plastic.\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/spaghetti-15.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "The bed is covered in loose, tangled strands of green plastic instead of a solid gear.",
+   "source": "model",
+   "latency_s": 103.45,
+   "raw": "{\"reason\": \"The bed is covered in loose, tangled strands of green plastic instead of a solid gear.\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/spaghetti-16.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "The bed is covered in a tangled mess of plastic strands.",
+   "source": "model",
+   "latency_s": 106.04,
+   "raw": "{\"reason\": \"The bed is covered in a tangled mess of plastic strands.\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/spaghetti-17.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "The bed is covered in a tangled mess of yellow plastic strands.",
+   "source": "model",
+   "latency_s": 104.81,
+   "raw": "{\"reason\": \"The bed is covered in a tangled mess of yellow plastic strands.\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/spaghetti-18.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "The bed is covered in loose, tangled strands of plastic.",
+   "source": "model",
+   "latency_s": 132.63,
+   "raw": "{\"reason\": \"The bed is covered in loose, tangled strands of plastic.\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/detached-19.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "ok",
+   "reason": "The blue object is being printed on the bed.",
+   "source": "model",
+   "latency_s": 11.65,
+   "raw": "{\"reason\": \"The blue object is being printed on the bed.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "failed/detached-20.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "suspect",
+   "reason": "The print is laying down a green filament on the bed.",
+   "source": "model",
+   "latency_s": 395.42,
+   "raw": "{\"reason\": \"The print is laying down a green filament on the bed.\", \"verdict\": \"suspect\"}"
+  },
+  {
+   "file": "failed/detached-21.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "ok",
+   "reason": "The print appears to be a solid object with smooth sides on the bed, and the nozzle is on top of it.",
+   "source": "model",
+   "latency_s": 353.7,
+   "raw": "{\"reason\": \"The print appears to be a solid object with smooth sides on the bed, and the nozzle is on top of it.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "failed/detached-22.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "suspect",
+   "reason": "The print is partially complete with some loose plastic strands on the bed.",
+   "source": "model",
+   "latency_s": 111.39,
+   "raw": "{\"reason\": \"The print is partially complete with some loose plastic strands on the bed.\", \"verdict\": \"suspect\"}"
+  },
+  {
+   "file": "failed/detached-23.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "suspect",
+   "reason": "The print is laying on the bed in a somewhat disorganized manner, with strands of plastic extending from the base.",
+   "source": "model",
+   "latency_s": 210.37,
+   "raw": "{\"reason\": \"The print is laying on the bed in a somewhat disorganized manner, with strands of plastic extending from the base.\", \"verdict\": \"suspect\"}"
+  },
+  {
+   "file": "failed/detached-24.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "suspect",
+   "reason": "A blue cube is being printed with loose strands of plastic around it.",
+   "source": "model",
+   "latency_s": 274.24,
+   "raw": "{\"reason\": \"A blue cube is being printed with loose strands of plastic around it.\", \"verdict\": \"suspect\"}"
+  },
+  {
+   "file": "failed/empty_bed-25.jpg",
+   "label": "failed",
+   "kind": "empty_bed",
+   "verdict": "ok",
+   "reason": "The bed is covered in a brown plastic layer, forming the first few layers of a print.",
+   "source": "model",
+   "latency_s": 224.1,
+   "raw": "{\"reason\": \"The bed is covered in a brown plastic layer, forming the first few layers of a print.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "failed/empty_bed-26.jpg",
+   "label": "failed",
+   "kind": "empty_bed",
+   "verdict": "ok",
+   "reason": "The print appears to be a solid block with smooth sides on the bed, and the nozzle is positioned on top of it.",
+   "source": "model",
+   "latency_s": 110.53,
+   "raw": "{\"reason\": \"The print appears to be a solid block with smooth sides on the bed, and the nozzle is positioned on top of it.\", \"verdict\": \"ok\"}"
+  }
+ ]
+}

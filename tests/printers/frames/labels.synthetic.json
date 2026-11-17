@@ -1,0 +1,380 @@
+[
+ {
+  "file": "good/good-00.jpg",
+  "label": "ok",
+  "kind": "printing",
+  "part": "box",
+  "color": "teal",
+  "status": {
+   "state": "printing",
+   "progress": 0.23,
+   "layer": 45,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "good/good-01.jpg",
+  "label": "ok",
+  "kind": "printing",
+  "part": "cylinder",
+  "color": "black",
+  "status": {
+   "state": "printing",
+   "progress": 0.31,
+   "layer": 61,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "good/good-02.jpg",
+  "label": "ok",
+  "kind": "printing",
+  "part": "vase",
+  "color": "yellow",
+  "status": {
+   "state": "printing",
+   "progress": 0.87,
+   "layer": 173,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "good/good-03.jpg",
+  "label": "ok",
+  "kind": "printing",
+  "part": "gear",
+  "color": "white",
+  "status": {
+   "state": "printing",
+   "progress": 0.33,
+   "layer": 65,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "good/good-04.jpg",
+  "label": "ok",
+  "kind": "printing",
+  "part": "grid",
+  "color": "teal",
+  "status": {
+   "state": "printing",
+   "progress": 0.73,
+   "layer": 145,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "good/good-05.jpg",
+  "label": "ok",
+  "kind": "printing",
+  "part": "bracket",
+  "color": "white",
+  "status": {
+   "state": "printing",
+   "progress": 0.47,
+   "layer": 93,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "good/good-06.jpg",
+  "label": "ok",
+  "kind": "printing",
+  "part": "box",
+  "color": "red",
+  "status": {
+   "state": "printing",
+   "progress": 0.5,
+   "layer": 100,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "good/good-07.jpg",
+  "label": "ok",
+  "kind": "printing",
+  "part": "cylinder",
+  "color": "black",
+  "status": {
+   "state": "printing",
+   "progress": 0.63,
+   "layer": 125,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "good/good-08.jpg",
+  "label": "ok",
+  "kind": "printing",
+  "part": "vase",
+  "color": "yellow",
+  "status": {
+   "state": "printing",
+   "progress": 0.51,
+   "layer": 101,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "good/good-09.jpg",
+  "label": "ok",
+  "kind": "printing",
+  "part": "gear",
+  "color": "green",
+  "status": {
+   "state": "printing",
+   "progress": 0.95,
+   "layer": 189,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "good/good-10.jpg",
+  "label": "ok",
+  "kind": "printing",
+  "part": "grid",
+  "color": "grey",
+  "status": {
+   "state": "printing",
+   "progress": 0.48,
+   "layer": 95,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "good/good-11.jpg",
+  "label": "ok",
+  "kind": "printing",
+  "part": "bracket",
+  "color": "red",
+  "status": {
+   "state": "printing",
+   "progress": 0.48,
+   "layer": 96,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "failed/spaghetti-12.jpg",
+  "label": "failed",
+  "kind": "spaghetti",
+  "part": "box",
+  "color": "teal",
+  "status": {
+   "state": "printing",
+   "progress": 0.57,
+   "layer": 114,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "failed/spaghetti-13.jpg",
+  "label": "failed",
+  "kind": "spaghetti",
+  "part": "cylinder",
+  "color": "yellow",
+  "status": {
+   "state": "printing",
+   "progress": 0.73,
+   "layer": 145,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "failed/spaghetti-14.jpg",
+  "label": "failed",
+  "kind": "spaghetti",
+  "part": "vase",
+  "color": "blue",
+  "status": {
+   "state": "printing",
+   "progress": 0.37,
+   "layer": 73,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "failed/spaghetti-15.jpg",
+  "label": "failed",
+  "kind": "spaghetti",
+  "part": "gear",
+  "color": "green",
+  "status": {
+   "state": "printing",
+   "progress": 0.83,
+   "layer": 166,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "failed/spaghetti-16.jpg",
+  "label": "failed",
+  "kind": "spaghetti",
+  "part": "grid",
+  "color": "teal",
+  "status": {
+   "state": "printing",
+   "progress": 0.65,
+   "layer": 130,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "failed/spaghetti-17.jpg",
+  "label": "failed",
+  "kind": "spaghetti",
+  "part": "bracket",
+  "color": "yellow",
+  "status": {
+   "state": "printing",
+   "progress": 0.58,
+   "layer": 116,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "failed/spaghetti-18.jpg",
+  "label": "failed",
+  "kind": "spaghetti",
+  "part": "box",
+  "color": "white",
+  "status": {
+   "state": "printing",
+   "progress": 0.57,
+   "layer": 113,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "failed/detached-19.jpg",
+  "label": "failed",
+  "kind": "detached",
+  "part": "cylinder",
+  "color": "blue",
+  "status": {
+   "state": "printing",
+   "progress": 0.35,
+   "layer": 70,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "failed/detached-20.jpg",
+  "label": "failed",
+  "kind": "detached",
+  "part": "vase",
+  "color": "green",
+  "status": {
+   "state": "printing",
+   "progress": 0.69,
+   "layer": 137,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "failed/detached-21.jpg",
+  "label": "failed",
+  "kind": "detached",
+  "part": "gear",
+  "color": "grey",
+  "status": {
+   "state": "printing",
+   "progress": 0.76,
+   "layer": 151,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "failed/detached-22.jpg",
+  "label": "failed",
+  "kind": "detached",
+  "part": "grid",
+  "color": "grey",
+  "status": {
+   "state": "printing",
+   "progress": 0.6,
+   "layer": 119,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "failed/detached-23.jpg",
+  "label": "failed",
+  "kind": "detached",
+  "part": "bracket",
+  "color": "yellow",
+  "status": {
+   "state": "printing",
+   "progress": 0.54,
+   "layer": 107,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "failed/detached-24.jpg",
+  "label": "failed",
+  "kind": "detached",
+  "part": "box",
+  "color": "blue",
+  "status": {
+   "state": "printing",
+   "progress": 0.49,
+   "layer": 98,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "failed/empty_bed-25.jpg",
+  "label": "failed",
+  "kind": "empty_bed",
+  "part": "cylinder",
+  "color": "orange",
+  "status": {
+   "state": "printing",
+   "progress": 0.52,
+   "layer": 104,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ },
+ {
+  "file": "failed/empty_bed-26.jpg",
+  "label": "failed",
+  "kind": "empty_bed",
+  "part": "vase",
+  "color": "blue",
+  "status": {
+   "state": "printing",
+   "progress": 0.54,
+   "layer": 108,
+   "total_layers": 200
+  },
+  "source": "synthetic, render_frames.py"
+ }
+]

@@ -31,6 +31,7 @@ mistake in those notes is a mistake in both the adapter and its fake.
 | Discovery | Known-port scan and probes checked against every fake (`gantrel-printer discover --host 127.0.0.1` finds each one in the tests) and the real K2. mDNS, Bambu SSDP listening and the Elegoo UDP broadcast are built but not tested on a real network. USB serial printers are listed from `/dev/serial/by-id` without opening the port. |
 | Slicing | Profiles for 24 printer models and 5 materials (the new ones cite their spec pages in `slicing.py`; resin profiles exist only so pre-sliced .ctb and .goo uploads know the printer is resin, and slicing them is refused), with rules (ABS and ASA need an enclosure, TPU needs direct drive; `--force` overrides with a printed warning). Slicing needs the printer's --model; it is never guessed from the printer type. Klipper profiles retract with plain G1 E moves of the printed `retract_mm`, never G10/G11 firmware retraction, so a printer.cfg without `[firmware_retraction]` still retracts. PrusaSlicer arguments are checked against a fake slicer. No real slicer has run yet; the OrcaSlicer path is untested. |
 | Calibration prints | `gantrel-printer calibrate <printer> <kind>` makes first-layer, temp-tower, retraction or flow G-code for a paired printer (or a profile key) and saves it locally. The G-code is written by `calibrate.py` from the printer's slicing profile (bed, nozzle, filament diameter, start and end G-code) and the material, so no slicer is needed; Klipper profiles use their START_PRINT macro. It never starts a print and uploads only with `--upload`, through the same path as `gantrel-printer upload`. Tests check every filament profile and material: every move inside the bed, every nozzle temperature inside the material's range, temp-tower bands 5 C apart and 5 mm tall, retraction bands retracting their stated distance. No calibration print has run on a real printer yet. |
+| Watch, guard, timelapse, notices | Fake: `tests/printers/test_watch.py` takes frames and status from every adapter's fake, pauses a fake printer after K failed verdicts from a fake vision server, never pauses on suspect or malformed answers, builds an MP4 that ffprobe reads, and posts to a fake ntfy topic and webhook. Real: a read-only 62 s watch of the K2 at 10 s intervals (5 frames and a timelapse, 2026-11-17); the guard has never paused a real printer. No local vision model passed the guard gate, so the guard is off unless asked for (see Which model). See Watching a print. |
 | Starting and resuming | Not in the tools. `gantrel-printer` has no start, resume or confirm command; after an upload it prints the file name on the printer and where a person starts it (the printer's screen, Mainsail or Fluidd, OctoPrint, PrusaLink, Bambu Studio, Creality Print, Duet Web Control, Repetier-Server). Snapmaker and UltiMaker prints are always started on the printer's touchscreen, because their APIs either can't start a stored file or start every file they receive. Files on the printer are named with their content hash and uploads never replace a file. The adapters' start and resume calls and the confirm-token code stay for the app's confirm sheet; nothing calls them yet, and only the fake-printer tests exercise them. Start and resume spend the token before any other check, so a refused or mismatched use voids it. Start tokens bind to the job record and its file's SHA-256; resume tokens bind to the job record of the print the printer is paused on, so a print Gantrel didn't upload can't be resumed with a token, and a file deleted and uploaded again gets a new record that an old token doesn't match. |
 
 Gantrel's tools never start or resume a print; a person does that on the printer. This is not a
@@ -82,6 +83,143 @@ HTTP uses the Python standard library, which keeps certifi (MPL-2.0) out.
 | [crowsnest](https://github.com/mainsail-crew/crowsnest), [moonraker-timelapse](https://github.com/mainsail-crew/moonraker-timelapse) | GPL-3.0 | Run on Klipper printers; Gantrel only reads their streams and files. |
 | FFmpeg | LGPL-2.1 or GPL | Builds timelapses for printers that don't. |
 | [Obico](https://github.com/TheSpaghettiDetective/obico-server) | AGPL-3.0 | Optional local failure detection that pauses the print. Run unmodified as its own service. |
+
+## Watching a print
+
+`gantrel-printer watch <name>` follows a print the person started. Every `--interval` seconds
+(default 30) it saves a camera frame and a status line to a job folder under the state dir
+(`~/.local/state/gantrel-printer/watch/<name>/<UTC time>/`), and it ends when the print does. It
+waits up to `--start-timeout` seconds (default 600) for the print to start, and it gives up after
+five status reads in a row fail. `--any-state` takes frames whatever the printer is doing and
+`--duration` stops after a set time; together they check a camera before a print. `--background`
+runs the watch as its own process and returns at once, so an agent or chat is not blocked for hours.
+Only one watch runs per printer. `gantrel-printer frames <name>` lists the job folders, how each
+ended and why the guard paused, and `frames <name> --timelapse <job>` makes a job's timelapse again.
+
+| File in the job folder | What it holds |
+|---|---|
+| `job.json` | Printer, start and end, how it ended (finished, ended, failed, cancelled, paused_by_guard, lost, not_started, time_up, stopped), frame count, timelapse, guard settings. |
+| `status.jsonl` | One status line per tick, with the frame it took and the guard's verdict. |
+| `frames/` | `000001.jpg`, `000002.jpg`, ... |
+| `guard/`, `guard.jsonl` | The last 12 frames the guard judged, each with its verdict in `<frame>.json`, and every verdict. |
+| `pause.json` | Only when the guard paused: the failed frames, the model's reasons and the model used. |
+| `timelapse.mp4` | With `--timelapse`, made by ffmpeg when the print ends. Without ffmpeg the watch says so and tells the person how to make it later. |
+
+Duet, OctoPrint, Repetier-Server and Marlin printers go back to idle after a print whether it
+finished or was stopped. The watch calls that `finished` only when the last progress it read was 98%
+or more, and `ended` otherwise.
+
+### Failure guard (`--guard`)
+
+With `--guard`, each frame taken while the printer reports printing goes to a vision model through
+[Fonsviva](https://github.com/baney75/Fonsviva), like all of Gantrel's compute: Fonsviva's
+OpenAI-compatible `/v1/chat/completions` endpoint, by default `http://127.0.0.1:7341/v1`. Gantrel
+sends its own Fonsviva app key as the bearer. The guard is measured (below), off by default, and has
+not yet been run through a real Fonsviva install: every guard test uses a fake Fonsviva that requires
+the key.
+The prompt (in `src/gantrel_printer/guard.py`) gives the printer's state, progress and layer, lists
+spaghetti, a part loose from the bed, blobs, layer shift, a clog or no extrusion, and an empty bed
+during a print, and asks for `{"reason": "...", "verdict": "ok|suspect|failed"}`.
+
+- The guard pauses only after `failed` on K frames in a row (`--consecutive`, default 2), only while
+  the printer reports printing, and only after reading the status once more just before the pause.
+  Pause is a safe action (see Safety rules), so it needs no confirm.
+- Anything that is not a clean answer counts as `suspect`, never `failed`: prose, bad JSON, an
+  unknown verdict, an empty reply, or a model that doesn't answer. Suspect frames never pause.
+- The watch reaches the printer through `monitor.PrinterHandle`, which exposes status, frames and
+  pause only. It has no start, resume or cancel, and the tests fail if the watch calls any of them.
+- Frames are pictures of the person's home, so the vision URL must resolve to this machine or the
+  local network (loopback, private ranges, link-local, or Tailscale's 100.64.0.0/10). Each request
+  looks the host up once, checks every address, and connects to that address, so a DNS answer that
+  changes between the check and the connection cannot send a frame or the key elsewhere. Over https
+  the certificate is still checked against the host name.
+- Gantrel's Fonsviva app key lives in the OS keyring, never in a file or a log. The person sets it
+  with `gantrel-printer watch-config --fonsviva-key-stdin` (approve the app first with
+  `fonsviva keys approve gantrel`; see [Connect to Fonsviva](setup/connect-fonsviva.md)).
+- Each verdict records where it ran: Fonsviva's host and port, the model asked for, and the model
+  and any `X-Fonsviva-*` headers Fonsviva sent back. They go in `guard.jsonl`, in `job.json` (the
+  last 50 verdicts under `guard.verdicts`), in `pause.json`, and in the watch log line.
+- If Fonsviva does not answer, refuses the key, has no key saved, or lacks the model, `watch --guard`
+  stops before it starts with an ERROR that names `fonsviva status`; run the watch again without
+  `--guard`, as the skill does.
+- Only a whole JSON object counts as an answer, with at most one Markdown code fence around it. An
+  array, or prose around the object, is malformed (suspect), so it never pauses.
+- If the pause call fails, the watch keeps going, retries on the next failed frame, and sends a
+  `pause_failed` notice once.
+
+Set the model once with `gantrel-printer watch-config --vision-model <model>` (saved in `watch.json`
+next to `printers.json`), or per run with `--vision-model`. `--vision-url` is only for Fonsviva at
+another address on the local network, such as another machine's Tailscale name.
+
+#### Which model (measured 2026-11-17)
+
+**The guard is off unless the person asks for it.** The skill and the NEXT lines leave out `--guard`,
+and a watch with `--guard` prints that it is experimental, because no local vision model passed the
+gate: 80% or more right on failed vs not failed over the labeled frames in `tests/printers/frames/`,
+with no good frame judged failed. The set has 13 good frames and 15 failed ones (7 spaghetti, 6 parts
+knocked loose or dragged, 2 empty beds during a print): 27 Blender renders and one real K2 frame (see
+the folder's README). Every model ran through the same `VisionGuard.classify()` the watch uses, with
+the printer status in each frame's label (`benchmarks/guard_vision.py`; every answer is in
+`benchmarks/results/guard-vision/`).
+
+<!-- guard-table: uv run python benchmarks/guard_vision.py --table -->
+| Model | Accuracy | Failed frames caught | Good frames judged failed | Malformed | Median / max latency | Passes the gate | Host | Date |
+|---|---|---|---|---|---|---|---|---|
+| `qwen2.5vl:3b` | 79% | 12/15 (detached 5/6, empty_bed 0/2, spaghetti 7/7) | 3 of 13 | 0 | 33.3 s / 181.5 s | no | abbey1 (GTX 1650 SUPER 4 GB, Ollama 0.12.6) | 2026-11-17 |
+| `qwen2.5vl:7b` | 75% | 13/15 (detached 4/6, empty_bed 2/2, spaghetti 7/7) | 5 of 13 | 0 | 52.2 s / 71.5 s | no | abbey1 (GTX 1650 SUPER 4 GB, Ollama 0.12.6) | 2026-11-17 |
+| `gemma3:4b` | 71% | 7/15 (detached 0/6, empty_bed 0/2, spaghetti 7/7) | 0 of 13 | 0 | 127.9 s / 486.9 s | no | abbey1 (GTX 1650 SUPER 4 GB, Ollama 0.40.15) | 2026-11-17 |
+| `hf.co/LiquidAI/LFM2-VL-1.6B-GGUF:Q8_0` | 46% | 0/15 (detached 0/6, empty_bed 0/2, spaghetti 0/7) | 0 of 13 | 26 | 2.4 s / 49.6 s | no | abbey1 (GTX 1650 SUPER 4 GB, Ollama 0.40.15) | 2026-11-17 |
+<!-- /guard-table -->
+
+- The default model is `gemma3:4b` because it never judged a good frame failed, so in these tests a
+  watch with `--guard` does not pause a good print. It catches only spaghetti: it called every part
+  knocked loose and every empty bed ok or suspect.
+- Both Qwen2.5-VL models catch more failures but read a small part half hidden behind the toolhead
+  as an empty bed, and call a good print failed. Two such frames in a row would pause a good print.
+- LFM2-VL 1.6B put its verdict word in the `reason` field, so the guard counted the answers as
+  malformed (suspect) and never paused, which is the safe way to fail.
+- `qwen3-vl:4b` reasons before it answers, and those tokens count against the answer limit. At the
+  old limit of 200 tokens it sent no JSON on most frames, so the guard now allows 1024 (the four rows
+  above ran at 200, and none of those answers was cut off). Two probe
+  frames at the new limit came back right (spaghetti `failed` in 118 s, a good print `ok` in 499 s),
+  but it has no full-set row yet: on the shared GPU a full run takes hours.
+- Times are from abbey1, whose 4 GB GPU was shared with another model during the runs, so they are
+  slower than on a free GPU. The watch waits for each answer and then takes the next frame, so a slow
+  model stretches the time between frames; it never piles up requests.
+- The renders are cleaner than a real chamber camera. A model that passes here is a candidate, not
+  proof that it catches real failures.
+
+Measure another model the same way and add its row. The benchmark is a developer tool: it talks to a
+model server directly (the rows above ran against Ollama), with no Fonsviva key, so a model can be
+measured before it is offered through Fonsviva. The watch never does this.
+
+    uv run python benchmarks/guard_vision.py --url <model server>/v1 --model <model> --host "<machine and GPU>"
+    uv run python benchmarks/guard_vision.py --table
+
+One read-only real check: frame 5 of the K2 run (state complete, 100%, a finished vase on the bed)
+went through the guard with `gemma3:4b`: `suspect`, "The bed shows a dark, partially printed object
+with some visible supports.", in 250 s. Suspect never pauses.
+
+### Notices (`--notify`)
+
+When a watch ends, `--notify` sends one notice: finished, ended, failed, cancelled, paused by the
+guard, or lost contact. A failed pause sends `pause_failed` at once. Gantrel has no default target.
+Set one with:
+
+    printf '%s\n' 'https://ntfy.sh/<your-topic>' | gantrel-printer watch-config --notify-url-stdin
+    printf '%s\n' 'http://192.168.1.20:8123/api/webhook/<id>' | gantrel-printer watch-config --notify-url-stdin --notify-kind webhook
+
+The URL goes to the OS keyring, not a file, because webhook URLs often carry a token; `watch.json`
+keeps only the kind and the host. A notice that fails is logged with only `scheme://host:port` and
+the kind of error, never the path, query or user of the URL, in the foreground and in a background
+watch's `watch.log`. An ntfy topic gets a POST with Title, Priority and Tags headers, or
+a PUT with the last frame as an attachment. A webhook gets a JSON POST:
+`{"event", "title", "message", "printer", "file", "time", "frame": {"name", "content_type", "base64"}}`.
+The frame goes along only when the target is on the local network (decided on each send, from the
+same DNS answer the send connects to), or after
+`watch-config --attach-frame`: anyone who knows a public ntfy topic's name can read it, so use a
+long random topic name or a self-hosted ntfy server. `--no-attach-frame` turns frames off, and
+`--clear-notify` forgets the target. A notice that fails is logged and never stops the watch.
 
 ## Agent-written adapters
 

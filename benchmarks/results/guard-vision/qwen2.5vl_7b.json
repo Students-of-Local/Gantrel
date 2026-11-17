@@ -1,0 +1,309 @@
+{
+ "summary": {
+  "model": "qwen2.5vl:7b",
+  "host": "abbey1 (GTX 1650 SUPER 4 GB, Ollama 0.12.6)",
+  "date": "2026-11-17",
+  "frames": {
+   "good": 13,
+   "failed": 15
+  },
+  "accuracy": 0.75,
+  "failed_caught": "13/15",
+  "false_failed_on_good": 5,
+  "good_called_ok": 7,
+  "malformed": 0,
+  "unreachable": 1,
+  "latency_s": {
+   "median": 52.2,
+   "max": 71.5
+  },
+  "by_kind": {
+   "detached": "4/6",
+   "empty_bed": "2/2",
+   "spaghetti": "7/7"
+  },
+  "passes_gate": false
+ },
+ "frames": [
+  {
+   "file": "good/k2-real-finished-vase.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "suspect",
+   "reason": "no answer from the vision model (the vision model at http://127.0.0.1:11436/v1 refused it (HTTP 500): {\"error\":{\"message\":\"model runner has unexpectedly stopped, this may be due to resource limitations or an internal error, check ollama server logs for details\",\"type\":\"api_error\",\"param\":null,\"code\":n)",
+   "source": "unreachable",
+   "latency_s": 60.36,
+   "raw": ""
+  },
+  {
+   "file": "good/good-00.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "failed",
+   "reason": "The bed is empty and there is no print material present.",
+   "source": "model",
+   "latency_s": 71.46,
+   "raw": "{\"reason\": \"The bed is empty and there is no print material present.\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "good/good-01.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The print appears to be a solid object with smooth sides on the bed, with the nozzle on top of it.",
+   "source": "model",
+   "latency_s": 54.5,
+   "raw": "{\"reason\": \"The print appears to be a solid object with smooth sides on the bed, with the nozzle on top of it.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-02.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The print appears to be a solid object with smooth sides on the bed, with the nozzle on top of it.",
+   "source": "model",
+   "latency_s": 54.29,
+   "raw": "{\"reason\": \"The print appears to be a solid object with smooth sides on the bed, with the nozzle on top of it.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-03.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The print looks normal with a solid object and smooth sides on the bed.",
+   "source": "model",
+   "latency_s": 52.74,
+   "raw": "{\"reason\": \"The print looks normal with a solid object and smooth sides on the bed.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-04.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The print appears to be solid with smooth sides and the nozzle is not on top of it, indicating a normal print.",
+   "source": "model",
+   "latency_s": 55.7,
+   "raw": "{\"reason\": \"The print appears to be solid with smooth sides and the nozzle is not on top of it, indicating a normal print.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-05.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The print appears to be a solid object with smooth sides on the bed, with the nozzle on top of it.",
+   "source": "model",
+   "latency_s": 54.82,
+   "raw": "{\"reason\": \"The print appears to be a solid object with smooth sides on the bed, with the nozzle on top of it.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-06.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "failed",
+   "reason": "The bed is empty and there is no print material present.",
+   "source": "model",
+   "latency_s": 51.76,
+   "raw": "{\"reason\": \"The bed is empty and there is no print material present.\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "good/good-07.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The print looks solid and smooth with no visible signs of failure.",
+   "source": "model",
+   "latency_s": 50.12,
+   "raw": "{\"reason\": \"The print looks solid and smooth with no visible signs of failure.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-08.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "failed",
+   "reason": "The print is missing from the bed, leaving an empty space where it should be.",
+   "source": "model",
+   "latency_s": 53.31,
+   "raw": "{\"reason\": \"The print is missing from the bed, leaving an empty space where it should be.\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "good/good-09.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The print looks normal with smooth sides and the nozzle is on top of the part.",
+   "source": "model",
+   "latency_s": 52.09,
+   "raw": "{\"reason\": \"The print looks normal with smooth sides and the nozzle is on top of the part.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-10.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "failed",
+   "reason": "The bed is empty and there are no prints or signs of failure.",
+   "source": "model",
+   "latency_s": 50.7,
+   "raw": "{\"reason\": \"The bed is empty and there are no prints or signs of failure.\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "good/good-11.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "failed",
+   "reason": "The bed is empty and there is no print material present.",
+   "source": "model",
+   "latency_s": 51.05,
+   "raw": "{\"reason\": \"The bed is empty and there is no print material present.\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/spaghetti-12.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "spaghetti: loose, tangled strands of plastic instead of a solid part",
+   "source": "model",
+   "latency_s": 52.21,
+   "raw": "{\"reason\": \"spaghetti: loose, tangled strands of plastic instead of a solid part\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/spaghetti-13.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "spaghetti: loose, tangled strands of yellow plastic",
+   "source": "model",
+   "latency_s": 51.71,
+   "raw": "{\"reason\": \"spaghetti: loose, tangled strands of yellow plastic\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/spaghetti-14.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "spaghetti: loose, tangled strands of blue plastic instead of a solid part",
+   "source": "model",
+   "latency_s": 52.74,
+   "raw": "{\"reason\": \"spaghetti: loose, tangled strands of blue plastic instead of a solid part\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/spaghetti-15.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "spaghetti: loose, tangled strands of plastic instead of a solid part",
+   "source": "model",
+   "latency_s": 52.48,
+   "raw": "{\"reason\": \"spaghetti: loose, tangled strands of plastic instead of a solid part\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/spaghetti-16.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "spaghetti: loose, tangled strands of plastic instead of a solid part",
+   "source": "model",
+   "latency_s": 52.61,
+   "raw": "{\"reason\": \"spaghetti: loose, tangled strands of plastic instead of a solid part\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/spaghetti-17.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "spaghetti: loose, tangled strands of plastic instead of a solid part",
+   "source": "model",
+   "latency_s": 50.95,
+   "raw": "{\"reason\": \"spaghetti: loose, tangled strands of plastic instead of a solid part\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/spaghetti-18.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "spaghetti: loose, tangled strands of plastic instead of a solid part",
+   "source": "model",
+   "latency_s": 46.22,
+   "raw": "{\"reason\": \"spaghetti: loose, tangled strands of plastic instead of a solid part\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/detached-19.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "suspect",
+   "reason": "The print is not visible on the bed, only the nozzle is present.",
+   "source": "model",
+   "latency_s": 52.5,
+   "raw": "{\"reason\": \"The print is not visible on the bed, only the nozzle is present.\", \"verdict\": \"suspect\"}"
+  },
+  {
+   "file": "failed/detached-20.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "failed",
+   "reason": "spaghetti and nozzle clog",
+   "source": "model",
+   "latency_s": 48.45,
+   "raw": "{\"reason\": \"spaghetti and nozzle clog\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/detached-21.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "ok",
+   "reason": "The print appears to be a solid object with smooth sides on the bed, and the nozzle is positioned correctly above it.",
+   "source": "model",
+   "latency_s": 54.05,
+   "raw": "{\"reason\": \"The print appears to be a solid object with smooth sides on the bed, and the nozzle is positioned correctly above it.\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "failed/detached-22.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "failed",
+   "reason": "The print appears to be a solid object with smooth sides, and the nozzle is not visible, indicating the print is complete.",
+   "source": "model",
+   "latency_s": 54.44,
+   "raw": "{\"reason\": \"The print appears to be a solid object with smooth sides, and the nozzle is not visible, indicating the print is complete.\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/detached-23.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "failed",
+   "reason": "spaghetti and loose strands of plastic",
+   "source": "model",
+   "latency_s": 51.54,
+   "raw": "{\"reason\": \"spaghetti and loose strands of plastic\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/detached-24.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "failed",
+   "reason": "spaghetti and loose part",
+   "source": "model",
+   "latency_s": 51.15,
+   "raw": "{\"reason\": \"spaghetti and loose part\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/empty_bed-25.jpg",
+   "label": "failed",
+   "kind": "empty_bed",
+   "verdict": "failed",
+   "reason": "The bed is empty and there is no print material present.",
+   "source": "model",
+   "latency_s": 52.08,
+   "raw": "{\"reason\": \"The bed is empty and there is no print material present.\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/empty_bed-26.jpg",
+   "label": "failed",
+   "kind": "empty_bed",
+   "verdict": "failed",
+   "reason": "The bed is empty and there is no print material present.",
+   "source": "model",
+   "latency_s": 52.06,
+   "raw": "{\"reason\": \"The bed is empty and there is no print material present.\", \"verdict\": \"failed\"}"
+  }
+ ]
+}

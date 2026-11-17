@@ -96,9 +96,11 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    def _send(self, code: int, data=None, ctype="application/json"):
+    def _send(self, code: int, data=None, ctype="application/json", headers: dict | None = None):
         body = b"" if data is None else (data if isinstance(data, bytes) else json.dumps(data).encode())
         self.send_response(code)
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         if body:
             self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -1435,3 +1437,109 @@ class FakeMarlin:
                 os.close(fd)
             except OSError:
                 pass
+
+
+# ---------------------------------------------------------------- watch: camera, vision model, notice target
+
+
+class FakeFrameCamera:
+    """A camera at /cam.jpg serving the given image files in turn; the last one repeats."""
+
+    def __init__(self, paths):
+        self.frames = [open(p, "rb").read() for p in paths]
+        self.served = 0
+        cam = self
+
+        def routes(h, method):
+            if urllib.parse.urlsplit(h.path).path != "/cam.jpg":
+                return h._send(404, {})
+            data = cam.frames[min(cam.served, len(cam.frames) - 1)]
+            cam.served += 1
+            return h._send(200, data, "image/jpeg")
+
+        self.srv = serve_http(Brain(), routes)
+        self.url = f"http://127.0.0.1:{self.srv.server_address[1]}/cam.jpg"
+
+    def close(self):
+        self.srv.shutdown()
+
+
+FONSVIVA_TEST_KEY = "fv-test-app-key-0123456789"
+
+
+class FakeVision:
+    """Stands in for Fonsviva's OpenAI-compatible /v1 API, answering from a script of reply texts.
+
+    Every request must carry `Authorization: Bearer <key>` (Gantrel's Fonsviva app key), or it gets
+    401, as Fonsviva answers an unknown app; key=None accepts any request. Replies carry an
+    X-Fonsviva-Machine header and a served model name, so tests can check where a verdict says it ran.
+    The last reply repeats. reject_json_mode answers 400 to a request carrying response_format, as
+    LM Studio does for json_object.
+    """
+
+    def __init__(self, replies, reject_json_mode=False, key: str | None = FONSVIVA_TEST_KEY):
+        self.replies = list(replies)
+        self.requests: list[dict] = []
+        self.auth: list[str] = []
+        self.reject_json_mode = reject_json_mode
+        self.key = key
+        fv = self
+
+        def routes(h, method):
+            fv.auth.append(h.headers.get("Authorization", ""))
+            if fv.key and h.headers.get("Authorization") != "Bearer " + fv.key:
+                return h._send(401, {"error": {"message": "unknown app key"}})
+            if method == "GET" and urllib.parse.urlsplit(h.path).path == "/v1/models":
+                return h._send(200, {"object": "list", "data": [{"id": "fake-vl", "object": "model"}]})
+            if method != "POST" or urllib.parse.urlsplit(h.path).path != "/v1/chat/completions":
+                return h._send(404, {})
+            body = json.loads(h._body())
+            if fv.reject_json_mode and "response_format" in body:
+                return h._send(400, {"error": "'response_format.type' must be 'json_schema' or 'text'"})
+            fv.requests.append(body)
+            text = fv.replies[min(len(fv.requests) - 1, len(fv.replies) - 1)]
+            return h._send(200, {"id": "x", "object": "chat.completion", "model": f"served/{body.get('model')}",
+                                 "choices": [{"index": 0, "message": {"role": "assistant", "content": text},
+                                              "finish_reason": "stop"}]},
+                           headers={"X-Fonsviva-Machine": "fake-fonsviva-host"})
+
+        self.srv = serve_http(Brain(), routes)
+        self.url = f"http://127.0.0.1:{self.srv.server_address[1]}/v1"
+
+    def images(self) -> list[bytes]:
+        import base64
+        out = []
+        for r in self.requests:
+            for part in r["messages"][0]["content"]:
+                if part["type"] == "image_url":
+                    out.append(base64.b64decode(part["image_url"]["url"].split(",", 1)[1]))
+        return out
+
+    def close(self):
+        self.srv.shutdown()
+
+
+class FakeHook:
+    """A notice target (ntfy topic or JSON webhook) that records every request and answers "ok".
+
+    status other than 200 answers that code with the request path echoed in the body, as many servers
+    do on an error page.
+    """
+
+    def __init__(self, status: int = 200):
+        self.got: list[dict] = []
+        self.port = 0
+        fh = self
+
+        def routes(h, method):
+            fh.got.append({"method": method, "path": h.path, "headers": dict(h.headers), "body": h._body()})
+            if status != 200:
+                return h._send(status, f"no route for {h.path}".encode(), "text/plain")
+            return h._send(200, b"ok", "text/plain")
+
+        self.srv = serve_http(Brain(), routes)
+        self.port = self.srv.server_address[1]
+        self.base = f"http://127.0.0.1:{self.port}"
+
+    def close(self):
+        self.srv.shutdown()

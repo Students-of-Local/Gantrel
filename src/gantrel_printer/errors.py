@@ -51,3 +51,9 @@ class SafetyError(PrinterError):
 
 class ConfigError(PrinterError):
     code = "config"
+
+
+class NotLocal(Refused):
+    """A host that must be on this machine or the local network resolved somewhere else."""
+
+    code = "not_local"
