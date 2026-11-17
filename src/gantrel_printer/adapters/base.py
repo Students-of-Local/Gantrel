@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .. import net, safety
 from ..config import PrinterConfig
-from ..errors import ProtocolError, Refused, SafetyError, Unsupported
+from ..errors import PrinterError, ProtocolError, Refused, SafetyError, Unsupported
 from ..model import READY_STATES, Camera, Status
 
 
@@ -98,13 +98,15 @@ class Adapter(ABC):
                               "Something replaced the file on the printer. Upload and confirm again")
 
     def start(self, job: safety.Job, token: str | None) -> None:
+        # The token is spent first, so any refused or mismatched use below voids it: a file changed and
+        # then restored, or a printer name pointed away and back, can never reuse a confirm.
+        safety.consume_token(token, "start", self.cfg.name, job.id, job.sha256, self.identity())
         if job.printer != self.cfg.name:
             raise SafetyError(f"job {job.id} is for printer {job.printer}, not {self.cfg.name}")
         if job.identity != self.identity():
             raise SafetyError(f"printer name {self.cfg.name} now points at a different printer than job {job.id}",
                               "Upload and confirm again for this printer")
         safety.verify_job_file(job)
-        safety.consume_token(token, "start", self.cfg.name, job.id, job.sha256, self.identity())
         self.check_remote(job)
         st = self.status()
         if st.state not in READY_STATES:
@@ -113,10 +115,16 @@ class Adapter(ABC):
         self._start(job.remote_name)
 
     def resume(self, token: str | None) -> None:
-        st = self.status()
-        if st.state != "paused":
-            raise Refused(f"{self.cfg.name} is {st.state}, not paused")
-        safety.consume_token(token, "resume", self.cfg.name, resume_job_id(st), "", self.identity())
+        # Any refusal before the binding check still spends the token, like start.
+        try:
+            st = self.status()
+            if st.state != "paused":
+                raise Refused(f"{self.cfg.name} is {st.state}, not paused")
+            job_id, sha = resume_binding(self, st)
+        except PrinterError:
+            safety.void_token(token)
+            raise
+        safety.consume_token(token, "resume", self.cfg.name, job_id, sha, self.identity())
         self._resume()
 
     @abstractmethod
@@ -173,9 +181,15 @@ class Adapter(ABC):
         return f"{self.cfg.name}: {self.label} at {self.cfg.host}:{self.port}"
 
 
-def resume_job_id(st: Status) -> str:
-    """Resume tokens bind to the printer and the file it is paused on."""
-    return "resume:" + (st.file or "")
+def resume_binding(adapter: Adapter, st: Status) -> tuple[str, str]:
+    """What a resume token binds to: one print, the Gantrel job record the printer is paused on.
+
+    Returns ("resume:<job id>", the job's file SHA-256). A print Gantrel did not upload has no record,
+    so it fails closed. A file deleted from the printer and uploaded again gets a new job record, so a
+    resume confirmed for the old print never resumes the new one, even though the names match.
+    """
+    job = safety.job_for_print(adapter.cfg.name, adapter.identity(), st.file)
+    return "resume:" + job.id, job.sha256
 
 
 def write_image(data: bytes, out: Path) -> Path:

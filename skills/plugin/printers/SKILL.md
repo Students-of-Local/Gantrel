@@ -1,6 +1,6 @@
 ---
 name: printers
-description: Find, check, slice for and watch the person's 3D printers and their cameras with the gantrel-printer CLI (Klipper/Moonraker, Creality K1 and K2, Bambu Lab LAN mode, Prusa with PrusaLink, OctoPrint, Elegoo, Duet, FlashForge, Snapmaker, UltiMaker, Repetier-Server, Anycubic, Marlin over USB). Use when someone wants to print a file, see a printer's status or camera, slice a model for their printer, or stop a print.
+description: Find, check, slice for and watch the person's 3D printers and their cameras with the gantrel-printer CLI (Klipper/Moonraker, Creality K1 and K2, Bambu Lab LAN mode, Prusa with PrusaLink, OctoPrint, Elegoo, Duet, FlashForge, Snapmaker, UltiMaker, Repetier-Server, Anycubic, Marlin over USB). Use when someone wants to print a file, see a printer's status or camera, slice a model for their printer, make a calibration print (first layer, temperature, retraction, flow), or stop a print.
 ---
 
 # printers
@@ -35,6 +35,8 @@ loose part), do this at once, at any point, before anything else in this skill:
 Then tell the person what you did. Do not wait for any other step.
 
 For "how is my printer" or "show me the camera", do steps 1, 2, 4 and 5 only, then stop.
+For a calibration print, or prints that come out badly (not sticking, stringing, rough or gappy
+surfaces), follow "Calibration prints" below.
 
 ## Steps to print
 
@@ -93,6 +95,33 @@ For "how is my printer" or "show me the camera", do steps 1, 2, 4 and 5 only, th
 10. Trouble you see on the camera: follow "First: is this a stop request?" above. Tell the person
     what you did and what you saw. Only they can resume it, on the printer.
 
+## Calibration prints
+
+Use these when prints don't stick, string between parts, look rough or have gaps, or when the
+person asks to tune a printer or a new filament. Do them in this order, one at a time, and only
+the ones the problem needs:
+
+| Problem | Kind | What it prints |
+|---|---|---|
+| Doesn't stick, first layer looks wrong | first-layer | Five one-layer squares: center and each corner |
+| Strings, blobs, weak layers, new filament | temp-tower | Two pillars in 5 mm bands, hottest at the bottom, 5 C cooler per band |
+| Strings or hairs between parts | retraction | Two pillars in 5 mm bands, more retraction per band |
+| Gaps or ridges on top surfaces | flow | Five flat patches at 90, 95, 100, 105 and 110% flow, left to right |
+
+1. Do steps 1 to 4 of "Steps to print" so the printer is paired with --model and idle.
+2. Run `gantrel-printer calibrate <name> <kind> --material <material>`. It saves a G-code file on
+   this computer and prints its path, the bands, and a NEXT line. It never starts a print, and it
+   sends nothing to the printer unless you add `--upload`. Calibration prints are plain G-code
+   made by Gantrel for that printer's bed, nozzle and material, so no slicer is needed.
+3. If the person wants it on the printer, run it again with `--upload` (or run
+   `gantrel-printer upload <file> --printer <name>`). Then do steps 5, 8 and 9 of "Steps to print":
+   check the bed is empty, tell the person the file name and where to start it, and watch.
+4. When it is done, tell the person exactly what the NEXT line says to look for, and which setting
+   to change. For towers, band 1 is the bottom; for flow, patch 1 is the left one, marked by a
+   small tab. Ask them which band or patch looks best, or look at a camera image with them.
+5. Tell them the value to use and where it goes (the setting named in the NEXT line). Gantrel's own
+   slice defaults don't change by themselves; say so.
+
 ## Rules and checks
 
 - Every gantrel-printer reply ends with `NEXT: <what to do>`. Follow it. If you lose track,
@@ -104,6 +133,7 @@ For "how is my printer" or "show me the camera", do steps 1, 2, 4 and 5 only, th
 - ABS and ASA need an enclosed printer; TPU needs direct drive. If slice refuses, say why. Use
   --force only when the person asks for it after hearing the warning.
 - If a command prints ERROR, tell the person the error and its advice in plain words.
+- A calibration print is still a print: the person starts it on the printer, with an empty bed.
 
 ## Sources
 

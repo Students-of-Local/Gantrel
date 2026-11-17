@@ -31,6 +31,9 @@ STATE_MAP = {"IDLE": "idle", "RUNNING": "printing", "PREPARE": "printing", "SLIC
              "PAUSE": "paused", "FINISH": "complete", "FAILED": "error"}
 USER = "bblp"
 RTSP_MODELS = ("bambu-x1", "bambu-x1c", "bambu-x1e", "bambu-h2d", "bambu-h2s", "bambu-p2s")
+# print_error codes Bambu firmware sets when a person stops a print (screen, app or a stop command).
+# From ha-bambulab's error table (MIT): 0300400C "The task was canceled", 0500400E "Printing was cancelled".
+USER_CANCEL_ERRORS = (0x0300400C, 0x0500400E)
 DEV_MODE_HINT = ("On newer firmware turn on LAN-only mode and Developer Mode on the printer, then pair again "
                  "with the access code shown there")
 
@@ -246,9 +249,15 @@ class BambuAdapter(Adapter):
 
     def status(self) -> Status:
         p = self._mqtt([{"pushing": {"sequence_id": "0", "command": "pushall"}}], want_report=True)
-        state = STATE_MAP.get(str(p.get("gcode_state", "")), "busy")
-        if p.get("print_error"):
-            state = "error" if state not in ("printing", "paused") else state
+        state = _state(p)
+        err = p.get("print_error") or 0
+        message = ""
+        if state == "cancelled":
+            message = "stopped by a person"
+        elif err:
+            message = f"print_error {err}"
+        elif state == "error" and _hms_errors(p):
+            message = "HMS " + ", ".join(_hms_errors(p))
         rem = p.get("mc_remaining_time")
         return Status(
             printer=self.cfg.name, type=self.type_name, state=state,
@@ -258,7 +267,7 @@ class BambuAdapter(Adapter):
             bed_c=p.get("bed_temper"), bed_target_c=p.get("bed_target_temper"), chamber_c=p.get("chamber_temper"),
             remaining_s=rem * 60 if isinstance(rem, (int, float)) else None,
             layer=p.get("layer_num"), total_layers=p.get("total_layer_num"),
-            message=f"print_error {p['print_error']}" if p.get("print_error") else "",
+            message=message,
         )
 
     def _ftp(self, work):
@@ -366,6 +375,30 @@ class BambuAdapter(Adapter):
             raise Unreachable(f"{self.cfg.name}'s camera did not answer ({err.__class__.__name__})",
                               "Check LAN Mode Liveview is on") from None
         return write_image(data, out)
+
+
+def _hms_errors(p: dict) -> list[str]:
+    """HMS entries the report lists, as attr-code hex. Any entry here means the printer flagged a fault."""
+    out = []
+    for h in p.get("hms") or []:
+        if isinstance(h, dict):
+            out.append(f"{int(h.get('attr', 0)):08X}-{int(h.get('code', 0)):08X}")
+    return out
+
+
+def _state(p: dict) -> str:
+    """Bambu keeps gcode_state FAILED after a person stops a print, until the next print starts.
+
+    That is a cancel, not a failure: FAILED with print_error 0 or a user cancel code, and no HMS fault,
+    is reported as cancelled. A nonzero print_error or any HMS entry stays an error.
+    """
+    state = STATE_MAP.get(str(p.get("gcode_state", "")), "busy")
+    err = p.get("print_error") or 0
+    if state == "error" and err in (0, *USER_CANCEL_ERRORS) and not _hms_errors(p):
+        return "cancelled"
+    if err and err not in USER_CANCEL_ERRORS and state not in ("printing", "paused"):
+        return "error"
+    return state
 
 
 def _recv_exact(sock, n: int) -> bytes:

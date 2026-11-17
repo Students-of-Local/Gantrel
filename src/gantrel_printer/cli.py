@@ -17,7 +17,7 @@ import re
 import sys
 from pathlib import Path
 
-from . import __version__, config, discover as disc, safety, slicing
+from . import __version__, calibrate, config, discover as disc, safety, slicing
 from .adapters import ADAPTERS, adapter_class, build
 from .errors import ConfigError, PrinterError, SafetyError
 from .model import fmt_duration
@@ -222,47 +222,88 @@ def cmd_slice(args):
         f"gantrel-printer upload {gcode} --printer {cfg.name} --material {mat.name}")
 
 
-def cmd_upload(args):
-    path = Path(args.file).expanduser().resolve()
+def upload_file(printer: str, path: Path, name: str | None = None, material_name: str | None = None):
+    """Send a file to a paired printer and record the job. Never starts it. Returns (job, adapter)."""
     if not path.is_file():
         raise ConfigError(f"no file at {path}")
-    requested = args.name or path.name
+    requested = name or path.name
     if not REMOTE_RE.match(requested):
         raise ConfigError(f"{requested!r} is not a safe printer file name",
                           "Use letters, digits, . _ - only, ending in .gcode, .bgcode, .3mf, .ctb or .goo")
     material = ""
-    if args.material:
-        material = slicing.material(args.material).name  # only known materials are stored
+    if material_name:
+        material = slicing.material(material_name).name  # only known materials are stored
     sha = safety.file_sha256(path)
     stem, ext = requested.rsplit(".", 1)
     # The name on the printer carries the content hash, so a different file never shares a job's name.
     remote = f"{stem[:100]}-{sha[:12]}.{ext}"
-    adapter = open_printer(args.printer)
+    adapter = open_printer(printer)
     if ext.lower() in RESIN_EXT and not getattr(adapter, "accepts_resin", False):
-        raise ConfigError(f"{args.printer} is not a resin printer Gantrel can send .{ext} files to",
+        raise ConfigError(f"{printer} is not a resin printer Gantrel can send .{ext} files to",
                           "Send .ctb or .goo files only to an Elegoo resin printer paired with a resin --model")
     before = snapshot_cfg(adapter)
     facts = slicing.gcode_facts(path)
     if adapter.verifies_remote and adapter.remote_info(remote) is not None:
-        raise SafetyError(f"{remote} is already on {args.printer}; uploads never replace a file",
+        raise SafetyError(f"{remote} is already on {printer}; uploads never replace a file",
                           "Use its existing job (gantrel-printer jobs), or delete it on the printer first")
     remote_name = adapter.upload(path, remote)
     info = adapter.remote_info(remote_name) if adapter.verifies_remote else {}
     if adapter.verifies_remote and info is None:
-        raise PrinterError(f"{args.printer} did not list {remote_name} after the upload", "Try the upload again")
+        raise PrinterError(f"{printer} did not list {remote_name} after the upload", "Try the upload again")
     save_if_changed(adapter, before)
     if safety.file_sha256(path) != sha:
         raise SafetyError("the file changed during upload", "Upload it again")
     gfacts_material = facts.get("material", "")
     material = material or (gfacts_material if gfacts_material.upper() in slicing.MATERIALS else "")
-    job = safety.new_job(args.printer, path, remote_name, material=material, est_seconds=facts.get("est_seconds"),
+    job = safety.new_job(printer, path, remote_name, material=material, est_seconds=facts.get("est_seconds"),
                          identity=adapter.identity(), sha256=sha, remote_size=info.get("size"),
                          remote_mtime=info.get("mtime"))
+    return job, adapter
+
+
+def cmd_upload(args):
+    path = Path(args.file).expanduser().resolve()
+    job, adapter = upload_file(args.printer, path, args.name, args.material)
+    remote_name = job.remote_name
     out(args, {"job": job.id, "printer": args.printer, "remote_name": remote_name, "sha256": job.sha256},
         f"Uploaded {path.name} to {args.printer} as {remote_name}. It has NOT started.\n"
         f"Only a person starts a print. {adapter.start_by_hand(remote_name)}",
         f"Tell the person the file name ({remote_name}) and where to start it, then wait for them to say it "
         f"started. Then watch it: gantrel-printer camera {args.printer} --out cam.jpg")
+
+
+def cmd_calibrate(args):
+    """Make a calibration print for one printer. Saves it locally; uploads only with --upload."""
+    try:
+        cfg = config.get(args.printer)
+        printer = slicing.profile_for(cfg.model, cfg.type)
+        name = cfg.name
+    except ConfigError:
+        if args.printer not in slicing.PRINTERS or args.upload:
+            raise
+        printer, name = slicing.PRINTERS[args.printer], None  # a profile key: make the file, nothing to send to
+    mat = slicing.material(args.material)
+    cal = calibrate.make(args.kind, printer, mat, force=args.force)
+    out_dir = Path(args.out_dir).expanduser() if args.out_dir else Path.cwd() / "gantrel-calibration"
+    path = calibrate.save(cal, out_dir.resolve(), calibrate.file_name(args.kind, printer, mat))
+    lines = [f"Made a {args.kind} calibration print for {name or printer.key} ({printer.label}), {mat.name}: {path}"]
+    lines += calibrate.describe(cal)
+    data = {"gcode": str(path), "kind": args.kind, "printer": name or printer.key, "model": printer.key,
+            "material": mat.name, "bands": [b.__dict__ for b in cal.bands], "look_for": cal.look_for,
+            "change": cal.change, "est_seconds": cal.est_seconds}
+    judge = f"When it is done: {cal.look_for}. {cal.change}."
+    if args.upload:
+        job, adapter = upload_file(name, path, material_name=mat.name)
+        data.update(job=job.id, remote_name=job.remote_name)
+        lines.append(f"Uploaded to {name} as {job.remote_name}. It has NOT started. Only a person starts a print. "
+                     + adapter.start_by_hand(job.remote_name))
+        nxt = f"Tell the person to start {job.remote_name} on the printer. {judge}"
+    else:
+        lines.append("Nothing was sent to the printer.")
+        send = (f"gantrel-printer upload {path} --printer {name}" if name
+                else "pair the printer, then gantrel-printer upload it")
+        nxt = f"Get it to the printer ({send}, or copy it to the printer's USB stick or SD card); a person starts it. {judge}"
+    out(args, data, "\n".join(lines), nxt)
 
 
 def cmd_jobs(args):
@@ -349,6 +390,14 @@ def parser() -> argparse.ArgumentParser:
     sp.add_argument("--printer", required=True)
     sp.add_argument("--material")
     sp.add_argument("--name", help="file name on the printer")
+    sp = add("calibrate", cmd_calibrate, "make a calibration print (saved locally; never starts a print)")
+    sp.add_argument("printer", help="a paired printer, or a profile key from: gantrel-printer profiles")
+    sp.add_argument("kind", choices=list(calibrate.KINDS))
+    sp.add_argument("--material", default="PLA")
+    sp.add_argument("--out-dir", help="where to save the G-code (default: ./gantrel-calibration)")
+    sp.add_argument("--upload", action="store_true", help="also send it to the printer (never starts it)")
+    sp.add_argument("--force", action="store_true",
+                    help="make it for a material the printer can't print well; prints a warning")
     add("jobs", cmd_jobs, "files uploaded with this tool")
     for name, fn, h in (("pause", cmd_pause, "pause now (safe)"),
                         ("cancel", cmd_cancel, "cancel the current print"),

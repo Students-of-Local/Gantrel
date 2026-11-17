@@ -12,7 +12,7 @@ import pytest
 
 from gantrel_printer import safety
 from gantrel_printer.adapters import ADAPTERS, build
-from gantrel_printer.adapters.base import resume_job_id
+from gantrel_printer.adapters.base import resume_binding
 from gantrel_printer.config import PrinterConfig
 from gantrel_printer.adapters.elegoo import ElegooAdapter
 from gantrel_printer.adapters.usb_serial import card_lines
@@ -283,11 +283,11 @@ def test_start_with_confirm_token_then_pause_resume_cancel(rig, tmp_path):
         a.resume(None)
     assert a.status().state == "paused"
     st = a.status()
-    a.resume(safety.mint_token("resume", rig.cfg.name, resume_job_id(st), "", a.identity()))
+    a.resume(safety.mint_token("resume", rig.cfg.name, *resume_binding(a, st), a.identity()))
     assert a.status().state == "printing"
 
     a.cancel()
-    # OctoPrint and Bambu report idle after a cancel; the others report cancelled.
+    # OctoPrint reports idle after a cancel; the others report cancelled.
     assert a.status().state in ("cancelled", "idle")
     assert rig.brain.events[-1] == "cancel"
 
