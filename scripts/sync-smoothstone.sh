@@ -30,6 +30,18 @@ lines[heading + 1:heading + 1] = ["\n", block]
 open(skill, "w", encoding="utf-8").write("".join(lines))
 PY
 
+python3 - "$dest/tiers/L.md" "$root/scripts/smoothstone-tier-L.md" "$sha" <<'PY'
+import sys
+card, note, sha = sys.argv[1:]
+lines = open(card, encoding="utf-8").read().splitlines(keepends=True)
+block = open(note, encoding="utf-8").read().replace("@SHA@", sha).rstrip("\n") + "\n"
+at = next((i for i, line in enumerate(lines) if "tools/sheet.py" in line), None)
+if at is None:
+    sys.exit("sync-smoothstone: no tools/sheet.py line in tiers/L.md to note after")
+lines[at + 1:at + 1] = [block]
+open(card, "w", encoding="utf-8").write("".join(lines))
+PY
+
 printf '%s\n%s\n' "$repo_url" "$sha" > "$dest/UPSTREAM"
 sed -i -E "s/(smoothstone[@/](tree\/)?)[0-9a-f]{40}/\1$sha/g; s/(Pinned smoothstone: \`)[0-9a-f]{40}/\1$sha/" "$root/README.md"
 echo "smoothstone skill synced at $sha"
