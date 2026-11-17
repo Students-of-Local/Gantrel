@@ -2,10 +2,11 @@
 
 Skills are the instructions that make the models in Gantrel do their work right. They must be standardized, precise and tested. A weak or vague skill is a bug.
 
-## Two sets
+## Sets
 
 - `skills/maintainer/`: skills for agents that build and maintain Gantrel itself (writing features, fixing bugs, running releases, updating benchmarks).
 - `skills/runtime/`: skills the agents inside Gantrel use while helping a user.
+- `skills/plugin/`: the skills the Local Studio plugin ships (`skills = "skills/plugin"` in `plugin.toml`). Local Studio loads every folder here as a skill, so put only finished skills in it, never a template. Today it holds `smoothstone`, copied from [baney75/smoothstone](https://github.com/baney75/smoothstone) at the commit in `skills/plugin/smoothstone/UPSTREAM`. Don't edit it by hand: change `scripts/smoothstone-preamble.md` or the upstream skill and run `scripts/sync-smoothstone.sh <sha>`.
 
 ## Originality
 
