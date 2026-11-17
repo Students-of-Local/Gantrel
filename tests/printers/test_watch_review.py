@@ -177,7 +177,7 @@ def test_guard_frames_never_follow_a_dns_answer_that_changed_to_a_public_address
     finally:
         good.close()
         evil.close()
-    assert first.verdict == "ok" and len(good.requests) == 1
+    assert first.verdict == "ok" and len(good.requests) == 1, first.to_dict()
     assert evil.requests == [] and evil.auth == []
     assert rb.public_connects == []
     assert second.verdict == "suspect" and second.source == "unreachable"
@@ -380,3 +380,60 @@ def test_guard_with_a_key_fonsviva_refuses_says_so(moon):
         v.close()
     assert code == cli.EXIT_ERROR
     assert "refused Gantrel's key" in err and "fonsviva keys list" in err and "wrong-app-key" not in err
+
+
+# ---------------------------------------------------------------- review round 2 (PR #9)
+
+
+def test_guard_never_pauses_a_new_print_with_frames_from_the_last_one(moon):
+    # sol-sol-F5: while the 2nd failed frame of print A is being judged, the person cancels A and
+    # starts print B. The streak belongs to A, so B must not be paused on A's evidence.
+    from test_watch import FAILED_JSON, vision, run_watch
+
+    v, g = vision([FAILED_JSON])
+    real = g.classify
+    calls = {"n": 0}
+
+    def classify(frame, st=None):
+        out = real(frame, st)
+        calls["n"] += 1
+        if calls["n"] == 2:
+            moon.brain.current = "print-b.gcode"  # A cancelled, B started, all during the long classify
+        return out
+
+    g.classify = classify
+    try:
+        res = run_watch(moon, guard=g, n_stop=3)
+    finally:
+        v.close()
+    if res.outcome == "paused_by_guard":
+        pause = json.loads((res.job_dir / "pause.json").read_text())
+        assert all(f.get("print") == "print-b.gcode" for f in pause["frames"]), pause["frames"]
+    else:
+        assert moon.brain.events == []
+
+
+def test_a_vision_error_that_echoes_the_key_never_keeps_it(tmp_path):
+    # sol-sol-F6: an error reply that names the rejected bearer must not land in a verdict or an error.
+    from gantrel_printer import guard as vguard
+    from gantrel_printer.errors import ConfigError
+
+    key = "fv-test-SECRET-key-0123456789"
+
+    def routes(h, method):
+        return h._send(500, {"error": f"backend failed for Authorization: Bearer {key}"})
+
+    srv = fakes.serve_http(fakes.Brain(), routes)
+    url = f"http://127.0.0.1:{srv.server_address[1]}/v1"
+    frame = tmp_path / "f.jpg"
+    frame.write_bytes(fakes.JPEG)
+    try:
+        g = vguard.VisionGuard(url, "fake-vl", timeout=5, key=key)
+        verdict = g.classify(frame)
+        assert verdict.verdict == "suspect"
+        assert key not in json.dumps(verdict.to_dict())
+        with pytest.raises(ConfigError) as err:
+            g.check()
+        assert key not in str(err.value) and key not in str(getattr(err.value, "hint", ""))
+    finally:
+        srv.shutdown()

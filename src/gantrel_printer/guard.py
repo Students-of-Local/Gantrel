@@ -161,14 +161,14 @@ class VisionGuard:
         what = f"{'the vision model server' if self.direct else 'Fonsviva'} at {self.host}"
         try:
             _, _, data = net.request("GET", self.url + "/models", headers=self._headers(), timeout=10, what=what,
-                                     local_only=True)
+                                     local_only=True, hide_url=True)
         except AuthFailed:
             raise ConfigError(f"{what} refused Gantrel's key",
                               "Check it with: fonsviva status and fonsviva keys list, then save the key again with: "
                               "gantrel-printer watch-config --fonsviva-key-stdin. Or run the watch without --guard"
                               ) from None
         except PrinterError as err:
-            raise ConfigError(f"{what} did not answer ({err.message})", FONSVIVA_HINT) from None
+            raise ConfigError(f"{what} did not answer ({self._scrub(err.message)})", FONSVIVA_HINT) from None
         try:
             names = {str(m.get("id", "")) for m in json.loads(data).get("data", [])}
         except (ValueError, AttributeError, TypeError):
@@ -177,6 +177,11 @@ class VisionGuard:
             raise ConfigError(f"{what} has no model named {self.model}",
                               "See the models Gantrel may use with: fonsviva models list --app gantrel. "
                               "Or pick one it has: " + ", ".join(sorted(names)[:8]))
+
+    def _scrub(self, text: str) -> str:
+        """Never keep Gantrel's Fonsviva key in anything logged or saved, even if a server echoes it."""
+        # A real key is long; a short test key would also eat ordinary words.
+        return text.replace(self.key, "[key]") if self.key and len(self.key) >= 8 else text
 
     def _headers(self) -> dict:
         h = {"Content-Type": "application/json"}
@@ -203,7 +208,7 @@ class VisionGuard:
             # local_only: one DNS lookup per frame, checked, and the frame goes to that address only.
             _, headers, data = net.request("POST", self.url + "/chat/completions", headers=self._headers(),
                                            body=json.dumps(payload).encode(), timeout=self.timeout, what=what,
-                                           local_only=True)
+                                           local_only=True, hide_url=True)
         except PrinterError as err:
             # Some servers (LM Studio) reject json_object; ask once more without it.
             if self._json_mode and "HTTP 400" in str(err):
@@ -211,10 +216,10 @@ class VisionGuard:
                 return self._ask(image, kind, st)
             raise
         reply = net.parse_json(data, what)
-        self._served = {k.lower(): printable(str(v))[:120] for k, v in headers.items()
+        self._served = {k.lower(): self._scrub(printable(str(v)))[:120] for k, v in headers.items()
                         if k.lower().startswith("x-fonsviva-")}
         if isinstance(reply.get("model"), str):
-            self._served["model"] = printable(reply["model"])[:120]
+            self._served["model"] = self._scrub(printable(reply["model"]))[:120]
         try:
             return str(reply["choices"][0]["message"].get("content") or "")
         except (KeyError, IndexError, TypeError, AttributeError):
@@ -235,8 +240,9 @@ class VisionGuard:
         try:
             text = self._ask(data, kind, st)
         except PrinterError as err:
-            return Verdict("suspect", f"no answer from the vision model ({err.message})", "unreachable",
+            return Verdict("suspect", f"no answer from the vision model ({self._scrub(err.message)})", "unreachable",
                            round(time.monotonic() - t0, 2), ran_on=self.ran_on())
         verdict, reason, source = parse_verdict(text)
+        reason, text = self._scrub(reason), self._scrub(text)
         return Verdict(verdict, reason, source, round(time.monotonic() - t0, 2), printable(text)[:500],
                        ran_on=self.ran_on())

@@ -294,6 +294,19 @@ def notice_text(res: Result) -> str:
     return " ".join(bits)
 
 
+def _same_print(first: dict, st) -> bool:
+    """Whether st is still the print the streak's first frame came from.
+
+    The file name must match. With no file name to compare, progress must not have gone backwards,
+    since a new print starts again near 0%. Without either, continuity can't be shown: not the same.
+    """
+    if first.get("print") or st.file:
+        return first.get("print") == st.file
+    if first.get("progress") is None or st.progress is None:
+        return False
+    return st.progress >= first["progress"]
+
+
 def _loop(handle, opts, guard, notifier, res, log, on_tick, sleep):
     t0 = time.monotonic()
     seen_active = False
@@ -352,12 +365,18 @@ def _loop(handle, opts, guard, notifier, res, log, on_tick, sleep):
         verdict = None
         if guard and frame is not None and st.state == "printing":
             verdict = guard.classify(frame, st).to_dict()
-            verdict.update(frame=f"frames/{frame.name}", time=line["time"])
+            verdict.update(frame=f"frames/{frame.name}", time=line["time"], print=st.file,
+                           progress=st.progress)
             line["verdict"] = verdict
             append_line(res.job_dir / "guard.jsonl", verdict)
             _record_verdict(res, verdict)
             keep_ring(res.job_dir / "guard", frame, verdict, opts.ring)
-            streak = streak + [verdict] if verdict["verdict"] == "failed" else []
+            if verdict["verdict"] != "failed":
+                streak = []
+            elif streak and not _same_print(streak[0], st):
+                streak = [verdict]  # another print started; evidence from the last one doesn't count
+            else:
+                streak = streak + [verdict]
         elif st.state != "printing":
             streak = []  # a person paused it; only failures while printing count
         append_line(res.job_dir / "status.jsonl", line)
@@ -370,7 +389,10 @@ def _loop(handle, opts, guard, notifier, res, log, on_tick, sleep):
             except PrinterError as err:
                 log(f"could not re-read status before pausing: {err}")
                 continue
-            if now.state != "printing":
+            if now.state != "printing" or not _same_print(streak[0], now):
+                # Classifying takes a while; if the print changed meanwhile, never pause the new one.
+                if now.state == "printing":
+                    log("the print changed while the guard was looking; its streak starts over")
                 streak = []
                 continue
             try:
