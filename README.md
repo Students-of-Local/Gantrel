@@ -13,6 +13,7 @@ The parts and licenses are in [docs/STACK.md](docs/STACK.md), and the printer pl
 This repo is a Local Studio plugin package: `plugin.toml` at the root, with its skills in `skills/plugin/`. It adds one command to the Local Studio palette:
 
 - `/gantrel <what you want>` asks the model for a printable part. It loads the [smoothstone](https://github.com/baney75/smoothstone) skill, so the model drives the `stone` CLI: it picks a tested parametric recipe, sets its sizes, builds the STL with OpenSCAD and checks that it prints (watertight, one piece, flat base, walls, overhangs, size). The part lands in `stone-job/` in your project. On the local fleet, LFM3-1.7B has made a 40 mm fan guard this way that passes every stone check; the LFM2.5 8B and 24B have not. See [SUPPORTED.md](SUPPORTED.md) for what is proven.
+- `/print` loads the printers skill, so the model uses the `gantrel-printer` CLI to check a printer's status and camera, slice with that printer's profile, upload, pause, cancel or stop. Gantrel's tools never start or resume a print: you start it on the printer. See [docs/PRINTERS.md](docs/PRINTERS.md).
 
 Install:
 
@@ -28,7 +29,7 @@ Install:
    git clone https://github.com/baney75/Gantrel ~/.local-studio/plugins/gantrel
    ```
 
-3. Check it: `local-studio plugin validate ~/.local-studio/plugins/gantrel` prints `OK gantrel 0.1.0 (1 skills, 0 prompts, 1 commands)`.
+3. Check it: `local-studio plugin validate ~/.local-studio/plugins/gantrel` prints `OK gantrel 0.1.0 (2 skills, 0 prompts, 2 commands)`.
 
 The skill's first action is `stone status`; if that prints `stone: command not found`, the model is told to give you the install command and stop without installing anything. That step is not tested yet on a machine without `stone`.
 
