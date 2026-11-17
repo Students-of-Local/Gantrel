@@ -23,7 +23,8 @@ from .errors import ConfigError, PrinterError, SafetyError
 from .model import fmt_duration
 
 EXIT_ERROR, EXIT_USAGE, EXIT_SAFETY = 1, 2, 3
-REMOTE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(gcode|bgcode|3mf)$")
+REMOTE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(gcode|bgcode|3mf|ctb|goo)$")
+RESIN_EXT = ("ctb", "goo")  # pre-sliced resin files; only adapters with accepts_resin take them
 
 
 def out(args, data: dict, text: str, nxt: str) -> None:
@@ -66,8 +67,17 @@ def cmd_discover(args):
     if not found:
         nxt = "Nothing found. Ask the person for the printer's IP address (printer screen: Network), then pair it"
     else:
-        r = found[0]
-        nxt = f"gantrel-printer pair <name> --type {r['type']} --host {r['host']} --port {r['port']} --model <model>"
+        # A USB serial device may be any gadget (a Zigbee stick, a UPS cable), so never suggest
+        # pairing one by itself; network hits come first.
+        net_hits = [r for r in found if r.get("via") != "usb" and r.get("type") != "serial"]
+        if net_hits:
+            r = net_hits[0]
+            nxt = (f"gantrel-printer pair <name> --type {r['type']} --host {r['host']} --port {r['port']}"
+                   " --model <model>")
+        else:
+            nxt = ("Only USB serial devices were found, and any of them may not be a printer. Ask the person which "
+                   "one is the printer and that it is idle, then: gantrel-printer pair <name> --type serial "
+                   "--host <device path> --model <model>")
     out(args, {"printers": found}, "\n".join(lines) or "No printers found.", nxt)
 
 
@@ -89,9 +99,20 @@ def cmd_pair(args):
     cfg = config.PrinterConfig(name=args.name, type=args.type, host=args.host, port=args.port, model=args.model or "",
                                camera_url=args.camera_url or "", stream_url=args.stream_url or "",
                                serial=args.serial or "")
+    if args.user:
+        cfg.extra["user"] = args.user
+    by_approval = getattr(cls, "pairs_by_approval", False)
+    if by_approval and args.no_check:
+        raise ConfigError(f"{cls.label} pairing must reach the printer so a person can allow it on its screen",
+                          "Pair without --no-check while the printer is on")
     secret = None
-    if args.secret_stdin:
+    if by_approval:
+        print(cls.approval_prompt, file=sys.stderr)
+    elif args.secret_stdin:
         secret = sys.stdin.readline().strip() or None
+    elif cls.asks_secret and sys.stdin.isatty():
+        # Optional (a Duet board password, a Moonraker key): an empty answer means it has none.
+        secret = getpass.getpass(f"{cls.secret_label}: ").strip() or None
     elif cls.needs_secret:
         if not sys.stdin.isatty():
             raise ConfigError(f"{cls.label} needs its {cls.secret_label}",
@@ -99,11 +120,12 @@ def cmd_pair(args):
         secret = getpass.getpass(f"{cls.secret_label}: ").strip() or None
     if cls.needs_secret and not secret:
         raise ConfigError(f"{cls.label} needs its {cls.secret_label}")
-    if secret:
-        cfg.extra["has_secret"] = True
     adapter = cls(cfg, secret)
     facts = {} if args.no_check else adapter.pair()
+    # Approval pairing (Snapmaker, UltiMaker) gets its secret from the printer during pair().
+    secret = adapter.secret or secret
     if secret:
+        adapter.cfg.extra["has_secret"] = True
         config.set_secret(args.name, secret)
     printers = config.load_all()
     printers[args.name] = adapter.cfg
@@ -207,7 +229,7 @@ def cmd_upload(args):
     requested = args.name or path.name
     if not REMOTE_RE.match(requested):
         raise ConfigError(f"{requested!r} is not a safe printer file name",
-                          "Use letters, digits, . _ - only, ending in .gcode, .bgcode or .3mf")
+                          "Use letters, digits, . _ - only, ending in .gcode, .bgcode, .3mf, .ctb or .goo")
     material = ""
     if args.material:
         material = slicing.material(args.material).name  # only known materials are stored
@@ -216,6 +238,9 @@ def cmd_upload(args):
     # The name on the printer carries the content hash, so a different file never shares a job's name.
     remote = f"{stem[:100]}-{sha[:12]}.{ext}"
     adapter = open_printer(args.printer)
+    if ext.lower() in RESIN_EXT and not getattr(adapter, "accepts_resin", False):
+        raise ConfigError(f"{args.printer} is not a resin printer Gantrel can send .{ext} files to",
+                          "Send .ctb or .goo files only to an Elegoo resin printer paired with a resin --model")
     before = snapshot_cfg(adapter)
     facts = slicing.gcode_facts(path)
     if adapter.verifies_remote and adapter.remote_info(remote) is not None:
@@ -292,7 +317,9 @@ def parser() -> argparse.ArgumentParser:
     sp.add_argument("--host", required=True)
     sp.add_argument("--port", type=int)
     sp.add_argument("--model", help="slicing profile, see: gantrel-printer profiles")
-    sp.add_argument("--serial", help="Bambu Lab serial number")
+    sp.add_argument("--serial", help="Bambu Lab or FlashForge serial number, Repetier-Server printer slug, "
+                    "or Elegoo mainboard ID")
+    sp.add_argument("--user", help="login name for digest auth (PrusaLink default: maker)")
     sp.add_argument("--camera-url", help="JPEG snapshot URL, for cameras the printer API doesn't list")
     sp.add_argument("--stream-url", help="live stream URL (no passwords in it)")
     sp.add_argument("--secret-stdin", action="store_true", help="read the API key or access code from stdin")

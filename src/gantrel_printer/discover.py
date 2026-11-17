@@ -1,19 +1,25 @@
-"""Find printers on the local network. Read-only: mDNS browse, SSDP listen, TCP connect, GET probes."""
+"""Find printers on the local network. Read-only: mDNS browse, SSDP listen, Elegoo's UDP hello, TCP
+connect, GET probes. USB serial ports are listed but never opened unless one is named with --host."""
 
 from __future__ import annotations
 
 import concurrent.futures
 import ipaddress
 import socket
+import json
 import time
+from pathlib import Path
 
 from .adapters import ADAPTERS
 
 MDNS_TYPES = {"_moonraker._tcp.local.": "moonraker", "_octoprint._tcp.local.": "octoprint",
-              "_prusa-link._tcp.local.": "prusalink"}
+              "_prusa-link._tcp.local.": "prusalink", "_ultimaker._tcp.local.": "ultimaker"}
 # (port, adapter types to try there)
 KNOWN_PORTS = [(7125, ["moonraker"]), (4408, ["moonraker"]), (9999, ["creality"]), (8883, ["bambu"]),
-               (80, ["moonraker", "prusalink", "octoprint"]), (5000, ["octoprint"])]
+               (80, ["moonraker", "prusalink", "octoprint", "duet", "ultimaker"]), (5000, ["octoprint"]),
+               (3030, ["elegoo"]), (8898, ["flashforge"]), (8899, ["flashforge"]), (8080, ["snapmaker"]),
+               (3344, ["repetier"])]
+SERIAL_BY_ID = Path("/dev/serial/by-id")
 
 
 def local_subnet() -> ipaddress.IPv4Network | None:
@@ -83,6 +89,45 @@ def bambu_ssdp(seconds: float = 3.0) -> list[dict]:
     return list(out.values())
 
 
+def elegoo_udp(seconds: float = 3.0) -> list[dict]:
+    """Elegoo SDCP printers answer a broadcast "M99999" on UDP 3000 with their name and mainboard ID."""
+    out: dict[str, dict] = {}
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        s.sendto(b"M99999", ("255.255.255.255", 3000))
+    except OSError:
+        return []
+    s.settimeout(0.5)
+    end = time.monotonic() + seconds
+    with s:
+        while time.monotonic() < end:
+            try:
+                data, addr = s.recvfrom(8192)
+            except (TimeoutError, OSError):
+                continue
+            try:
+                d = (json.loads(data) or {}).get("Data") or {}
+            except (ValueError, AttributeError):
+                continue
+            if isinstance(d, dict) and d.get("MainboardID"):
+                out[addr[0]] = {"type": "elegoo", "host": addr[0], "port": 3030, "via": "udp",
+                                "serial": str(d["MainboardID"]),
+                                "detail": f"Elegoo {d.get('MachineName') or d.get('Name') or ''}".strip()}
+    return list(out.values())
+
+
+def serial_hints() -> list[dict]:
+    """USB serial devices by stable name. Listed only; opening one can restart some boards."""
+    try:
+        devices = sorted(SERIAL_BY_ID.iterdir())
+    except OSError:
+        return []
+    return [{"type": "serial", "host": str(d), "port": 115200, "via": "usb",
+             "detail": "USB serial device, not opened. Pair it while the printer is idle to check it"}
+            for d in devices]
+
+
 def _open(host: str, port: int, timeout: float) -> bool:
     try:
         with socket.create_connection((host, port), timeout=timeout):
@@ -92,6 +137,9 @@ def _open(host: str, port: int, timeout: float) -> bool:
 
 
 def probe_host(host: str, timeout: float = 1.0, ports=None) -> list[dict]:
+    if host.startswith("/dev/"):
+        info = ADAPTERS["serial"].probe(host, timeout=max(timeout, 3.0))
+        return [{**info, "via": "usb"}] if info else []
     hits = []
     for port, types in ports or KNOWN_PORTS:
         if not _open(host, port, timeout):
@@ -119,6 +167,9 @@ def discover(subnet: str | None = None, hosts: list[str] | None = None, seconds:
     if use_mdns and not hosts:
         results += mdns(seconds)
         results += bambu_ssdp(seconds)
+        results += elegoo_udp(seconds)
+    if not hosts:
+        results += serial_hints()
     if hosts is None:
         net = ipaddress.ip_network(subnet, strict=False) if subnet else local_subnet()
         if net is None:

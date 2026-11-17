@@ -7,12 +7,20 @@ from ..errors import ConfigError
 from .bambu import BambuAdapter
 from .base import Adapter
 from .creality import CrealityAdapter
+from .duet import DuetAdapter
+from .elegoo import ElegooAdapter
+from .flashforge import FlashForgeAdapter
 from .moonraker import MoonrakerAdapter
 from .octoprint import OctoPrintAdapter
 from .prusalink import PrusaLinkAdapter
+from .repetier import RepetierAdapter
+from .snapmaker import SnapmakerAdapter
+from .ultimaker import UltimakerAdapter
+from .usb_serial import SerialAdapter
 
 ADAPTERS: dict[str, type[Adapter]] = {a.type_name: a for a in (
-    MoonrakerAdapter, OctoPrintAdapter, PrusaLinkAdapter, BambuAdapter, CrealityAdapter)}
+    MoonrakerAdapter, OctoPrintAdapter, PrusaLinkAdapter, BambuAdapter, CrealityAdapter, ElegooAdapter,
+    DuetAdapter, FlashForgeAdapter, SnapmakerAdapter, UltimakerAdapter, RepetierAdapter, SerialAdapter)}
 
 
 def adapter_class(type_name: str) -> type[Adapter]:

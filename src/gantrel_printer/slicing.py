@@ -38,6 +38,9 @@ class PrinterProfile:
     end_gcode: str = ""
     orca_machine: str = ""  # OrcaSlicer system machine profile name
     upload_ext: str = ".gcode"
+    filament_mm: float = 1.75
+    resin: bool = False    # resin printers: Gantrel never slices, it only uploads a pre-sliced .ctb or .goo
+    note: str = ""
 
 
 KLIPPER_START = "START_PRINT EXTRUDER_TEMP={first_layer_temperature[0]} BED_TEMP={first_layer_bed_temperature[0]}"
@@ -84,6 +87,42 @@ PRINTERS: dict[str, PrinterProfile] = {p.key: p for p in (
                    accel=3000, start_gcode=KLIPPER_START, end_gcode="END_PRINT"),
     PrinterProfile("generic-marlin", "Generic Marlin printer", (220, 220), 250, "marlin2", max_speed=100,
                    accel=1000, direct_drive=False, start_gcode=MARLIN_START, end_gcode=MARLIN_END),
+    # The common 220 mm bed slinger class (Ender-3 style): 220 x 220 x 250 mm, Bowden.
+    # https://www.creality.com/products/ender-3-v2-3d-printer
+    PrinterProfile("generic-marlin-220", "Generic Marlin printer, 220 mm bed", (220, 220), 250, "marlin2",
+                   max_speed=100, accel=1000, direct_drive=False, start_gcode=MARLIN_START, end_gcode=MARLIN_END),
+    # 256 x 256 x 256 mm, enclosed CoreXY, direct drive. https://us.elegoo.com/products/centauri-carbon
+    PrinterProfile("elegoo-centauri-carbon", "Elegoo Centauri Carbon", (256, 256), 256, "marlin2", max_speed=300,
+                   accel=10000, enclosed=True, start_gcode=MARLIN_START, end_gcode=MARLIN_END),
+    # Resin (MSLA). 218.88 x 122.88 x 220 mm. https://global.elegoo.com/pages/elegoo-saturn-4-ultra
+    PrinterProfile("elegoo-saturn-4-ultra", "Elegoo Saturn 4 Ultra (resin)", (218, 122), 220, "", direct_drive=False,
+                   upload_ext=".goo", resin=True),
+    # Resin (MSLA). 153.36 x 77.76 x 165 mm. https://www.elegoo.com/pages/elegoo-mars-5-series
+    PrinterProfile("elegoo-mars-5-ultra", "Elegoo Mars 5 Ultra (resin)", (153, 77), 165, "", direct_drive=False,
+                   upload_ext=".goo", resin=True),
+    # 220 x 220 x 220 mm, open frame CoreXY, direct drive. https://www.flashforge.com/products/adventurer-5m-3d-printer
+    PrinterProfile("flashforge-adventurer-5m", "FlashForge Adventurer 5M", (220, 220), 220, "marlin2", max_speed=300,
+                   accel=10000, start_gcode=MARLIN_START, end_gcode=MARLIN_END),
+    # 220 x 220 x 220 mm, fully enclosed, direct drive. https://www.flashforge.com/products/adventurer-5m-pro-3d-printer
+    PrinterProfile("flashforge-adventurer-5m-pro", "FlashForge Adventurer 5M Pro", (220, 220), 220, "marlin2",
+                   max_speed=300, accel=10000, enclosed=True, start_gcode=MARLIN_START, end_gcode=MARLIN_END),
+    # 220 x 220 x 220 mm, open frame CoreXY, direct drive, four color IFS. https://www.flashforge.com/products/flashforge-ad5x
+    PrinterProfile("flashforge-ad5x", "FlashForge AD5X", (220, 220), 220, "marlin2", max_speed=300, accel=10000,
+                   start_gcode=MARLIN_START, end_gcode=MARLIN_END),
+    # 300 x 200 x 200 mm, enclosed IDEX, direct drive. https://www.snapmaker.com/snapmaker-j1s
+    PrinterProfile("snapmaker-j1", "Snapmaker J1 / J1s", (300, 200), 200, "marlin2", max_speed=250, accel=8000,
+                   enclosed=True, start_gcode=MARLIN_START, end_gcode=MARLIN_END,
+                   note="Profile is for the left head only; IDEX duplication and mirror modes are set on the printer."),
+    # 320 x 350 x 330 mm, open frame (enclosure sold separately), direct drive.
+    # https://www.snapmaker.com/snapmaker-2-0
+    PrinterProfile("snapmaker-a350", "Snapmaker 2.0 A350", (320, 350), 330, "marlin2", max_speed=100, accel=1000,
+                   start_gcode=MARLIN_START, end_gcode=MARLIN_END),
+    # 330 x 240 x 300 mm, Bowden, 2.85 mm filament, front doors and an open top.
+    # https://ultimaker.com/3d-printers/s-series/ultimaker-s5/
+    PrinterProfile("ultimaker-s5", "UltiMaker S5", (330, 240), 300, "marlin2", max_speed=150, accel=2000,
+                   direct_drive=False, filament_mm=2.85, start_gcode=MARLIN_START, end_gcode=MARLIN_END,
+                   note="UltiMaker printers expect Cura's Griffin header and may warn about G-code from other "
+                        "slicers; confirm the material on the printer's screen."),
 )}
 
 
@@ -144,6 +183,9 @@ def material(name: str) -> Material:
 
 
 def settings(printer: PrinterProfile, mat: Material, quality: str = "standard", force: bool = False) -> dict:
+    if printer.resin:
+        raise Unsupported(f"Gantrel does not slice for resin printers like the {printer.label}",
+                          "Slice it in CHITUBOX or VOXELDANCE TANGO, then upload the .goo or .ctb file")
     if quality not in QUALITY:
         raise ConfigError(f"unknown quality {quality!r}", f"Use one of: {', '.join(QUALITY)}")
     warnings = []
@@ -170,7 +212,8 @@ def settings(printer: PrinterProfile, mat: Material, quality: str = "standard", 
         "inner_wall_speed_mms": min(speed, 250), "infill_speed_mms": speed, "first_layer_speed_mms": min(speed, 30),
         "travel_speed_mms": printer.max_speed, "accel_mms2": printer.accel, "retract_mm": mat.retract_mm,
         "supports": "auto, for overhangs flatter than 50 degrees from horizontal", "brim": "auto for small footprints",
-        "bed_mm": list(printer.bed), "max_height_mm": printer.height, "note": mat.note,
+        "bed_mm": list(printer.bed), "max_height_mm": printer.height,
+        "note": " ".join(n for n in (mat.note, printer.note) if n), "filament_mm": printer.filament_mm,
         **({"warning": "; ".join(warnings)} if warnings else {}),
     }
 
@@ -195,6 +238,8 @@ def prusa_args(s: dict, printer: PrinterProfile) -> list[str]:
         "--support-material-threshold", "50", "--brim-width", "0", "--skirts", "1",
         "--center", f"{w // 2},{d // 2}", "--ensure-on-bed",
     ]
+    if printer.filament_mm != 1.75:
+        a += ["--filament-diameter", str(printer.filament_mm)]
     if printer.flavor == "klipper":
         a += ["--use-relative-e-distances", "--use-firmware-retraction", "--max-print-speed",
               str(s["infill_speed_mms"]), "--machine-max-acceleration-extruding", str(s["accel_mms2"])]

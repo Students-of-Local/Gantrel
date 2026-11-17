@@ -9,7 +9,7 @@ import sys
 import pytest
 
 from gantrel_printer import cli, config, slicing
-from gantrel_printer.errors import ConfigError
+from gantrel_printer.errors import ConfigError, Unsupported
 
 import fakes
 
@@ -68,6 +68,11 @@ def test_material_rules():
 def test_every_profile_and_material_combination_is_consistent():
     for p in slicing.PRINTERS.values():
         for m in slicing.MATERIALS.values():
+            if p.resin:
+                # Resin printers are never sliced here; only pre-sliced .ctb or .goo files are uploaded.
+                with pytest.raises(Unsupported, match="does not slice for resin"):
+                    slicing.settings(p, m)
+                continue
             try:
                 s = slicing.settings(p, m)
             except ConfigError:
@@ -76,6 +81,10 @@ def test_every_profile_and_material_combination_is_consistent():
             assert s["infill_speed_mms"] <= m.max_speed and s["travel_speed_mms"] == p.max_speed
             args = slicing.prusa_args(s, p)
             assert args[args.index("--bed-shape") + 1] == f"0x0,{p.bed[0]}x0,{p.bed[0]}x{p.bed[1]},0x{p.bed[1]}"
+            if p.filament_mm != 1.75:
+                assert args[args.index("--filament-diameter") + 1] == str(p.filament_mm)
+            else:
+                assert "--filament-diameter" not in args
 
 
 def test_slice_for_k2_runs_the_slicer_with_the_profile(k2, tmp_path, fake_slicer, capsys):

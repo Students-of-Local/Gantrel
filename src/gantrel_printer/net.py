@@ -6,6 +6,7 @@ some other device or a loopback service.
 
 from __future__ import annotations
 
+import http.client
 import json
 import socket
 import urllib.error
@@ -26,11 +27,23 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _opener = urllib.request.build_opener(_NoRedirect, urllib.request.ProxyHandler({}))
 
 
+def _digest_opener(url: str, user: str, password: str):
+    """An opener that answers HTTP digest challenges, only for URLs on url's own scheme, host and port."""
+    u = urllib.parse.urlsplit(url)
+    mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+    mgr.add_password(None, f"{u.scheme}://{u.netloc}/", user, password)
+    return urllib.request.build_opener(_NoRedirect, urllib.request.ProxyHandler({}),
+                                       urllib.request.HTTPDigestAuthHandler(mgr))
+
+
 def request(method: str, url: str, *, headers: dict | None = None, body: bytes | None = None,
-            timeout: float = 10.0, what: str = "the printer") -> tuple[int, dict, bytes]:
+            timeout: float = 10.0, what: str = "the printer",
+            digest: tuple[str, str] | None = None) -> tuple[int, dict, bytes]:
+    """One HTTP request. digest=(user, password) answers a digest challenge from that same origin only."""
     req = urllib.request.Request(url, data=body, method=method, headers=headers or {})
+    opener = _digest_opener(url, *digest) if digest else _opener
     try:
-        with _opener.open(req, timeout=timeout) as reply:
+        with opener.open(req, timeout=timeout) as reply:
             data = reply.read(MAX_REPLY + 1)
             if len(data) > MAX_REPLY:
                 raise ProtocolError(f"{what} sent a reply that is too large")
@@ -51,6 +64,20 @@ def request(method: str, url: str, *, headers: dict | None = None, body: bytes |
         reason = getattr(err, "reason", err)
         raise Unreachable(f"{what} did not answer at {url.split('?')[0]} ({reason})",
                           "Check it is on, on the same network, and the address is right") from None
+    except http.client.HTTPException as err:
+        raise ProtocolError(f"{what} did not answer in HTTP at {url.split('?')[0]} ({err.__class__.__name__})",
+                            "Check the port; this may be a different service") from None
+
+
+def challenge(url: str, timeout: float = 2.0) -> str:
+    """The WWW-Authenticate header of a 401 reply to a plain GET, or "". Sends no credentials."""
+    try:
+        with _opener.open(urllib.request.Request(url, method="GET"), timeout=timeout):
+            return ""
+    except urllib.error.HTTPError as err:
+        return str(err.headers.get("WWW-Authenticate") or "") if err.code == 401 else ""
+    except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, OSError):
+        return ""
 
 
 def get_json(url: str, **kw) -> dict:
@@ -95,6 +122,36 @@ def same_origin(url: str, scheme: str, host: str, port: int) -> bool:
     except ValueError:
         return False
     return u.scheme == scheme and (u.hostname or "").lower() == host.lower() and uport == port
+
+
+def mjpeg_frame(url: str, *, timeout: float = 15.0, what: str = "the camera",
+                max_bytes: int = 8 * 1024 * 1024) -> bytes:
+    """One JPEG frame from an MJPEG stream (multipart/x-mixed-replace) or a plain JPEG URL.
+
+    Reads only until the first complete frame, so an endless stream never hangs the call.
+    """
+    req = urllib.request.Request(url, method="GET")
+    try:
+        with _opener.open(req, timeout=timeout) as reply:
+            buf = bytearray()
+            while len(buf) < max_bytes:
+                chunk = reply.read1(65536) if hasattr(reply, "read1") else reply.read(65536)
+                if not chunk:
+                    break
+                buf += chunk
+                start = buf.find(b"\xff\xd8\xff")
+                if start >= 0:
+                    end = buf.find(b"\xff\xd9", start + 3)
+                    if end >= 0:
+                        return bytes(buf[start:end + 2])
+    except urllib.error.HTTPError as err:
+        raise Unreachable(f"{what} refused the stream (HTTP {err.code})",
+                          "Check the camera is on; some printers turn it off when idle") from None
+    except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, OSError) as err:
+        reason = getattr(err, "reason", err)
+        raise Unreachable(f"{what} did not answer at {url.split('?')[0]} ({reason})",
+                          "Check the printer is on and its camera is turned on") from None
+    raise ProtocolError(f"{what} sent no complete JPEG frame")
 
 
 def is_image(data: bytes) -> str | None:

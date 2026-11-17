@@ -1,21 +1,30 @@
 """Fake printers for the contract suite: one shared printer state, one front end per protocol.
 
 Each front end speaks its protocol over real sockets on 127.0.0.1 (HTTP, WebSocket, MQTT over TLS,
-implicit FTPS, the Bambu JPEG camera socket), so adapters are tested through their real network code.
+implicit FTPS, the Bambu JPEG camera socket, Elegoo's UDP hello, FlashForge's TCP G-code port), or
+over a pseudo terminal for Marlin on USB serial, so adapters are tested through their real I/O code.
 """
 
 from __future__ import annotations
 
 import asyncio
+import datetime
 import email.parser
 import email.policy
+import hashlib
 import json
+import os
+import re
+import select
 import socket
+import socketserver
 import ssl
 import struct
 import threading
 import time
+import tty
 import urllib.parse
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00" + b"\x00" * 64 + b"\xff\xd9"
@@ -116,8 +125,8 @@ class _Handler(BaseHTTPRequestHandler):
         self.routes(self, "DELETE")
 
 
-def serve_http(brain: Brain, routes) -> ThreadingHTTPServer:
-    handler = type("H", (_Handler,), {"brain": brain, "routes": staticmethod(routes)})
+def serve_http(brain: Brain, routes, **attrs) -> ThreadingHTTPServer:
+    handler = type("H", (_Handler,), {"brain": brain, "routes": staticmethod(routes), **attrs})
     srv = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     srv.daemon_threads = True
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -254,10 +263,19 @@ PRUSA_STATE = {"idle": "IDLE", "printing": "PRINTING", "paused": "PAUSED", "comp
 def prusalink_routes(h: _Handler, method: str):
     b = h.brain
     url = urllib.parse.urlsplit(h.path)
+    digest = getattr(h, "digest_users", None)
+    if digest is not None:
+        # Newer Buddy firmware: digest auth (user maker) on every call, /api/version included.
+        if not digest_ok(h, digest, "Printer API"):
+            return digest_challenge(h, "Printer API")
+    elif getattr(h, "key_challenges_digest", False) and not h._authed():
+        # PrusaLink on an MK3 Pi: takes an API key, yet answers every unauthenticated call,
+        # /api/version included, with a digest challenge.
+        return digest_challenge(h, "Printer API")
+    elif not (method == "GET" and url.path == "/api/version") and not h._authed():
+        return h._send(401, {"title": "Unauthorized"})
     if method == "GET" and url.path == "/api/version":
         return h._send(200, {"api": "2.0.0", "server": "2.1.2", "text": "PrusaLink"})
-    if not h._authed():
-        return h._send(401, {"title": "Unauthorized"})
     busy = b.state in ("printing", "paused")
     if method == "GET" and url.path == "/api/v1/status":
         st = {"printer": {"state": PRUSA_STATE[b.state], "temp_nozzle": 215.0, "target_nozzle": 215.0,
@@ -592,3 +610,818 @@ class FakeBambu:
         if user != "bblp" or code != self.brain.secret:
             return
         s.sendall(struct.pack("<IIII", len(JPEG), 0, 1, 0) + JPEG)
+
+
+# ---------------------------------------------------------------- shared helpers for the newer fakes
+
+def digest_challenge(h: _Handler, realm: str) -> None:
+    nonce = uuid.uuid4().hex
+    h.server.nonces = getattr(h.server, "nonces", set()) | {nonce}
+    body = b'{"message": "Authorization required"}'
+    h.send_response(401)
+    h.send_header("WWW-Authenticate", f'Digest realm="{realm}", nonce="{nonce}", qop="auth", algorithm=MD5')
+    h.send_header("Content-Type", "application/json")
+    h.send_header("Content-Length", str(len(body)))
+    h.end_headers()
+    h.wfile.write(body)
+
+
+def digest_ok(h: _Handler, users: dict, realm: str) -> bool:
+    """Check an RFC 7616 MD5 digest answer (qop auth) the way the printer does."""
+    auth = h.headers.get("Authorization", "")
+    if not auth.startswith("Digest "):
+        return False
+    p = {k: q or u for k, q, u in re.findall(r'(\w+)=(?:"([^"]*)"|([^\s,]*))', auth[7:])}
+    h.digest_seen = getattr(h, "digest_seen", []) + [p.get("username")]
+    password = users.get(p.get("username"))
+    if password is None or p.get("realm") != realm or p.get("nonce") not in getattr(h.server, "nonces", set()):
+        return False
+
+    def md5(x: str) -> str:
+        return hashlib.md5(x.encode()).hexdigest()
+
+    ha1, ha2 = md5(f"{p['username']}:{realm}:{password}"), md5(f"{h.command}:{p.get('uri', '')}")
+    if p.get("qop"):
+        want = md5(f"{ha1}:{p['nonce']}:{p.get('nc')}:{p.get('cnonce')}:{p['qop']}:{ha2}")
+    else:
+        want = md5(f"{ha1}:{p['nonce']}:{ha2}")
+    return p.get("response") == want
+
+
+def send_mjpeg(h: _Handler, frames: int = 2) -> None:
+    """A camera stream: multipart/x-mixed-replace, a couple of frames, then the connection closes."""
+    h.send_response(200)
+    h.send_header("Content-Type", "multipart/x-mixed-replace;boundary=frame")
+    h.end_headers()
+    for _ in range(frames):
+        h.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: " + str(len(JPEG)).encode()
+                      + b"\r\n\r\n" + JPEG + b"\r\n")
+
+
+def serve_jpeg() -> ThreadingHTTPServer:
+    """A stand-alone JPEG camera at /cam.jpg (for printers whose API lists no camera)."""
+
+    def routes(h, method):
+        if urllib.parse.urlsplit(h.path).path == "/cam.jpg":
+            return h._send(200, JPEG, "image/jpeg")
+        h._send(404, {})
+
+    return serve_http(Brain(), routes)
+
+
+def _form(h: _Handler, body: bytes | None = None) -> dict:
+    data = h._body() if body is None else body
+    return {k: v[0] for k, v in urllib.parse.parse_qs(data.decode(), keep_blank_values=True).items()}
+
+
+# ---------------------------------------------------------------- Elegoo SDCP v3 (WebSocket, UDP, HTTP)
+
+ELEGOO_CODE = {"idle": 0, "printing": 13, "paused": 6, "cancelled": 8, "complete": 9, "error": 14}
+
+
+class FakeElegoo:
+    MB = "ELEGOOFAKE000001"
+
+    def __init__(self, brain: Brain, resin: bool = False):
+        self.brain, self.resin = brain, resin
+        self.starts: list[dict] = []
+        self.cmds: list[int] = []
+        self.uploads: dict[str, bytearray] = {}
+        self.loop = asyncio.new_event_loop()
+        ready = threading.Event()
+
+        async def handler(ws):
+            if ws.request.path != "/websocket":
+                await ws.close()
+                return
+            async for raw in ws:
+                try:
+                    msg = json.loads(raw)
+                except ValueError:
+                    continue
+                d = msg.get("Data") if isinstance(msg, dict) else None
+                if not isinstance(d, dict) or d.get("MainboardID") != self.MB:
+                    continue  # the real board ignores requests addressed to another board
+                cmd = d.get("Cmd")
+                self.cmds.append(cmd)
+                reply = self.on_cmd(cmd, d.get("Data") or {})
+                if reply is None:
+                    continue  # unknown Cmd: the real firmware may crash; the fake just goes quiet
+                await ws.send(json.dumps({"Id": "fake", "Topic": f"sdcp/response/{self.MB}", "Data": {
+                    "Cmd": cmd, "Data": reply, "RequestID": d.get("RequestID"), "MainboardID": self.MB,
+                    "TimeStamp": int(time.time())}}))
+                if cmd == 0:
+                    await ws.send(json.dumps({"Id": "fake", "Topic": f"sdcp/status/{self.MB}",
+                                              "Status": self.status(), "MainboardID": self.MB,
+                                              "TimeStamp": int(time.time())}))
+
+        async def main():
+            from websockets.asyncio.server import serve
+
+            self.server = await serve(handler, "127.0.0.1", 0)
+            self.port = self.server.sockets[0].getsockname()[1]
+            ready.set()
+            await self.server.serve_forever()
+
+        threading.Thread(target=self.loop.run_until_complete, args=(main(),), daemon=True).start()
+        ready.wait(5)
+        self.udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.udp.bind(("127.0.0.1", 0))
+        self.udp_port = self.udp.getsockname()[1]
+        threading.Thread(target=self._udp_loop, daemon=True).start()
+        self.http = serve_http(brain, self.http_routes)
+
+    def _udp_loop(self):
+        while True:
+            try:
+                data, addr = self.udp.recvfrom(1024)
+            except OSError:
+                return
+            if data.strip() == b"M99999":
+                name = "Saturn 4 Ultra" if self.resin else "Centauri Carbon"
+                self.udp.sendto(json.dumps({"Id": "fake", "Data": {
+                    "Name": "fake-elegoo", "MachineName": name, "BrandName": "ELEGOO", "MainboardIP": "127.0.0.1",
+                    "MainboardID": self.MB, "ProtocolVersion": "V3.0.0", "FirmwareVersion": "V1.1.29"}}).encode(), addr)
+
+    def status(self) -> dict:
+        b = self.brain
+        busy = b.state in ("printing", "paused")
+        st = {"CurrentStatus": [1 if busy else 0],
+              "PrintInfo": {"Status": ELEGOO_CODE[b.state], "CurrentLayer": 1 if busy else 0,
+                            "TotalLayer": 10 if busy else 0, "CurrentTicks": 12, "TotalTicks": 612,
+                            "Filename": f"/local/{b.current}" if busy else "", "Progress": 10 if busy else 0}}
+        if not self.resin:
+            st.update({"TempOfNozzle": 215.0, "TempTargetNozzle": 215.0, "TempOfHotbed": 60.0,
+                       "TempTargetHotbed": 60.0, "TempOfBox": 30.0})
+        return st
+
+    def on_cmd(self, cmd, data: dict):
+        b = self.brain
+        if cmd == 0:
+            return {"Ack": 0}
+        if cmd == 128:
+            self.starts.append(data)
+            return {"Ack": 0 if b.start(str(data.get("Filename", "")).removeprefix("/local/")) else 1}
+        if cmd in (129, 130, 131):
+            b.act({129: "pause", 130: "cancel", 131: "resume"}[cmd])
+            return {"Ack": 0}
+        if cmd == 258:
+            return {"Ack": 0, "FileList": [{"name": f"/local/{n}", "FileSize": len(d), "CreateTime": b.mtimes[n],
+                                            "TotalLayers": 10, "type": 1} for n, d in b.files.items()]}
+        return None
+
+    def http_routes(self, h: _Handler, method: str):
+        url = urllib.parse.urlsplit(h.path)
+        if method == "POST" and url.path == "/uploadFile/upload":
+            parts = parse_multipart(h._body(), h.headers["Content-Type"])
+            name, chunk = parts["File"]
+            uid, offset = parts["Uuid"][1].decode(), int(parts["Offset"][1])
+            total, md5 = int(parts["TotalSize"][1]), parts["S-File-MD5"][1].decode()
+            buf = self.uploads.setdefault(uid, bytearray())
+            if offset != len(buf):
+                return h._send(200, {"code": "000004", "messages": "bad offset"})
+            buf += chunk
+            if len(buf) >= total:
+                del self.uploads[uid]
+                if hashlib.md5(bytes(buf)).hexdigest() != md5:
+                    return h._send(200, {"code": "000003", "messages": "md5 mismatch"})
+                self.brain.put(name, bytes(buf))
+            return h._send(200, {"code": "000000", "messages": None, "data": None, "success": True})
+        if method == "GET" and url.path == "/video" and not self.resin:
+            return send_mjpeg(h)
+        h._send(404, {})
+
+    def close(self):
+        self.http.shutdown()
+        self.udp.close()
+
+        async def stop():
+            self.server.close()
+            await self.server.wait_closed()
+
+        try:
+            asyncio.run_coroutine_threadsafe(stop(), self.loop).result(5)
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------- Duet: RepRapFirmware rr_ API and DSF
+
+DUET_STATE = {"idle": "idle", "printing": "processing", "paused": "paused", "cancelled": "idle",
+              "complete": "idle", "error": "halted"}
+
+
+class FakeDuet:
+    def __init__(self, brain: Brain, dsf: bool = False):
+        self.brain, self.dsf = brain, dsf
+        self.sessions: set[str] = set()
+        self.codes: list[str] = []
+        self.http = serve_http(brain, self.routes)
+        self.port = self.http.server_address[1]
+
+    def model(self) -> dict:
+        b = self.brain
+        busy = b.state in ("printing", "paused")
+        return {
+            "boards": [{"name": "Duet 3 MB6HC", "firmwareVersion": "3.5.2"}],
+            "state": {"status": DUET_STATE[b.state], "displayMessage": ""},
+            "job": {"file": {"fileName": f"0:/gcodes/{b.current}", "size": 1000, "numLayers": 10} if busy
+                    else {"fileName": None}, "filePosition": 100 if busy else 0, "duration": 12 if busy else None,
+                    "layer": 1 if busy else None, "timesLeft": {"slicer": 600, "file": 610}},
+            "heat": {"heaters": [{"current": 60.0, "active": 60.0, "state": "active"},
+                                 {"current": 215.0, "active": 215.0, "state": "active"}],
+                     "bedHeaters": [0, -1], "chamberHeaters": [-1]},
+            "tools": [{"number": 0, "heaters": [1]}],
+        }
+
+    def gcode(self, code: str) -> None:
+        b = self.brain
+        c = code.strip()
+        self.codes.append(c)
+        m = re.match(r'M32\s+"0:/gcodes/([^"]+)"', c)
+        if m:
+            b.start(m.group(1))
+        elif c == "M24":
+            b.act("resume")
+        elif c == "M25":
+            b.act("pause")
+        elif c == "M0" and b.state == "paused":
+            b.act("cancel")  # RRF: M0 while paused cancels the print
+        elif c == "M112":
+            b.act("estop")
+
+    def file_info(self, path: str) -> dict | None:
+        name = path.removeprefix("0:/gcodes/")
+        info = self.brain.info(name)
+        if info is None:
+            return None
+        stamp = datetime.datetime.fromtimestamp(info["mtime"]).isoformat(timespec="microseconds")
+        return {"size": info["size"], "lastModified": stamp, "fileName": path}
+
+    def _session_ok(self, h) -> bool:
+        if self.dsf and not self.brain.secret:
+            return True  # DSF with no password needs no session key
+        return h.headers.get("X-Session-Key") in self.sessions
+
+    def routes(self, h: _Handler, method: str):
+        url = urllib.parse.urlsplit(h.path)
+        q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query, keep_blank_values=True).items()}
+        if url.path == "/cam.jpg":
+            return h._send(200, JPEG, "image/jpeg")
+        if self.dsf:
+            return self.dsf_routes(h, method, url, q)
+        if url.path == "/rr_connect":
+            if self.brain.secret and q.get("password") != self.brain.secret:
+                return h._send(200, {"err": 1})
+            key = str(len(self.sessions) + 1000)
+            self.sessions.add(key)
+            return h._send(200, {"err": 0, "sessionTimeout": 8000, "boardType": "duet3mb6hc", "sessionKey": int(key),
+                                 "apiLevel": 1})
+        if not url.path.startswith("/rr_"):
+            # A standalone RepRapFirmware board serves Duet Web Control for any other path, with 200.
+            return h._send(200, b"<!DOCTYPE html><html><title>Duet Web Control</title></html>", "text/html")
+        if not self._session_ok(h):
+            return h._send(401, {})
+        if url.path == "/rr_disconnect":
+            self.sessions.discard(h.headers.get("X-Session-Key"))
+            return h._send(200, {"err": 0})
+        if url.path == "/rr_model":
+            return h._send(200, {"key": q.get("key"), "flags": q.get("flags"), "result": self.model().get(q.get("key"))})
+        if url.path == "/rr_gcode":
+            self.gcode(q.get("gcode", ""))
+            return h._send(200, {"buff": 255})
+        if url.path == "/rr_upload" and method == "POST":
+            self.brain.put(q["name"].removeprefix("0:/gcodes/"), h._body())
+            return h._send(200, {"err": 0})
+        if url.path == "/rr_fileinfo":
+            info = self.file_info(q.get("name", ""))
+            return h._send(200, {"err": 0, **info} if info else {"err": 1})
+        h._send(404, {})
+
+    def dsf_routes(self, h, method, url, q):
+        if url.path == "/machine/connect":
+            if self.brain.secret and q.get("password") != self.brain.secret:
+                return h._send(403, {})
+            key = uuid.uuid4().hex
+            self.sessions.add(key)
+            return h._send(200, {"sessionKey": key})
+        if not url.path.startswith("/machine/"):
+            return h._send(404, {})
+        if not self._session_ok(h):
+            return h._send(403, {})
+        if url.path == "/machine/disconnect":
+            self.sessions.discard(h.headers.get("X-Session-Key"))
+            return h._send(204)
+        if url.path == "/machine/status":
+            return h._send(200, self.model())
+        if url.path == "/machine/code" and method == "POST":
+            self.gcode(h._body().decode())
+            return h._send(200, b"", "text/plain")
+        if url.path.startswith("/machine/file/") and method == "PUT":
+            path = urllib.parse.unquote(url.path.removeprefix("/machine/file/"))
+            self.brain.put(path.removeprefix("0:/gcodes/"), h._body())
+            return h._send(201)
+        if url.path.startswith("/machine/fileinfo/"):
+            info = self.file_info(urllib.parse.unquote(url.path.removeprefix("/machine/fileinfo/")))
+            return h._send(200, info) if info else h._send(404, {})
+        h._send(404, {})
+
+    def close(self):
+        self.http.shutdown()
+
+
+# ---------------------------------------------------------------- FlashForge Adventurer 5M (HTTP 8898, TCP 8899)
+
+FF_STATE = {"idle": "ready", "printing": "printing", "paused": "paused", "cancelled": "cancel",
+            "complete": "completed", "error": "error"}
+FF_LEGACY = {"idle": "READY", "printing": "BUILDING_FROM_SD", "paused": "PAUSED", "cancelled": "READY",
+             "complete": "BUILDING_COMPLETED", "error": "BUSY"}
+
+
+class FakeFlashForge:
+    SERIAL = "SNFAKE5M01"
+
+    def __init__(self, brain: Brain):
+        self.brain = brain
+        self.upload_headers: list[dict] = []
+        self.http = serve_http(brain, self.routes)
+        self.port = self.http.server_address[1]
+        fake = self
+
+        class Legacy(socketserver.StreamRequestHandler):
+            def handle(self):
+                while True:
+                    line = self.rfile.readline(4096)
+                    if not line:
+                        return
+                    text = line.decode("utf-8", "replace").strip()
+                    if not text.startswith("~"):
+                        self.wfile.write(b"CMD ? Received.\r\nok\r\n")  # it never speaks HTTP
+                        continue
+                    self.wfile.write(fake.legacy_reply(text[1:]).encode())
+
+        self.tcp = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Legacy)
+        self.tcp.daemon_threads = True
+        self.legacy_port = self.tcp.server_address[1]
+        threading.Thread(target=self.tcp.serve_forever, daemon=True).start()
+
+    def legacy_reply(self, cmd: str) -> str:
+        b = self.brain
+        word = cmd.split()[0] if cmd else ""
+        busy = b.state in ("printing", "paused")
+        body = {
+            "M115": "Machine Type: Flashforge Adventurer 5M\r\nMachine Name: fake-5m\r\nFirmware: v3.1.3\r\n"
+                    f"SN: {self.SERIAL}\r\nX: 220 Y: 220 Z: 220\r\nTool Count: 1",
+            "M119": f"Endstop: X-max:0 Y-max:0 Z-min:0\r\nMachineStatus: {FF_LEGACY[b.state]}\r\nMoveMode: READY\r\n"
+                    f"Status: S:0 L:0 J:0 F:0\r\nLED: 1\r\nCurrentFile: {b.current if busy else ''}",
+            "M105": "T0:215.0/215.0 T1:0.0/0.0 B:60.0/60.0",
+            "M27": "SD printing byte 10/100\r\nLayer: 1/10" if busy else "SD printing byte 0/100\r\nLayer: 0/0",
+            "M601": "Control Success.", "M602": "Control Release.",
+        }.get(word, "")
+        if word in ("M25", "M24", "M26"):
+            b.act({"M25": "pause", "M24": "resume", "M26": "cancel"}[word])
+        return f"CMD {word} Received.\r\n" + (body + "\r\n" if body else "") + "ok\r\n"
+
+    def detail(self) -> dict:
+        b = self.brain
+        busy = b.state in ("printing", "paused")
+        return {"status": FF_STATE[b.state], "printFileName": b.current if busy else "",
+                "printProgress": 0.1 if busy else 0.0, "rightTemp": 215.0, "rightTargetTemp": 215.0,
+                "platTemp": 60.0, "platTargetTemp": 60.0, "chamberTemp": 30.0, "printLayer": 1 if busy else 0,
+                "targetPrintLayer": 10 if busy else 0, "printDuration": 12, "estimatedTime": 600,
+                "cameraStreamUrl": f"http://127.0.0.1:{self.port}/?action=stream", "errorCode": "",
+                "firmwareVersion": "3.1.3", "name": "Adventurer 5M"}
+
+    def _creds_ok(self, serial, code) -> bool:
+        return serial == self.SERIAL and code == self.brain.secret
+
+    def routes(self, h: _Handler, method: str):
+        b = self.brain
+        url = urllib.parse.urlsplit(h.path)
+        if method == "GET" and url.path == "/" and "action=stream" in url.query:
+            return send_mjpeg(h)
+        if method != "POST":
+            return h._send(404, {})
+        if url.path == "/uploadGcode":
+            if not self._creds_ok(h.headers.get("serialNumber"), h.headers.get("checkCode")):
+                return h._send(200, {"code": 1, "message": "check code error"})
+            self.upload_headers.append({k.lower(): v for k, v in h.headers.items()})
+            name, data = parse_multipart(h._body(), h.headers["Content-Type"])["gcodeFile"]
+            b.put(name, data)
+            if h.headers.get("printNow") == "true":
+                b.start(name)
+            return h._send(200, {"code": 0, "message": "Success"})
+        try:
+            body = json.loads(h._body() or b"{}")
+        except ValueError:
+            return h._send(400, {})
+        if url.path not in ("/detail", "/control", "/printGcode", "/gcodeList"):
+            return h._send(404, {})
+        if not self._creds_ok(body.get("serialNumber"), body.get("checkCode")):
+            return h._send(200, {"code": 1, "message": "check code error"})
+        if url.path == "/detail":
+            return h._send(200, {"code": 0, "message": "Success", "detail": self.detail()})
+        if url.path == "/gcodeList":
+            return h._send(200, {"code": 0, "message": "Success", "gcodeList": list(b.files)})
+        if url.path == "/printGcode":
+            ok = b.start(str(body.get("fileName", "")))
+            return h._send(200, {"code": 0 if ok else 2, "message": "Success" if ok else "busy"})
+        action = ((body.get("payload") or {}).get("args") or {}).get("action")
+        if action in ("pause", "continue", "cancel"):
+            b.act({"pause": "pause", "continue": "resume", "cancel": "cancel"}[action])
+            return h._send(200, {"code": 0, "message": "Success"})
+        h._send(200, {"code": 3, "message": "unknown"})
+
+    def close(self):
+        self.http.shutdown()
+        self.tcp.shutdown()
+        self.tcp.server_close()
+
+
+# ---------------------------------------------------------------- Snapmaker 2.0 (HTTP 8080, touchscreen approval)
+
+SNAP_STATE = {"idle": "IDLE", "printing": "RUNNING", "paused": "PAUSED", "cancelled": "STOPPED",
+              "complete": "FINISHED", "error": "UNKNOWN"}
+
+
+class FakeSnapmaker:
+    def __init__(self, brain: Brain, approve: bool = True):
+        self.brain, self.approve = brain, approve
+        self.tokens: dict[str, bool] = {}  # token -> accepted on the touchscreen
+        if brain.secret:
+            self.tokens[brain.secret] = True
+        self.http = serve_http(brain, self.routes)
+        self.port = self.http.server_address[1]
+
+    def routes(self, h: _Handler, method: str):
+        b = self.brain
+        url = urllib.parse.urlsplit(h.path)
+        q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
+        if url.path == "/cam.jpg":
+            return h._send(200, JPEG, "image/jpeg")
+        if method == "POST" and url.path == "/api/v1/connect":
+            token = uuid.uuid4().hex
+            self.tokens[token] = False
+            return h._send(200, {"token": token, "readonly": False})
+        if not url.path.startswith("/api/v1/"):
+            return h._send(404, {})
+        if method == "POST" and url.path == "/api/v1/upload":
+            parts = parse_multipart(h._body(), h.headers["Content-Type"])
+            token = parts.get("token", (None, b""))[1].decode()
+            if not self.tokens.get(token):
+                return h._send(401, {})
+            name, data = parts["file"]
+            b.put(name, data)
+            return h._send(200, {})
+        form = q if method == "GET" else _form(h)
+        token = form.get("token")
+        if token not in self.tokens:
+            return h._send(401, {})
+        if not self.tokens[token]:
+            if self.approve:
+                self.tokens[token] = True  # the person taps Yes; this poll still sees "waiting"
+            return h._send(204)
+        if method == "GET" and url.path == "/api/v1/status":
+            busy = b.state in ("printing", "paused")
+            return h._send(200, {"status": SNAP_STATE[b.state], "x": 0, "y": 0, "z": 0, "offsetX": 0,
+                                 "nozzleTemperature": 215.0, "nozzleTargetTemperature": 215.0,
+                                 "heatedBedTemperature": 60.0, "heatedBedTargetTemperature": 60.0,
+                                 "isFilamentOut": False, "workSpeed": 1500, "printStatus": "",
+                                 "fileName": b.current if busy else "", "progress": 0.1 if busy else 0,
+                                 "elapsedTime": 12, "remainingTime": 600, "toolHead": "TOOLHEAD_3DPRINTING_1"})
+        acts = {"/api/v1/pause_print": "pause", "/api/v1/resume_print": "resume", "/api/v1/stop_print": "cancel"}
+        if method == "POST" and url.path in acts:
+            b.act(acts[url.path])
+            return h._send(200, {})
+        if method == "POST" and url.path == "/api/v1/execute_code":
+            if form.get("code", "").strip() == "M112":
+                b.act("estop")
+            return h._send(200, {})
+        h._send(404, {})
+
+    def close(self):
+        self.http.shutdown()
+
+
+# ---------------------------------------------------------------- UltiMaker /api/v1 (digest auth, screen approval)
+
+class FakeUltimaker:
+    REALM = "Jedi-API"
+
+    def __init__(self, brain: Brain, approve: bool = True, deny: bool = False):
+        self.brain, self.approve, self.deny = brain, approve, deny
+        self.creds: dict[str, str] = {}
+        self.approved: set[str] = set()
+        self.digest_users_seen: list = []
+        if brain.secret:
+            self.creds["fakeid"] = brain.secret
+            self.approved.add("fakeid")
+        self.http = serve_http(brain, self.routes)
+        self.port = self.http.server_address[1]
+
+    def users(self) -> dict:
+        return {i: k for i, k in self.creds.items() if i in self.approved}
+
+    def job(self) -> dict | None:
+        b = self.brain
+        js = {"printing": "printing", "paused": "paused", "cancelled": "wait_cleanup", "complete": "wait_cleanup"}
+        if b.state not in js or not b.current:
+            return None
+        return {"name": b.current, "state": js[b.state], "progress": 0.1, "time_elapsed": 12, "time_total": 612,
+                "result": "Aborted" if b.state == "cancelled" else ("Finished" if b.state == "complete" else "")}
+
+    def routes(self, h: _Handler, method: str):
+        b = self.brain
+        url = urllib.parse.urlsplit(h.path)
+        if url.path == "/" and "action=snapshot" in url.query:
+            return h._send(200, JPEG, "image/jpeg")
+        if method == "GET" and url.path == "/api/v1/system":
+            return h._send(200, {"guid": "fake-guid-0001", "variant": "Ultimaker S5", "firmware": "5.8.1",
+                                 "name": "fake-s5", "platform": "Linux"})
+        if method == "POST" and url.path == "/api/v1/auth/request":
+            ident, key = uuid.uuid4().hex, uuid.uuid4().hex
+            self.creds[ident] = key
+            return h._send(200, {"id": ident, "key": key})
+        if method == "GET" and url.path.startswith("/api/v1/auth/check/"):
+            ident = url.path.rsplit("/", 1)[1]
+            if self.deny:
+                return h._send(200, {"message": "unauthorized"})
+            if ident in self.approved:
+                return h._send(200, {"message": "authorized"})
+            if self.approve and ident in self.creds:
+                self.approved.add(ident)  # the person taps Allow; this poll still says "unknown"
+            return h._send(200, {"message": "unknown"})
+        if method == "GET" and url.path == "/api/v1/printer":
+            return h._send(200, {"status": "error" if b.state == "error" else
+                                 ("printing" if b.state in ("printing", "paused") else "idle"),
+                                 "heads": [{"extruders": [{"hotend": {"temperature": {"current": 215.0, "target": 215.0}}}]}],
+                                 "bed": {"temperature": {"current": 60.0, "target": 60.0}}})
+        if method == "GET" and url.path == "/api/v1/print_job":
+            job = self.job()
+            return h._send(200, job) if job else h._send(404, {"message": "No print job"})
+        needs_auth = url.path == "/api/v1/auth/verify" or method in ("PUT", "POST")
+        if needs_auth and not digest_ok(h, self.users(), self.REALM):
+            return digest_challenge(h, self.REALM)
+        if url.path == "/api/v1/auth/verify":
+            return h._send(200, {"message": "ok"})
+        if method == "PUT" and url.path == "/api/v1/print_job/state":
+            target = json.loads(h._body() or b"{}").get("target")
+            b.act({"pause": "pause", "print": "resume", "abort": "cancel"}.get(target, "unknown"))
+            return h._send(204)
+        if method == "POST" and url.path == "/api/v1/print_job":
+            parts = parse_multipart(h._body(), h.headers["Content-Type"])
+            name, data = parts["file"]
+            b.put(name, data)
+            b.start(name)  # the real printer starts at once, which is why Gantrel never calls this
+            return h._send(201, {})
+        h._send(404, {})
+
+    def close(self):
+        self.http.shutdown()
+
+
+# ---------------------------------------------------------------- Repetier-Server (REST, x-api-key)
+
+class FakeRepetier:
+    SLUG = "Fake_Printer"
+    GLOBAL_KEY = "repetier-global-key-from-info"
+
+    def __init__(self, brain: Brain, printers: int = 1):
+        self.brain, self.printers = brain, printers
+        self.ids: dict[str, int] = {}
+        self.sent: list[str] = []
+        self.http = serve_http(brain, self.routes)
+        self.port = self.http.server_address[1]
+
+    def _printer_list(self) -> list:
+        b = self.brain
+        busy = b.state in ("printing", "paused")
+        me = {"slug": self.SLUG, "name": "Fake Printer", "online": 1, "active": True,
+              "job": b.current if busy else "none", "paused": b.state == "paused", "done": 10.0 if busy else 0.0,
+              "printedTimeComp": 12}
+        others = [{"slug": f"Other_{i}", "name": f"Other {i}", "online": 1, "active": True, "job": "none"}
+                  for i in range(1, self.printers)]
+        return [me, *others]
+
+    def _id(self, name: str) -> int:
+        return self.ids.setdefault(name, len(self.ids) + 1)
+
+    def routes(self, h: _Handler, method: str):
+        b = self.brain
+        url = urllib.parse.urlsplit(h.path)
+        q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
+        if url.path == "/printer/info":
+            # The real server's info call carries the global API key; adapters must never keep it.
+            return h._send(200, {"name": "Repetier-Server", "version": "1.4.10", "apikey": self.GLOBAL_KEY,
+                                 "printers": [{"slug": p["slug"], "name": p["name"]} for p in self._printer_list()]})
+        if url.path == "/fake/cam.jpg":
+            return h._send(200, JPEG, "image/jpeg")
+        if h.headers.get("x-api-key") != b.secret:
+            return h._send(200, {"error": "Authorization required"})
+        if url.path == "/printer/list":
+            return h._send(200, {"data": self._printer_list()})
+        if url.path == f"/printer/model/{self.SLUG}" and method == "POST" and q.get("a") == "upload":
+            _, data = parse_multipart(h._body(), h.headers["Content-Type"])["filename"]
+            b.put(q["name"], data)
+            self._id(q["name"])
+            return h._send(200, {})
+        if url.path != f"/printer/api/{self.SLUG}":
+            return h._send(404, {"error": "unknown printer"})
+        a, data = q.get("a"), json.loads(q.get("data") or "{}")
+        if a == "stateList":
+            return h._send(200, {self.SLUG: {"extruder": [{"tempRead": 215.0, "tempSet": 215.0}],
+                                             "heatedBeds": [{"tempRead": 60.0, "tempSet": 60.0}],
+                                             "layer": 1 if b.state in ("printing", "paused") else 0}})
+        if a == "listModels":
+            return h._send(200, {"data": [{"id": self._id(n), "name": n, "length": len(d),
+                                           "created": int(b.mtimes[n] * 1000)} for n, d in b.files.items()]})
+        if a == "copyModel":
+            name = next((n for n, i in self.ids.items() if i == data.get("id")), "")
+            ok = data.get("autostart") and b.start(name)
+            return h._send(200, {} if ok else {"error": "printer busy"})
+        if a == "continueJob":
+            b.act("resume")
+            return h._send(200, {})
+        if a == "stopJob":
+            b.act("cancel")
+            return h._send(200, {})
+        if a == "send":
+            cmd = str(data.get("cmd", ""))
+            self.sent.append(cmd)
+            if cmd == "@pause":
+                b.act("pause")
+            elif cmd == "M112":
+                b.act("estop")
+            return h._send(200, {})
+        if a == "getPrinterConfig":
+            return h._send(200, {"general": {"name": "Fake Printer"},
+                                 "webcam": {"staticUrl": "/fake/cam.jpg", "dynamicUrl": "/fake/stream"}})
+        h._send(200, {"error": f"unknown action {a}"})
+
+    def close(self):
+        self.http.shutdown()
+
+
+# ---------------------------------------------------------------- Marlin on USB serial (a pty pair)
+
+def marlin_checksum(line: str) -> int:
+    cs = 0
+    for c in line.encode():
+        cs ^= c
+    return cs
+
+
+class FakeMarlin:
+    """Marlin 2.1 on a pseudo terminal. Line numbers and checksums, SD card commands, M112 halt."""
+
+    def __init__(self, brain: Brain, sd: bool = True, corrupt_line: int | None = None):
+        self.brain, self.sd, self.corrupt_line = brain, sd, corrupt_line
+        # heating: inside a blocking M109/M190. Commands queue with no ok, and the board prints only
+        # busy and temperature lines, except M112, which the emergency parser runs at once.
+        self.heating = False
+        self.queued: list[str] = []
+        self.master, self.slave = os.openpty()
+        tty.setraw(self.slave)
+        self.path = os.ttyname(self.slave)
+        self.line_no = 0
+        self.saving: tuple[str, bytearray] | None = None
+        self.selected = ""
+        self.halted = False
+        self.resends = 0
+        self.received: list[str] = []
+        self.stop = False
+        threading.Thread(target=self._loop, daemon=True).start()
+        threading.Thread(target=self._busy_loop, daemon=True).start()
+
+    def _busy_loop(self):
+        while not self.stop:
+            time.sleep(0.3)
+            if self.heating and not self.halted:
+                self.say("echo:busy: processing", " T:180.00 /215.00 B:60.00 /60.00 @:127 B@:0")
+
+    def finish_heating(self) -> None:
+        self.heating = False
+        queued, self.queued = self.queued, []
+        for line in queued:
+            self.handle(line)
+
+    def say(self, *lines: str) -> None:
+        os.write(self.master, "".join(f"{ln}\n" for ln in lines).encode())
+
+    def _loop(self):
+        buf = b""
+        while not self.stop:
+            try:
+                r, _, _ = select.select([self.master], [], [], 0.1)
+                if not r:
+                    continue
+                data = os.read(self.master, 4096)
+            except OSError:
+                return
+            buf += data
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                self.handle(line.decode("utf-8", "replace").strip())
+
+    def handle(self, line: str) -> None:
+        if not line:
+            return
+        self.received.append(line)
+        if self.halted:
+            return self.say("Error:Printer halted. kill() called!")
+        if line.split()[0].upper() == "M112":
+            self.halted = True
+            self.brain.act("estop")
+            return self.say("Error:Printer halted. kill() called!")
+        if self.heating:
+            self.received.pop()
+            self.queued.append(line)
+            return
+        m = re.match(r"N(\d+)\s+(.*)\*(\d+)$", line)
+        if m:
+            n, cmd = int(m.group(1)), m.group(2)
+            corrupt = self.corrupt_line == n
+            if corrupt:
+                self.corrupt_line = None  # one bad line on the wire, once
+            if corrupt or marlin_checksum(line[:line.rindex("*")]) != int(m.group(3)) or n != self.line_no + 1:
+                self.resends += 1
+                return self.say(f"Error:checksum mismatch, Last Line: {self.line_no}", f"Resend: {self.line_no + 1}",
+                                "ok")
+            self.line_no = n
+            line = cmd.strip()
+        if self.saving is not None:
+            name, data = self.saving
+            if line.split()[0].upper() == "M29":
+                self.saving = None
+                self.brain.put(name, bytes(data))
+                return self.say("Done saving file.", "ok")
+            data += (line + "\r\n").encode()
+            return self.say("ok")
+        self.command(line)
+
+    def command(self, line: str) -> None:
+        b = self.brain
+        word, _, arg = line.partition(" ")
+        word = word.upper()
+        busy = b.state in ("printing", "paused")
+        sd_cmds = ("M20", "M21", "M23", "M24", "M25", "M27", "M28", "M524")
+        if word in sd_cmds and not self.sd:
+            return self.say(f'echo:Unknown command: "{line}"', "ok")
+        if word == "M105":
+            return self.say("ok T:215.00 /215.00 B:60.00 /60.00 @:0 B@:0")
+        if word == "M115":
+            return self.say("FIRMWARE_NAME:Marlin 2.1.2.1 (Sep 12 2023 12:00:00) SOURCE_CODE_URL:github.com/MarlinFirmware/"
+                            "Marlin PROTOCOL_VERSION:1.0 MACHINE_TYPE:Fake Ender-3 EXTRUDER_COUNT:1 UUID:cede2a2f",
+                            "Cap:SERIAL_XON_XOFF:0", f"Cap:SDCARD:{1 if self.sd else 0}", "Cap:AUTOREPORT_TEMP:1", "ok")
+        if word == "M110":
+            self.line_no = int(arg.strip().lstrip("N") or 0)
+            return self.say("ok")
+        if word in ("M21", "M28") and busy:
+            b.act("cancel")  # real Marlin: remounting or writing the card mid-print kills the print
+            self.selected = ""
+        if word == "M21":
+            return self.say("echo:SD card ok", "ok")
+        if word == "M20":
+            return self.say("Begin file list", *[f"{n} {len(d)}" for n, d in b.files.items()], "End file list", "ok")
+        if word == "M28":
+            self.saving = (arg.strip().upper(), bytearray())
+            return self.say(f"Writing to file: {arg.strip()}", "ok")
+        if word == "M23":
+            name = arg.strip().upper()
+            if name not in b.files:
+                return self.say(f"open failed, File: {name}.", "ok")
+            self.selected = name
+            return self.say(f"echo:Now fresh file: {name}", f"File opened: {name} Size: {len(b.files[name])}",
+                            "File selected", "ok")
+        if word == "M24":
+            if b.state == "paused":
+                b.act("resume")
+            elif self.selected:
+                b.start(self.selected)
+            return self.say("ok")
+        if word == "M25":
+            b.act("pause")
+            return self.say("ok")
+        if word == "M27" and arg.strip().upper() == "C":
+            return self.say(f"Current file: {b.current} {b.current}" if busy else "(no file)", "ok")
+        if word == "M27":
+            # Marlin 2.1: paused still reports "SD printing byte", since the file stays open.
+            return self.say("SD printing byte 10/100" if busy else "Not SD printing", "ok")
+        if word == "M524":
+            b.act("cancel")
+            self.selected = ""
+            return self.say("ok")
+        if word == "M112":
+            b.act("estop")
+            self.halted = True
+            return self.say("Error:Printer halted. kill() called!")
+        self.say(f'echo:Unknown command: "{line}"', "ok")
+
+    def close(self):
+        self.stop = True
+        time.sleep(0.15)
+        for fd in (self.master, self.slave):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
