@@ -12,7 +12,8 @@ with this one command, then stop and do nothing else:
 
     uv tool install git+https://github.com/baney75/smoothstone@fefce749a2e03f7094307da3347d868593dc63e8
 
-Never install it yourself.
+Never install it yourself. If it prints a path, run `stone status` next and follow its NEXT line.
+stone status prints your tier card's rules, so you can start without opening the tier files.
 
 stone turns a request into a print-ready STL. The model picks a recipe and sets its numbers;
 stone builds the part with OpenSCAD, checks that it prints (watertight, one piece, flat base,
