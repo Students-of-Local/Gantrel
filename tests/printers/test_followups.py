@@ -59,12 +59,14 @@ def test_bambu_real_failure_stays_an_error(bambu, tmp_path):
     assert st.state == "error" and "HMS 07008000-00020001" in st.message
     # A user cancel code does not hide an HMS fault.
     bambu.fake.print_error = 0x0300400C
-    assert a.status().state == "error"
+    st = a.status()
+    assert st.state == "error" and "HMS 07008000-00020001" in st.message and "print_error" not in st.message
     # A nonzero print_error while idle is an error too.
     bambu.fake.hms = []
     bambu.fake.print_error = 0x0500C011
     bambu.brain.state = "idle"
-    assert a.status().state == "error"
+    st = a.status()
+    assert st.state == "error" and st.message == "print_error 0500C011"
 
 
 # ---------------------------------------------------------------- 2. Klipper: plain G1 E retracts

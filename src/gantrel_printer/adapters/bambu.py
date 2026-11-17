@@ -251,13 +251,16 @@ class BambuAdapter(Adapter):
         p = self._mqtt([{"pushing": {"sequence_id": "0", "command": "pushall"}}], want_report=True)
         state = _state(p)
         err = p.get("print_error") or 0
-        message = ""
+        hms = _hms_errors(p)
         if state == "cancelled":
             message = "stopped by a person"
-        elif err:
-            message = f"print_error {err}"
-        elif state == "error" and _hms_errors(p):
-            message = "HMS " + ", ".join(_hms_errors(p))
+        else:
+            # Name both facts: the print_error (hex, as ha-bambulab's table lists it) unless it is only a
+            # person's stop, and every HMS fault.
+            parts = [f"print_error {err:08X}"] if err and err not in USER_CANCEL_ERRORS else []
+            if hms and state == "error":
+                parts.append("HMS " + ", ".join(hms))
+            message = "; ".join(parts)
         rem = p.get("mc_remaining_time")
         return Status(
             printer=self.cfg.name, type=self.type_name, state=state,

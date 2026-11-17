@@ -235,6 +235,7 @@ def make(kind: str, printer: PrinterProfile, mat: Material, force: bool = False)
                 w.layer(z)
                 if layer == 1:
                     _fan(w, fan)
+                    w.add(f"M104 S{s['nozzle_c']}")  # first layer done: print temperature, as a slicer does
                 speed = first_speed if layer == 0 else fill_speed
                 for i, (x0, y0) in enumerate(spots):
                     flow = FLOWS[i] / 100
@@ -250,8 +251,8 @@ def make(kind: str, printer: PrinterProfile, mat: Material, force: bool = False)
                     w.loops(x0, y0 - 6, x0 + 5, y0 - 1, 2, first_speed)
             bands = [Band(i + 1, f, "%", f"patch {i + 1} from the left") for i, f in enumerate(FLOWS)]
             summary = (f"Five {patch:g} mm flat patches in a row, {layers * LAYER:g} mm tall, printed at "
-                       f"{', '.join(f'{f}%' for f in FLOWS)} flow from left to right. A small tab marks the left "
-                       f"({FLOWS[0]}%) patch.")
+                       f"{', '.join(f'{f}%' for f in FLOWS)} flow from left to right, at {s['nozzle_c']} C after the first "
+                       f"layer. A small tab marks the left ({FLOWS[0]}%) patch.")
             look_for = ("Look at the top of each patch in good light. Too little flow: gaps or grooves between "
                         "lines. Too much: ridges, rough bumps or a raised edge. Pick the smoothest patch with no gaps")
             change = ("Multiply your flow (extrusion multiplier) by that patch's percent: for example 105% means "
@@ -273,6 +274,8 @@ def make(kind: str, printer: PrinterProfile, mat: Material, force: bool = False)
                 m = w.width
                 w.fill(base[0] + m, base[1] + m, base[2] - m, base[3] - m, first_speed, vertical=layer == 1)
             _fan(w, fan)
+            if kind != "temp-tower":
+                w.add(f"M104 S{s['nozzle_c']}")  # base done: print temperature, as a slicer does
             z = 2 * LAYER
             per_band = round(BAND_MM / LAYER)
             for i, v in enumerate(values):

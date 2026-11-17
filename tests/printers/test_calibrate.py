@@ -259,3 +259,15 @@ def test_the_cli_still_cannot_start_a_print():
 
     src = Path(mod.__file__).read_text()
     assert ".start(" not in src and "mint_token" not in src and "upload" not in src.split('"""', 2)[2]
+
+
+@pytest.mark.parametrize("kind", ["retraction", "flow"])
+@pytest.mark.parametrize("mat", ["PLA", "PETG"])
+def test_summary_temperature_is_the_one_the_body_prints_at(kind, mat):
+    # Review r1 first-F1 (PR #7): the body heated to the first-layer temperature and never came down.
+    m = slicing.material(mat)
+    cal = calibrate.make(kind, slicing.PRINTERS["creality-k2"], m)
+    temps = [int(x) for x in re.findall(r"^M10[49] S(\d+)", "\n".join(sections(cal.gcode)["body"]), re.M)]
+    assert temps, "the body never sets the print temperature"
+    stated = re.search(r"at (\d+) C", cal.summary)
+    assert stated and int(stated.group(1)) == temps[-1]
