@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import socket
+import ssl
+from pathlib import Path
 from dataclasses import dataclass, field
 
 import pytest
@@ -55,8 +58,10 @@ def make_rig(kind: str, tls_cert) -> Rig:
         return Rig(kind, brain, cfg, None, [fc.close])
     if kind == "bambu":
         fb = fakes.FakeBambu(brain, "01S00FAKE", *tls_cert)
+        # As after pair: the MQTT certificate is pinned.
         cfg = PrinterConfig(name=name, type=kind, host="127.0.0.1", port=fb.mqtt, serial="01S00FAKE",
-                            model="bambu-p1s", extra={"ftp_port": fb.ftp, "camera_port": fb.cam})
+                            model="bambu-p1s", tls_fingerprint=cert_fp(tls_cert[0]),
+                            extra={"ftp_port": fb.ftp, "camera_port": fb.cam})
         rig = Rig(kind, brain, cfg, SECRET)
         rig.fake = fb
         return rig
@@ -71,15 +76,24 @@ def rig(request, tls_cert):
         c()
 
 
+def cert_fp(pem_path: str) -> str:
+    return hashlib.sha256(ssl.PEM_cert_to_DER_cert(Path(pem_path).read_text())).hexdigest()
+
+
 def upload_job(rig, tmp_path, name="part.gcode", data=GCODE):
+    """What `gantrel-printer upload` does: content-hash name, upload, record the printer's copy."""
+    a = rig.adapter()
     f = tmp_path / name
     f.write_bytes(data)
-    remote = rig.adapter().upload(f, name)
-    return safety.new_job(rig.cfg.name, f, remote, material="PLA")
+    sha = safety.file_sha256(f)
+    remote = a.upload(f, f"{f.stem}-{sha[:12]}.gcode")
+    info = a.remote_info(remote) if a.verifies_remote else {}
+    return safety.new_job(rig.cfg.name, f, remote, material="PLA", identity=a.identity(), sha256=sha,
+                          remote_size=info.get("size"), remote_mtime=info.get("mtime"))
 
 
 def start_token(job):
-    return safety.mint_token("start", job.printer, job.id, job.sha256)
+    return safety.mint_token("start", job.printer, job.id, job.sha256, job.identity)
 
 
 def test_every_adapter_has_a_fake():
@@ -159,7 +173,7 @@ def test_start_with_confirm_token_then_pause_resume_cancel(rig, tmp_path):
         a.resume(None)
     assert a.status().state == "paused"
     st = a.status()
-    a.resume(safety.mint_token("resume", rig.cfg.name, resume_job_id(st), ""))
+    a.resume(safety.mint_token("resume", rig.cfg.name, resume_job_id(st), "", a.identity()))
     assert a.status().state == "printing"
 
     a.cancel()
@@ -177,7 +191,7 @@ def test_start_refused_while_printing_even_with_a_token(rig, tmp_path):
 
     with pytest.raises(Refused):
         a.start(second, start_token(second))
-    assert rig.brain.current == "one.gcode"
+    assert rig.brain.current == first.remote_name
 
 
 def test_emergency_stop_stops_the_print(rig, tmp_path):
@@ -196,3 +210,94 @@ def test_camera_snapshot_is_a_jpeg(rig, tmp_path):
     assert out.read_bytes()[:3] == b"\xff\xd8\xff"
     cam = a.camera()
     assert SECRET not in cam.stream_url and SECRET not in cam.snapshot_url
+
+
+def test_start_refused_when_the_printers_copy_was_replaced(rig, tmp_path):
+    """first-F1, sol-F1: the token must not start different content stored under the job's name."""
+    a = rig.adapter()
+    job = upload_job(rig, tmp_path)
+    token = start_token(job)
+    rig.brain.put(job.remote_name, b"G28\nM104 S300\n; not what the person confirmed\n")
+    if not a.verifies_remote:
+        # Creality stock firmware can't report file details; the content-hash name is the only guard.
+        assert rig.type == "creality"
+        return
+    with pytest.raises(SafetyError, match="changed after it was uploaded"):
+        a.start(job, token)
+    assert not rig.brain.started
+
+
+def test_same_size_replacement_is_caught_by_mtime(rig, tmp_path):
+    a = rig.adapter()
+    if not a.verifies_remote:
+        return
+    job = upload_job(rig, tmp_path)
+    rig.brain.put(job.remote_name, GCODE.replace(b"X10", b"X99"))  # same size, new content
+    with pytest.raises(SafetyError, match="changed"):
+        a.start(job, start_token(job))
+    assert not rig.brain.started
+
+
+def test_camera_override_never_gets_printer_credentials(rig, tmp_path):
+    """sol-F3: a --camera-url on another host (a go2rtc relay) must not receive the API key."""
+    seen = []
+
+    def relay(h, method):
+        seen.append(dict(h.headers))
+        h._send(200, fakes.JPEG, "image/jpeg")
+
+    srv = fakes.serve_http(fakes.Brain(), relay)
+    try:
+        rig.cfg.camera_url = f"http://localhost:{srv.server_address[1]}/api/frame.jpeg?src=cam"
+        rig.adapter().snapshot(tmp_path / "relay.jpg")
+    finally:
+        srv.shutdown()
+    assert seen
+    for headers in seen:
+        assert "X-Api-Key" not in headers and SECRET not in str(headers)
+
+
+def test_identity_changes_with_the_address(rig):
+    a = rig.adapter()
+    before = a.identity()
+    rig.cfg.host = "127.0.0.2"
+    assert rig.adapter().identity() != before
+
+
+def test_bambu_checks_the_pin_on_every_connection_that_carries_the_access_code(tmp_path, tls_cert, tls_cert2):
+    """sol-F2, first-F2: an interceptor that shows the real certificate on some connections and its own
+    on others must never receive the access code on one of its own."""
+    brain = fakes.Brain(secret=SECRET)
+    fb = fakes.FakeBambu(brain, "01S00FAKE", *tls_cert, alt=tls_cert2)
+    pin = cert_fp(tls_cert[0])
+    cfg = PrinterConfig(name="bambu", type="bambu", host="127.0.0.1", port=fb.mqtt, serial="01S00FAKE",
+                        tls_fingerprint=pin, model="bambu-p1s",
+                        extra={"ftp_port": fb.ftp, "camera_port": fb.cam,
+                               "tls_pins": {str(fb.ftp): pin, str(fb.cam): pin}})
+    a = build(cfg, SECRET)
+    f = tmp_path / "x.gcode"
+    f.write_bytes(GCODE)
+    refused = 0
+    for call in (a.status, a.status, lambda: a.upload(f, "x.gcode"), lambda: a.upload(f, "x.gcode"),
+                 lambda: a.snapshot(tmp_path / "c.jpg"), lambda: a.snapshot(tmp_path / "c.jpg")):
+        try:
+            call()
+        except AuthFailed as err:
+            assert "certificate" in str(err)
+            refused += 1
+    assert refused >= 3  # every connection that drew the impostor certificate was refused
+    assert fb.logins, "the genuine connections should have logged in"
+    assert all(idx == 0 for _, idx in fb.logins), fb.logins  # no secret ever went to the impostor
+
+
+def test_bambu_wrong_pin_sends_nothing(tmp_path, tls_cert):
+    brain = fakes.Brain(secret=SECRET)
+    fb = fakes.FakeBambu(brain, "01S00FAKE", *tls_cert)
+    cfg = PrinterConfig(name="bambu", type="bambu", host="127.0.0.1", port=fb.mqtt, serial="01S00FAKE",
+                        tls_fingerprint="0" * 64, extra={"ftp_port": fb.ftp, "camera_port": fb.cam,
+                                                         "tls_pins": {str(fb.ftp): "0" * 64, str(fb.cam): "0" * 64}})
+    a = build(cfg, SECRET)
+    for call in (a.status, lambda: a.snapshot(tmp_path / "c.jpg"), lambda: a.remote_info("x.gcode")):
+        with pytest.raises(AuthFailed, match="certificate"):
+            call()
+    assert fb.logins == []

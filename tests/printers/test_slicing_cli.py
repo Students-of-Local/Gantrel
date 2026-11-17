@@ -167,3 +167,23 @@ def test_upload_refuses_unsafe_remote_names(k2, tmp_path, capsys):
     assert cli.main(["upload", str(f), "--printer", "k2", "--name", "../../etc/x.gcode"]) == cli.EXIT_ERROR
     assert cli.main(["upload", str(f), "--printer", "k2", "--name", "x.sh"]) == cli.EXIT_ERROR
     assert k2.files == {}
+
+
+@pytest.mark.parametrize("kind", ["prusaslicer", "orcaslicer"])
+def test_stale_gcode_is_never_reported_as_the_slice(k2, tmp_path, monkeypatch, capsys, kind):
+    """sol-F4: an old G-code in the output folder plus a slicer that exits 0 without writing anything."""
+    noop = tmp_path / "noop-slicer"
+    noop.write_text(f"#!{sys.executable}\nimport sys\nsys.exit(0)\n")
+    noop.chmod(noop.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv(f"GANTREL_{kind.upper()}", str(noop))
+    other = "ORCASLICER" if kind == "prusaslicer" else "PRUSASLICER"
+    monkeypatch.delenv(f"GANTREL_{other}", raising=False)
+    monkeypatch.setattr(slicing, "find_slicers", lambda: {kind: [str(noop)]})
+    stl = tmp_path / "cube.stl"
+    stl.write_bytes(STL)
+    (tmp_path / "cube_creality-k2_PLA.gcode").write_text("; old slice of something else\n")
+    (tmp_path / "plate_1.gcode").write_text("; old orca output\n")
+    assert cli.main(["slice", str(stl), "--printer", "k2", "--slicer", kind]) == cli.EXIT_ERROR
+    err = capsys.readouterr().err
+    assert "wrote no output file" in err or "expected exactly 1" in err
+    assert (tmp_path / "cube_creality-k2_PLA.gcode").read_text() == "; old slice of something else\n"

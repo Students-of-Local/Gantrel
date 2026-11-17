@@ -29,6 +29,12 @@ class Refused(PrinterError):
     code = "refused"
 
 
+class NotFound(Refused):
+    """HTTP 404 or the printer's equivalent: the thing asked about does not exist."""
+
+    code = "not_found"
+
+
 class ProtocolError(PrinterError):
     code = "protocol"
 

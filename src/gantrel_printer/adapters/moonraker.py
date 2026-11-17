@@ -10,7 +10,7 @@ import urllib.parse
 from pathlib import Path
 
 from .. import net
-from ..errors import AuthFailed, ProtocolError
+from ..errors import AuthFailed, NotFound, ProtocolError
 from ..model import Camera, Status
 from .base import Adapter
 
@@ -123,6 +123,13 @@ class MoonrakerAdapter(Adapter):
         reply = net.parse_json(data, self.cfg.name)
         item = reply.get("item") or reply.get("result", {}).get("item") or {}
         return item.get("path", remote_name)
+
+    def remote_info(self, remote_name: str) -> dict | None:
+        try:
+            meta = self._get("/server/files/metadata?filename=" + urllib.parse.quote(remote_name))
+        except NotFound:
+            return None
+        return {"size": meta.get("size"), "mtime": meta.get("modified")}
 
     def _start(self, remote_name: str) -> None:
         self._post("/printer/print/start?filename=" + urllib.parse.quote(remote_name))

@@ -14,6 +14,7 @@ import socket
 import ssl
 import struct
 import threading
+import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -28,9 +29,21 @@ class Brain:
         self.state = "idle"  # idle printing paused complete cancelled error
         self.running_macro = False  # Klipper busy outside a print job (Moonraker fake only)
         self.files: dict[str, bytes] = {}
+        self.mtimes: dict[str, float] = {}
         self.current = ""
         self.events: list[str] = []
         self.lock = threading.Lock()
+
+    def put(self, name: str, data: bytes) -> None:
+        """Store a file the way a printer does: replacing any file of that name, with a new mtime."""
+        with self.lock:
+            self.files[name] = data
+            self.mtimes[name] = time.time() + len(self.mtimes) * 0.001
+
+    def info(self, name: str) -> dict | None:
+        if name not in self.files:
+            return None
+        return {"size": len(self.files[name]), "mtime": self.mtimes[name]}
 
     def start(self, name: str) -> bool:
         with self.lock:
@@ -146,10 +159,15 @@ def moonraker_routes(h: _Handler, method: str):
         return h._send(200, {"result": {"webcams": [{"name": "cam", "enabled": True,
                                                      "snapshot_url": "/webcam/?action=snapshot",
                                                      "stream_url": "/webcam/?action=stream"}]}})
+    if method == "GET" and url.path == "/server/files/metadata":
+        info = b.info(q.get("filename", [""])[0])
+        if info is None:
+            return h._send(404, {"error": {"message": "Metadata not available"}})
+        return h._send(200, {"result": {"size": info["size"], "modified": info["mtime"]}})
     if method == "POST" and url.path == "/server/files/upload":
         parts = parse_multipart(h._body(), h.headers["Content-Type"])
         name, data = parts["file"]
-        b.files[name] = data
+        b.put(name, data)
         return h._send(201, {"item": {"path": name, "root": "gcodes"}, "action": "create_file"})
     if method == "POST" and url.path == "/printer/print/start":
         ok = b.start(q.get("filename", [""])[0])
@@ -196,10 +214,15 @@ def octoprint_routes(h: _Handler, method: str):
     if method == "POST" and url.path == "/api/files/local":
         parts = parse_multipart(h._body(), h.headers["Content-Type"])
         name, data = parts["file"]
-        b.files[name] = data
+        b.put(name, data)
         if parts.get("print", (None, b"false"))[1] == b"true":
             b.start(name)  # what real OctoPrint does; the contract test must never see this
         return h._send(201, {"done": True, "files": {"local": {"name": name}}})
+    if method == "GET" and url.path.startswith("/api/files/local/"):
+        info = b.info(urllib.parse.unquote(url.path.rsplit("/", 1)[1]))
+        if info is None:
+            return h._send(404, {"error": "File not found"})
+        return h._send(200, {"size": info["size"], "date": int(info["mtime"] * 1000)})
     if method == "POST" and url.path.startswith("/api/files/local/"):
         cmd = json.loads(h._body() or b"{}")
         name = urllib.parse.unquote(url.path.rsplit("/", 1)[1])
@@ -253,8 +276,15 @@ def prusalink_routes(h: _Handler, method: str):
         return h._send(200, JPEG, "image/jpeg")
     if url.path.startswith("/api/v1/files/usb/"):
         name = urllib.parse.unquote(url.path.rsplit("/", 1)[1])
+        if method == "GET":
+            info = b.info(name)
+            if info is None:
+                return h._send(404, {"title": "Not found"})
+            return h._send(200, {"name": name, "size": info["size"], "m_timestamp": int(info["mtime"] * 1000)})
         if method == "PUT":
-            b.files[name] = h._body()
+            if name in b.files and h.headers.get("Overwrite") != "?1":
+                return h._send(409, {"title": "File exists"})
+            b.put(name, h._body())
             if h.headers.get("Print-After-Upload") == "?1":
                 b.start(name)
             return h._send(201)
@@ -336,7 +366,7 @@ class FakeCreality:
         if method == "POST" and url.path.startswith("/upload/"):
             parts = parse_multipart(h._body(), h.headers["Content-Type"])
             name, data = parts["file"]
-            h.brain.files[name] = data
+            h.brain.put(name, data)
             return h._send(200, {"code": 200})
         if method == "GET" and url.path == "/":
             return h._send(200, JPEG, "image/jpeg")
@@ -380,9 +410,14 @@ def _mqtt_packet(ptype: int, payload: bytes) -> bytes:
 
 
 class FakeBambu:
-    def __init__(self, brain: Brain, serial: str, cert: str, key: str):
+    def __init__(self, brain: Brain, serial: str, cert: str, key: str, alt: tuple[str, str] | None = None):
         self.brain, self.serial = brain, serial
         self.ctx = _tls_server_ctx(cert, key)
+        # With alt, connections alternate between the main and the alternate certificate, like an
+        # interceptor that passes some connections through to the real printer.
+        self.ctxs = [self.ctx] + ([_tls_server_ctx(*alt)] if alt else [])
+        self.connections = 0
+        self.logins: list[tuple[str, int]] = []  # (service, index of the certificate it arrived on)
         self.ignored: list[dict] = []
         self.mqtt = self._listen(self._mqtt_client)
         self.ftp = self._listen(self._ftp_client)
@@ -403,8 +438,11 @@ class FakeBambu:
         return srv.getsockname()[1]
 
     def _wrap(self, raw, fn):
+        idx = self.connections % len(self.ctxs)
+        self.connections += 1
         try:
-            with self.ctx.wrap_socket(raw, server_side=True) as tls:
+            with self.ctxs[idx].wrap_socket(raw, server_side=True) as tls:
+                tls.cert_index = idx
                 fn(tls)
         except (OSError, ssl.SSLError, ConnectionError):
             pass
@@ -443,6 +481,8 @@ class FakeBambu:
                     i += 2 + n
                 user = fields[1].decode() if flags & 0x80 and len(fields) > 1 else None
                 pw = fields[2].decode() if flags & 0x40 and len(fields) > 2 else None
+                if pw is not None:
+                    self.logins.append(("mqtt", s.cert_index))
                 ok = user == "bblp" and pw == self.brain.secret
                 s.sendall(_mqtt_packet(0x20, b"\x00" + (b"\x00" if ok else b"\x05")))
                 if not ok:
@@ -501,6 +541,7 @@ class FakeBambu:
                 user = arg
                 say("331 password")
             elif cmd == "PASS":
+                self.logins.append(("ftp", s.cert_index))
                 ok = user == "bblp" and arg == self.brain.secret
                 say("230 ok" if ok else "530 login incorrect")
             elif cmd in ("PBSZ", "PROT", "TYPE"):
@@ -529,8 +570,14 @@ class FakeBambu:
                     except (ssl.SSLError, OSError):
                         pass
                 data_srv.close()
-                self.brain.files[arg] = buf
+                self.brain.put(arg, buf)
                 say("226 done")
+            elif cmd == "SIZE":
+                info = self.brain.info(arg)
+                say(f"213 {info['size']}" if info else "550 not found")
+            elif cmd == "MDTM":
+                info = self.brain.info(arg)
+                say(f"213 {int(info['mtime'] * 1000)}" if info else "550 not found")
             elif cmd == "QUIT":
                 say("221 bye")
                 return
@@ -539,6 +586,7 @@ class FakeBambu:
 
     def _cam_client(self, s):
         auth = _recv_exact(s, 80)
+        self.logins.append(("camera", s.cert_index))
         user = auth[16:48].rstrip(b"\0").decode()
         code = auth[48:80].rstrip(b"\0").decode()
         if user != "bblp" or code != self.brain.secret:

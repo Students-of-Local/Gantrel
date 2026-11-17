@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .. import net, safety
 from ..config import PrinterConfig
-from ..errors import ProtocolError, Refused, SafetyError
+from ..errors import ProtocolError, Refused, SafetyError, Unsupported
 from ..model import READY_STATES, Camera, Status
 
 
@@ -71,11 +71,39 @@ class Adapter(ABC):
     def upload(self, local_path: Path, remote_name: str) -> str:
         """Send a file. Must never start it. Return the name the printer knows it by."""
 
+    # Can this adapter read back a file's size and time on the printer? If not, start relies on the
+    # content-hash file name alone (Creality stock firmware has no file info call we know of).
+    verifies_remote: bool = True
+
+    def identity(self) -> str:
+        """Which physical printer this is: type, host, port, serial, TLS pin. Tokens bind to this."""
+        c = self.cfg
+        return "|".join((c.type, c.host.lower(), str(self.port), c.serial, c.tls_fingerprint))
+
+    def remote_info(self, remote_name: str) -> dict | None:
+        """{'size': int, 'mtime': float | None} for a file on the printer, or None if it isn't there."""
+        raise Unsupported(f"{self.label} can't report file details")
+
+    def check_remote(self, job: safety.Job) -> None:
+        if not self.verifies_remote:
+            return
+        info = self.remote_info(job.remote_name)
+        if info is None:
+            raise SafetyError(f"{job.remote_name} is no longer on {self.cfg.name}", "Upload and confirm again")
+        if job.remote_size is None or info.get("size") != job.remote_size or (
+                job.remote_mtime is not None and info.get("mtime") != job.remote_mtime):
+            raise SafetyError(f"{job.remote_name} on {self.cfg.name} changed after it was uploaded",
+                              "Something replaced the file on the printer. Upload and confirm again")
+
     def start(self, job: safety.Job, token: str | None) -> None:
         if job.printer != self.cfg.name:
             raise SafetyError(f"job {job.id} is for printer {job.printer}, not {self.cfg.name}")
+        if job.identity != self.identity():
+            raise SafetyError(f"printer name {self.cfg.name} now points at a different printer than job {job.id}",
+                              "Upload and confirm again for this printer")
         safety.verify_job_file(job)
-        safety.consume_token(token, "start", self.cfg.name, job.id, job.sha256)
+        safety.consume_token(token, "start", self.cfg.name, job.id, job.sha256, self.identity())
+        self.check_remote(job)
         st = self.status()
         if st.state not in READY_STATES:
             raise Refused(f"{self.cfg.name} is {st.state}, so it can't start a new print",
@@ -86,7 +114,7 @@ class Adapter(ABC):
         st = self.status()
         if st.state != "paused":
             raise Refused(f"{self.cfg.name} is {st.state}, not paused")
-        safety.consume_token(token, "resume", self.cfg.name, resume_job_id(st), "")
+        safety.consume_token(token, "resume", self.cfg.name, resume_job_id(st), "", self.identity())
         self._resume()
 
     @abstractmethod
@@ -118,8 +146,10 @@ class Adapter(ABC):
         if not cam.snapshot_url:
             raise ProtocolError(f"{self.cfg.name} has no camera snapshot URL",
                                 "Pair again with --camera-url pointing at a JPEG snapshot URL")
-        _, _, data = net.request("GET", cam.snapshot_url, headers=self.camera_headers(), timeout=15,
-                                 what=f"{self.cfg.name}'s camera")
+        # Printer credentials go only to the printer itself, never to a separate camera or relay.
+        same = net.same_origin(cam.snapshot_url, "http", self.cfg.host, self.port)
+        _, _, data = net.request("GET", cam.snapshot_url, headers=self.camera_headers() if same else {},
+                                 timeout=15, what=f"{self.cfg.name}'s camera")
         return write_image(data, out)
 
     def camera_headers(self) -> dict:

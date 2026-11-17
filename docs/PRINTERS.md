@@ -15,11 +15,11 @@ the protocol over real sockets. "Real" means a check against a real printer.
 | Creality stock firmware adapter | Fake: full contract. Real: read-only status over WebSocket 9999 on the same K2 (model code F021, DWIN 1.1.7.0). Only state 0 (idle) was seen live; the other state codes and every write command are unverified. |
 | OctoPrint adapter | Fake only. |
 | PrusaLink adapter | Fake only. API key auth only; HTTP digest auth is not built. PrusaLink has no network emergency stop, so estop stops the job and says so. |
-| Bambu Lab LAN adapter | Fake only (MQTT over TLS, implicit FTPS, port 6000 camera). Pins the TLS certificate on first pair. No network emergency stop: estop sends stop and heaters off and says so. X1-series RTSPS video needs a go2rtc relay. |
+| Bambu Lab LAN adapter | Fake only (MQTT over TLS, implicit FTPS, port 6000 camera). Pins the TLS certificate on first pair and checks the pin inside the handshake of every connection, before the access code is sent. No network emergency stop: estop sends stop and heaters off and says so. X1-series RTSPS video needs a go2rtc relay. |
 | Cameras | Snapshot from the printer's API, or from `--camera-url` for cameras the API doesn't list. Real: K2 chamber camera through the fleet's go2rtc relay (the K2 serves only WebRTC on port 8000). |
 | Discovery | Known-port scan and probes checked against every fake and the real K2. mDNS and Bambu SSDP listening are built but not tested. |
 | Slicing | Profiles for 14 printer models and 5 materials, with rules (ABS and ASA need an enclosure, TPU needs direct drive). PrusaSlicer arguments are checked against a fake slicer. No real slicer has run yet; the OrcaSlicer path is untested. |
-| Confirm to start | Built and tested: `gantrel-printer confirm` needs a person at a real terminal and mints a single-use, 10-minute token bound to the action, printer, job and file hash. Tested through a real pseudo-terminal. |
+| Confirm to start | Built and tested: `gantrel-printer confirm` needs a person at a real terminal and mints a single-use, 10-minute token bound to the action, job, file hash and the printer's identity (type, host, port, serial, TLS pin), so re-pairing a name voids it. Files on the printer are named with their content hash, uploads never replace a file, and start re-checks the printer's copy (size and modification time; Creality stock firmware can't report these). The confirm sheet strips control characters. Tested through a real pseudo-terminal. |
 
 The confirm step stops an agent from starting a print by itself, because an agent's shell has no
 terminal. A hostile program running as the same user could fake a terminal or edit the token files;

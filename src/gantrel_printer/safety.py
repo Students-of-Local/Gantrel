@@ -6,7 +6,11 @@ Only then does it mint a confirm token that is:
 
 - single use (a failed or mismatched use also voids it),
 - short lived (TOKEN_TTL_S),
-- bound to one action, one printer, one job and the SHA-256 of that job's file.
+- bound to one action, one job, the SHA-256 of that job's file, and the printer's identity (type,
+  host, port, serial and TLS pin), not just its name, so re-pairing a name to another printer voids it.
+
+The job's file on the printer has a name that includes its content hash, uploads never replace an
+existing file, and start re-checks the printer's copy (size and modification time) before starting.
 
 Adapter.start and Adapter.resume refuse without a token that passes consume_token().
 
@@ -55,6 +59,9 @@ class Job:
     material: str = ""
     est_seconds: float | None = None
     created: float = 0.0
+    identity: str = ""                # printer identity at upload (Adapter.identity())
+    remote_size: int | None = None    # the printer's copy, recorded right after upload
+    remote_mtime: float | None = None
 
 
 def _jobs_dir() -> Path:
@@ -72,10 +79,12 @@ def _write_private(path: Path, data: dict) -> None:
 
 
 def new_job(printer: str, local_path: str | Path, remote_name: str, material: str = "",
-            est_seconds: float | None = None) -> Job:
+            est_seconds: float | None = None, identity: str = "", sha256: str | None = None,
+            remote_size: int | None = None, remote_mtime: float | None = None) -> Job:
     local = Path(local_path).resolve()
-    job = Job(id=secrets.token_hex(4), printer=printer, local_path=str(local), sha256=file_sha256(local),
-              remote_name=remote_name, material=material, est_seconds=est_seconds, created=time.time())
+    job = Job(id=secrets.token_hex(4), printer=printer, local_path=str(local), sha256=sha256 or file_sha256(local),
+              remote_name=remote_name, material=material, est_seconds=est_seconds, created=time.time(),
+              identity=identity, remote_size=remote_size, remote_mtime=remote_mtime)
     _write_private(_jobs_dir() / f"{job.id}.json", asdict(job))
     return job
 
@@ -118,18 +127,21 @@ def _token_key(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def mint_token(action: str, printer: str, job_id: str, file_hash: str) -> str:
+def mint_token(action: str, printer: str, job_id: str, file_hash: str, identity: str) -> str:
     """Only confirm_interactive() calls this, after a person typed the printer name at a TTY."""
     if action not in ACTIONS:
         raise ValueError(action)
+    if not identity:
+        raise ValueError("a token must be bound to a printer identity")
     token = secrets.token_urlsafe(18)
-    record = {"action": action, "printer": printer, "job": job_id, "sha256": file_hash,
+    record = {"action": action, "printer": printer, "job": job_id, "sha256": file_hash, "identity": identity,
               "expires": time.time() + TOKEN_TTL_S}
     _write_private(_tokens_dir() / f"{_token_key(token)}.json", record)
     return token
 
 
-def consume_token(token: str | None, action: str, printer: str, job_id: str, file_hash: str) -> None:
+def consume_token(token: str | None, action: str, printer: str, job_id: str, file_hash: str,
+                  identity: str) -> None:
     """Raise SafetyError unless token is a fresh, unused token for exactly this action.
 
     Any use, right or wrong, voids the token, so a token can never be tried twice.
@@ -150,10 +162,11 @@ def consume_token(token: str | None, action: str, printer: str, job_id: str, fil
     record = json.loads(path.read_text())
     if time.time() > record["expires"]:
         raise SafetyError("that confirm token expired", f"Tokens last {TOKEN_TTL_S // 60} minutes; confirm again")
-    want = {"action": action, "printer": printer, "job": job_id, "sha256": file_hash}
+    want = {"action": action, "printer": printer, "job": job_id, "sha256": file_hash, "identity": identity}
+    names = {"sha256": "file", "identity": "printer (the name now points at another device)"}
     for k, v in want.items():
         if record.get(k) != v:
-            raise SafetyError(f"that confirm token is for a different {'file' if k == 'sha256' else k}",
+            raise SafetyError(f"that confirm token is for a different {names.get(k, k)}",
                               "The token is now void; confirm this exact job again")
 
 
@@ -202,15 +215,36 @@ def open_tty() -> _Tty:
                           "Run confirm yourself in a terminal window") from None
 
 
-def confirm_interactive(action: str, printer: str, job_id: str, file_hash: str, lines: list[str]) -> str:
-    """Show lines on the terminal, make the person type the printer name, then mint a token."""
+def forget_printer(printer: str) -> int:
+    """Delete a printer's jobs and outstanding tokens (unpair). Returns how many files went."""
+    n = 0
+    for d in (_jobs_dir(), _tokens_dir()):
+        for p in d.glob("*.json"):
+            try:
+                if json.loads(p.read_text()).get("printer") == printer:
+                    p.unlink()
+                    n += 1
+            except (OSError, ValueError):
+                continue
+    return n
+
+
+def confirm_interactive(action: str, printer: str, job_id: str, file_hash: str, identity: str,
+                        lines: list[str]) -> str:
+    """Show lines on the terminal, make the person type the printer name, then mint a token.
+
+    Every line is stripped of control characters first, so nothing stored in a job (a path, a
+    material, a printer message) can move the cursor, clear lines or fake parts of the sheet.
+    """
     require_tty()
+    from .model import printable
+
     with open_tty() as tty:
-        tty.write("\n".join(lines) + "\n\n")
+        tty.write("\n".join(printable(line) for line in lines) + "\n\n")
         tty.write(f"To {action} this print, type the printer name ({printer}) and press Enter.\n"
                   "Anything else cancels: ")
         tty.flush()
         answer = tty.readline().strip()
         if answer != printer:
             raise SafetyError("not confirmed", "Nothing was started")
-    return mint_token(action, printer, job_id, file_hash)
+    return mint_token(action, printer, job_id, file_hash, identity)

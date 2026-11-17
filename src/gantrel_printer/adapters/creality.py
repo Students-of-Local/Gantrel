@@ -34,6 +34,7 @@ class CrealityAdapter(Adapter):
     label = "Creality stock firmware"
     default_port = 9999
     needs_secret = False
+    verifies_remote = False  # no file info call known on the stock socket; names carry the content hash
 
     @property
     def ws_url(self) -> str:

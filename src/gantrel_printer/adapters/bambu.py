@@ -35,22 +35,43 @@ DEV_MODE_HINT = ("On newer firmware turn on LAN-only mode and Developer Mode on 
                  "with the access code shown there")
 
 
-def _insecure_ctx() -> ssl.SSLContext:
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+class _PinMismatch(ConnectionError):
+    """The certificate on this connection is not the pinned one. Nothing secret was sent."""
+
+    def __init__(self, got: str):
+        super().__init__("TLS certificate does not match the pin")
+        self.got = got
+
+
+class _PinnedSocket(ssl.SSLSocket):
+    """Checks the peer certificate against the context's pin as part of every handshake.
+
+    Both wrap_socket(do_handshake_on_connect=True) and an explicit do_handshake() (paho, ftplib's
+    data channel) come through here, so the check runs on the very connection that then carries the
+    access code or a command, before either is sent.
+    """
+
+    def do_handshake(self, *args, **kwargs):
+        super().do_handshake(*args, **kwargs)
+        fp = hashlib.sha256(self.getpeercert(binary_form=True) or b"").hexdigest()
+        ctx = self.context
+        ctx.seen = fp
+        if ctx.pin and fp != ctx.pin:
+            raise _PinMismatch(fp)
+
+
+class _PinnedContext(ssl.SSLContext):
+    sslsocket_class = _PinnedSocket
+    pin: str = ""
+    seen: str = ""
+
+
+def _pinned_ctx(pin: str) -> _PinnedContext:
+    ctx = _PinnedContext(ssl.PROTOCOL_TLS_CLIENT)
     ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE  # identity is checked by the pinned fingerprint instead
+    ctx.verify_mode = ssl.CERT_NONE  # Bambu's own CA; identity is the pinned fingerprint instead
+    ctx.pin = pin
     return ctx
-
-
-def fingerprint(host: str, port: int, timeout: float = 5.0) -> str:
-    try:
-        with socket.create_connection((host, port), timeout=timeout) as raw:
-            with _insecure_ctx().wrap_socket(raw, server_hostname=host) as tls:
-                der = tls.getpeercert(binary_form=True)
-    except (OSError, ssl.SSLError) as err:
-        raise Unreachable(f"no TLS answer from {host}:{port} ({err.__class__.__name__})",
-                          "Check the printer is on, in LAN mode, and the address is right") from None
-    return hashlib.sha256(der).hexdigest()
 
 
 class _ImplicitFTPS(ftplib.FTP_TLS):
@@ -96,17 +117,26 @@ class BambuAdapter(Adapter):
         if not self.secret:
             raise AuthFailed(f"{self.cfg.name} has no access code in the keyring", "Pair it again")
 
-    def _check_pin(self, port: int) -> None:
-        pins = self.cfg.extra.setdefault("tls_pins", {})
-        got = fingerprint(self.cfg.host, port)
-        want = pins.get(str(port)) or (self.cfg.tls_fingerprint if port == self.port else "")
-        if not want:
-            pins[str(port)] = got  # first use; the CLI saves cfg after pair and upload
-            return
-        if got != want:
-            raise AuthFailed(f"{self.cfg.name}'s TLS certificate on port {port} changed",
-                             "The access code was not sent. If you replaced the printer or its firmware reset, "
-                             "pair it again; otherwise something else may be answering at that address")
+    def _pin_for(self, port: int) -> str:
+        if port == self.port:
+            return self.cfg.tls_fingerprint
+        return self.cfg.extra.get("tls_pins", {}).get(str(port), "")
+
+    def _ctx(self, port: int) -> _PinnedContext:
+        return _pinned_ctx(self._pin_for(port))
+
+    def _remember(self, port: int, ctx: _PinnedContext) -> None:
+        """Trust on first use: keep the fingerprint seen on the first good connection to a port."""
+        if ctx.seen and not self._pin_for(port):
+            if port == self.port:
+                self.cfg.tls_fingerprint = ctx.seen
+            else:
+                self.cfg.extra.setdefault("tls_pins", {})[str(port)] = ctx.seen
+
+    def _pin_error(self, port: int) -> AuthFailed:
+        return AuthFailed(f"{self.cfg.name}'s TLS certificate on port {port} changed",
+                          "The access code was not sent. If you replaced the printer or its firmware reset, "
+                          "unpair and pair it again; otherwise something else may be answering at that address")
 
     # ------------------------------------------------------------ MQTT
 
@@ -114,7 +144,7 @@ class BambuAdapter(Adapter):
         import paho.mqtt.client as mqtt
 
         self._require()
-        self._check_pin(self.port)
+        ctx = self._ctx(self.port)
         report_topic = f"device/{self.cfg.serial}/report"
         req_topic = f"device/{self.cfg.serial}/request"
         connected, got = threading.Event(), threading.Event()
@@ -138,10 +168,12 @@ class BambuAdapter(Adapter):
         c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"gantrel-{time.time_ns() % 10**9}",
                         protocol=mqtt.MQTTv311)
         c.username_pw_set(USER, self.secret)
-        c.tls_set_context(_insecure_ctx())
+        c.tls_set_context(ctx)
         c.on_connect, c.on_message = on_connect, on_message
         try:
             c.connect(self.cfg.host, self.port, keepalive=30)
+        except _PinMismatch:
+            raise self._pin_error(self.port) from None
         except (OSError, ssl.SSLError) as err:
             raise Unreachable(f"{self.cfg.name} did not answer on MQTT ({err.__class__.__name__})",
                               "Check the printer is on and in LAN mode") from None
@@ -162,6 +194,7 @@ class BambuAdapter(Adapter):
         finally:
             c.loop_stop()
             c.disconnect()
+        self._remember(self.port, ctx)
         return state["print"]
 
     def _command(self, cmd: dict) -> None:
@@ -175,7 +208,7 @@ class BambuAdapter(Adapter):
         port = port or cls.default_port
         try:
             with socket.create_connection((host, port), timeout=timeout) as raw:
-                with _insecure_ctx().wrap_socket(raw, server_hostname=host) as tls:
+                with _pinned_ctx("").wrap_socket(raw, server_hostname=host) as tls:
                     # MQTT 3.1.1 CONNECT, clean session, client id "gantrel-probe", no credentials.
                     cid = b"gantrel-probe"
                     var = b"\x00\x04MQTT\x04\x02\x00\x1e" + struct.pack(">H", len(cid)) + cid
@@ -190,9 +223,7 @@ class BambuAdapter(Adapter):
 
     def pair(self):
         self._require()
-        self.cfg.tls_fingerprint = fingerprint(self.cfg.host, self.port)
-        self.cfg.extra.setdefault("tls_pins", {})[str(self.port)] = self.cfg.tls_fingerprint
-        st = self.status()
+        st = self.status()  # first MQTT connection; _remember pins its certificate
         return {"state": st.state, "tls_fingerprint": self.cfg.tls_fingerprint[:16] + "..."}
 
     def status(self) -> Status:
@@ -212,25 +243,47 @@ class BambuAdapter(Adapter):
             message=f"print_error {p['print_error']}" if p.get("print_error") else "",
         )
 
-    def upload(self, local_path: Path, remote_name: str) -> str:
+    def _ftp(self, work):
         self._require()
-        self._check_pin(self.ftp_port)
-        ftp = _ImplicitFTPS(context=_insecure_ctx(), timeout=30)
+        ctx = self._ctx(self.ftp_port)
+        ftp = _ImplicitFTPS(context=ctx, timeout=30)
         try:
             ftp.connect(self.cfg.host, self.ftp_port)
             ftp.login(USER, self.secret)
             ftp.prot_p()
-            with open(local_path, "rb") as fh:
-                ftp.storbinary(f"STOR {remote_name}", fh)
+            out = work(ftp)
             ftp.quit()
+        except _PinMismatch:
+            raise self._pin_error(self.ftp_port) from None
         except ftplib.error_perm as err:
             if str(err).startswith("530"):
-                raise AuthFailed(f"{self.cfg.name} refused the access code for upload", DEV_MODE_HINT) from None
-            raise Refused(f"{self.cfg.name} refused the upload ({str(err)[:80]})") from None
+                raise AuthFailed(f"{self.cfg.name} refused the access code for file transfer", DEV_MODE_HINT) from None
+            raise Refused(f"{self.cfg.name} refused it ({str(err)[:80]})") from None
         except (OSError, ssl.SSLError, ftplib.Error) as err:
-            raise Unreachable(f"upload to {self.cfg.name} failed ({err.__class__.__name__})",
+            raise Unreachable(f"file transfer with {self.cfg.name} failed ({err.__class__.__name__})",
                               "Check the printer has an SD card or storage inserted") from None
+        self._remember(self.ftp_port, ctx)
+        return out
+
+    def upload(self, local_path: Path, remote_name: str) -> str:
+        def work(ftp):
+            with open(local_path, "rb") as fh:
+                ftp.storbinary(f"STOR {remote_name}", fh)
+        self._ftp(work)
         return remote_name
+
+    def remote_info(self, remote_name: str) -> dict | None:
+        def work(ftp):
+            try:
+                size = ftp.size(remote_name)
+            except ftplib.error_perm:
+                return None
+            try:
+                mtime = ftp.sendcmd(f"MDTM {remote_name}").split()[-1]
+            except ftplib.error_perm:
+                mtime = None
+            return {"size": size, "mtime": mtime}
+        return self._ftp(work)
 
     def _start(self, remote_name: str) -> None:
         if remote_name.lower().endswith(".3mf"):
@@ -273,21 +326,24 @@ class BambuAdapter(Adapter):
                               "Turn on LAN Mode Liveview on the printer, relay it with go2rtc, and pair with "
                               "--camera-url set to go2rtc's frame.jpeg URL")
         self._require()
-        self._check_pin(self.camera_port)
+        ctx = self._ctx(self.camera_port)
         auth = struct.pack("<IIII", 0x40, 0x3000, 0, 0) + USER.encode().ljust(32, b"\0") \
             + self.secret.encode().ljust(32, b"\0")
         try:
             with socket.create_connection((self.cfg.host, self.camera_port), timeout=10) as raw:
-                with _insecure_ctx().wrap_socket(raw, server_hostname=self.cfg.host) as tls:
-                    tls.sendall(auth)
+                with ctx.wrap_socket(raw, server_hostname=self.cfg.host) as tls:
+                    tls.sendall(auth)  # only after the handshake matched the pin
                     header = _recv_exact(tls, 16)
                     size = struct.unpack("<I", header[:4])[0]
                     if not 0 < size < 8 * 1024 * 1024:
                         raise ProtocolError(f"{self.cfg.name}'s camera sent a bad frame header")
                     data = _recv_exact(tls, size)
+        except _PinMismatch:
+            raise self._pin_error(self.camera_port) from None
         except (OSError, ssl.SSLError) as err:
             raise Unreachable(f"{self.cfg.name}'s camera did not answer ({err.__class__.__name__})",
                               "Check LAN Mode Liveview is on") from None
+        self._remember(self.camera_port, ctx)
         return write_image(data, out)
 
 

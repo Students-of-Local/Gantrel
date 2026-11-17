@@ -69,6 +69,9 @@ def cmd_discover(args):
 
 def cmd_pair(args):
     cls = adapter_class(args.type)
+    if args.name in config.load_all():
+        raise SafetyError(f"a printer named {args.name!r} is already paired",
+                          f"Run gantrel-printer unpair {args.name} first; that also voids its jobs and confirms")
     if args.model and args.model not in slicing.PRINTERS:
         raise ConfigError(f"unknown model {args.model!r}", f"Use one of: {', '.join(slicing.PRINTERS)}")
     cfg = config.PrinterConfig(name=args.name, type=args.type, host=args.host, port=args.port, model=args.model or "",
@@ -107,7 +110,9 @@ def cmd_unpair(args):
     del printers[args.name]
     config.save_all(printers)
     config.delete_secret(args.name)
-    out(args, {"unpaired": args.name}, f"Removed {args.name} and its saved secret.", "gantrel-printer list")
+    safety.forget_printer(args.name)
+    out(args, {"unpaired": args.name}, f"Removed {args.name}, its saved secret, its jobs and any confirms.",
+        "gantrel-printer list")
 
 
 def cmd_list(args):
@@ -187,17 +192,35 @@ def cmd_upload(args):
     path = Path(args.file).expanduser().resolve()
     if not path.is_file():
         raise ConfigError(f"no file at {path}")
-    remote = args.name or path.name
-    if not REMOTE_RE.match(remote):
-        raise ConfigError(f"{remote!r} is not a safe printer file name",
+    requested = args.name or path.name
+    if not REMOTE_RE.match(requested):
+        raise ConfigError(f"{requested!r} is not a safe printer file name",
                           "Use letters, digits, . _ - only, ending in .gcode, .bgcode or .3mf")
+    material = ""
+    if args.material:
+        material = slicing.material(args.material).name  # only known materials reach the confirm sheet
+    sha = safety.file_sha256(path)
+    stem, ext = requested.rsplit(".", 1)
+    # The name on the printer carries the content hash, so a different file never shares a job's name.
+    remote = f"{stem[:100]}-{sha[:12]}.{ext}"
     adapter = open_printer(args.printer)
     before = snapshot_cfg(adapter)
     facts = slicing.gcode_facts(path)
+    if adapter.verifies_remote and adapter.remote_info(remote) is not None:
+        raise SafetyError(f"{remote} is already on {args.printer}; uploads never replace a file",
+                          "Use its existing job (gantrel-printer jobs), or delete it on the printer first")
     remote_name = adapter.upload(path, remote)
+    info = adapter.remote_info(remote_name) if adapter.verifies_remote else {}
+    if adapter.verifies_remote and info is None:
+        raise PrinterError(f"{args.printer} did not list {remote_name} after the upload", "Try the upload again")
     save_if_changed(adapter, before)
-    job = safety.new_job(args.printer, path, remote_name, material=args.material or facts.get("material", ""),
-                         est_seconds=facts.get("est_seconds"))
+    if safety.file_sha256(path) != sha:
+        raise SafetyError("the file changed during upload", "Upload it again")
+    gfacts_material = facts.get("material", "")
+    material = material or (gfacts_material if gfacts_material.upper() in slicing.MATERIALS else "")
+    job = safety.new_job(args.printer, path, remote_name, material=material, est_seconds=facts.get("est_seconds"),
+                         identity=adapter.identity(), sha256=sha, remote_size=info.get("size"),
+                         remote_mtime=info.get("mtime"))
     out(args, {"job": job.id, "printer": args.printer, "remote_name": remote_name, "sha256": job.sha256},
         f"Uploaded {path.name} to {args.printer} as {remote_name}. Job {job.id}. It has NOT started.",
         f"Tell the person to run this in their own terminal (agents can't): gantrel-printer confirm {job.id}")
@@ -221,12 +244,16 @@ def cmd_confirm(args):
 
         lines = [f"Resume print on {args.resume} ({adapter.label}, {adapter.cfg.host})", f"Now: {st.summary()}",
                  "Look at the printer first: is the print still stuck to the bed and the nozzle clear?"]
-        token = safety.confirm_interactive("resume", args.resume, resume_job_id(st), "", lines)
+        token = safety.confirm_interactive("resume", args.resume, resume_job_id(st), "", adapter.identity(), lines)
         cmd = f"gantrel-printer resume {args.resume} --token {token}"
     else:
         job = safety.load_job(args.job)
         safety.verify_job_file(job)
         adapter = open_printer(job.printer)
+        if job.identity != adapter.identity():
+            raise SafetyError(f"printer name {job.printer} now points at a different printer than this job",
+                              "Upload and confirm again")
+        adapter.check_remote(job)
         try:
             now = adapter.status()
             now_text = now.summary()
@@ -237,7 +264,7 @@ def cmd_confirm(args):
                 raise
             now_text = f"could not read status ({err.message})"
         lines = [
-            f"Printer:  {job.printer} ({adapter.label}, {adapter.cfg.host})",
+            f"Printer:  {job.printer} ({adapter.label}, {adapter.cfg.host}:{adapter.port})",
             f"File:     {job.remote_name}  (from {job.local_path})",
             f"SHA-256:  {job.sha256[:16]}...",
             f"Material: {job.material or 'unknown'}",
@@ -245,7 +272,7 @@ def cmd_confirm(args):
             f"Now:      {now_text}",
             "Look at the printer: the bed must be empty and clean, and the right filament loaded.",
         ]
-        token = safety.confirm_interactive("start", job.printer, job.id, job.sha256, lines)
+        token = safety.confirm_interactive("start", job.printer, job.id, job.sha256, adapter.identity(), lines)
         cmd = f"gantrel-printer start {job.id} --token {token}"
     print(f"Confirmed. This token works once, for {safety.TOKEN_TTL_S // 60} minutes:")
     print(cmd)

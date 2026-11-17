@@ -20,7 +20,22 @@ their own terminal. Your shell has no terminal, so confirm refuses if you run it
 - The model file (STL or 3MF) or a sliced file (.gcode), if printing.
 - The material loaded in the printer. Ask if you don't know it. Default PLA.
 
-## Steps
+## First: is this a stop request?
+
+If the person says stop, pause, cancel, or something is wrong (fire, smoke, a crash, spaghetti, a
+loose part), do this at once, at any point, before anything else in this skill:
+
+- Fire, smoke, a crash, or "stop now": run `gantrel-printer estop <name>`.
+- Anything else wrong: run `gantrel-printer pause <name>`. Pause needs no permission.
+- "Cancel the print": run `gantrel-printer cancel <name>`.
+- If you don't know the printer name, run `gantrel-printer list` first. If only one printer is
+  listed, use it.
+
+Then tell the person what you did. Do not wait for any other step.
+
+For "how is my printer" or "show me the camera", do steps 1, 2, 4 and 5 only, then stop.
+
+## Steps to print
 
 1. Run `command -v gantrel-printer`. If it prints nothing, tell the person to install it with this
    command, then stop:
@@ -36,8 +51,9 @@ their own terminal. Your shell has no terminal, so confirm refuses if you run it
    - Run `gantrel-printer pair <name> --type <type> --host <ip> --model <model>`.
    - If it needs an API key or access code, ask the person to run the pair command
      themselves in a terminal so they type the secret. Never ask them to paste a secret to you.
-4. Run `gantrel-printer status <name>`. The state must be idle, complete or cancelled to print.
-   If it is printing, paused or error, tell the person and stop.
+4. Run `gantrel-printer status <name>`. The state must be idle, complete or cancelled to start a
+   new print. If it is printing, paused, busy or error, tell the person and don't start a new print.
+   Stop requests still go through the section above.
 5. Run `gantrel-printer camera <name> --out cam.jpg` and look at the image, or show it to the
    person. The bed must be empty. If you can't tell, ask the person to check.
 6. Slice: `gantrel-printer slice <model.stl> --printer <name> --material <PLA|PETG|ABS|ASA|TPU>`.
@@ -56,11 +72,9 @@ their own terminal. Your shell has no terminal, so confirm refuses if you run it
    exactly as given. Never make up, change or reuse a token.
 10. Watch: run `gantrel-printer status <name>` and `gantrel-printer camera <name> --out cam.jpg`
     every few minutes during the first layers.
-11. Trouble (spaghetti, part came loose, wrong filament, strange noise the person reports):
-    - Run `gantrel-printer pause <name>` at once. Pause needs no permission.
-    - Fire, smoke, a crash, or the person says stop now: run `gantrel-printer estop <name>`.
-    - Tell the person what you did and what you saw. To resume, they run
-      `gantrel-printer confirm --resume <name>` themselves.
+11. Trouble you see on the camera: follow "First: is this a stop request?" above. Tell the person
+    what you did and what you saw. To resume, they run `gantrel-printer confirm --resume <name>`
+    themselves.
 
 ## Rules and checks
 

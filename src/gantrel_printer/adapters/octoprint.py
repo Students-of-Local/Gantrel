@@ -9,7 +9,7 @@ import urllib.parse
 from pathlib import Path
 
 from .. import net
-from ..errors import Refused
+from ..errors import NotFound, Refused
 from ..model import Camera, Status
 from .base import Adapter
 
@@ -99,6 +99,13 @@ class OctoPrintAdapter(Adapter):
         net.request("POST", f"{self.base}/api/files/local", body=body, timeout=300,
                     headers={"Content-Type": ctype, **self._h()}, what=self.cfg.name)
         return remote_name
+
+    def remote_info(self, remote_name: str) -> dict | None:
+        try:
+            f = self._get("/api/files/local/" + urllib.parse.quote(remote_name))
+        except NotFound:
+            return None
+        return {"size": f.get("size"), "mtime": f.get("date")}
 
     def _start(self, remote_name: str) -> None:
         self._post("/api/files/local/" + urllib.parse.quote(remote_name), {"command": "select", "print": True})

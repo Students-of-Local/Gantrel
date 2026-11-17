@@ -27,3 +27,13 @@ def tls_cert(tmp_path_factory):
     subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2", "-subj", "/CN=FAKEBAMBU",
                     "-keyout", str(key), "-out", str(cert)], check=True, capture_output=True)
     return str(cert), str(key)
+
+
+@pytest.fixture(scope="session")
+def tls_cert2(tmp_path_factory):
+    """A second, different certificate (an impostor's)."""
+    d = tmp_path_factory.mktemp("tls2")
+    cert, key = d / "cert.pem", d / "key.pem"
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2", "-subj", "/CN=IMPOSTOR",
+                    "-keyout", str(key), "-out", str(cert)], check=True, capture_output=True)
+    return str(cert), str(key)

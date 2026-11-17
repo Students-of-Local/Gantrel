@@ -10,6 +10,7 @@ import urllib.parse
 from pathlib import Path
 
 from .. import net
+from ..errors import NotFound
 from ..model import Camera, Status
 from .base import Adapter
 
@@ -83,8 +84,15 @@ class PrusaLinkAdapter(Adapter):
         net.request("PUT", f"{self.base}/api/v1/files/usb/{urllib.parse.quote(remote_name)}",
                     body=Path(local_path).read_bytes(), timeout=300,
                     headers={"Content-Type": "application/octet-stream", "Print-After-Upload": "?0",
-                             "Overwrite": "?1", **self._h()}, what=self.cfg.name)
+                             "Overwrite": "?0", **self._h()}, what=self.cfg.name)
         return remote_name
+
+    def remote_info(self, remote_name: str) -> dict | None:
+        try:
+            f = self._get("/api/v1/files/usb/" + urllib.parse.quote(remote_name))
+        except NotFound:
+            return None
+        return {"size": f.get("size"), "mtime": f.get("m_timestamp")}
 
     def _start(self, remote_name: str) -> None:
         net.request("POST", f"{self.base}/api/v1/files/usb/{urllib.parse.quote(remote_name)}",

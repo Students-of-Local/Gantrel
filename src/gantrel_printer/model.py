@@ -56,13 +56,18 @@ class Status:
             parts.append(f"{fmt_duration(self.remaining_s)} left")
         if self.message:
             parts.append(f"message: {self.message}")
-        return "; ".join(parts)
+        return printable("; ".join(parts))
 
 
 @dataclass
 class Camera:
     snapshot_url: str = ""
     stream_url: str = ""  # never contains a secret
+
+
+def printable(text: str) -> str:
+    """Replace control and other non-printable characters (escape codes, newlines) with '?'."""
+    return "".join(c if c.isprintable() else "?" for c in str(text))
 
 
 def fmt_duration(seconds: float | None) -> str:

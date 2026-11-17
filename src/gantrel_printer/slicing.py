@@ -15,6 +15,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -281,38 +282,49 @@ def slice_model(model_path: Path, out_dir: Path, printer: PrinterProfile, s: dic
         raise Unsupported(f"{prefer} is not installed", f"Installed: {', '.join(found)}")
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", model_path.stem)
-    if kind == "prusaslicer":
-        ext = ".bgcode" if printer.upload_ext == ".bgcode" else ".gcode"
-        out = out_dir / f"{stem}_{printer.key}_{s['material']}{ext}"
-        argv = found[kind] + ["--export-gcode"] + (["--binary-gcode"] if ext == ".bgcode" else []) \
-            + prusa_args(s, printer) + ["--output", str(out), str(model_path)]
-    else:
-        if not printer.orca_machine:
-            raise Unsupported(f"OrcaSlicer has no system profile mapped for {printer.label}",
-                              "Install PrusaSlicer, or pair with a model that has an Orca profile")
-        machine, process, filament = orca_overrides(s, printer)
-        files = []
-        for name, data in (("machine", machine), ("process", process), ("filament", filament)):
-            f = out_dir / f"gantrel-{name}.json"
-            f.write_text(json.dumps(data, indent=2))
-            files.append(str(f))
-        out = out_dir / f"{stem}_{printer.key}_{s['material']}.gcode"
-        argv = found[kind] + ["--slice", "0", "--load-settings", f"{files[0]};{files[1]}", "--load-filaments",
-                              files[2], "--outputdir", str(out_dir), str(model_path)]
-    try:
-        proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        raise PrinterError(f"{kind} took longer than {timeout}s", "Try a smaller model or the draft quality") from None
-    if proc.returncode != 0:
-        tail = (proc.stderr or proc.stdout).strip().splitlines()[-5:]
-        raise PrinterError(f"{kind} failed (exit {proc.returncode})", " | ".join(tail)[:400])
-    if kind == "orcaslicer":
-        made = sorted(out_dir.glob("*.gcode"), key=lambda p: p.stat().st_mtime)
-        if made:
-            out = made[-1]
-    if not out.exists():
-        raise PrinterError(f"{kind} finished but wrote no output file", "Check the model is a valid STL or 3MF")
-    return out, kind, argv
+    ext = ".bgcode" if kind == "prusaslicer" and printer.upload_ext == ".bgcode" else ".gcode"
+    final = out_dir / f"{stem}_{printer.key}_{s['material']}{ext}"
+    if kind == "orcaslicer" and not printer.orca_machine:
+        raise Unsupported(f"OrcaSlicer has no system profile mapped for {printer.label}",
+                          "Install PrusaSlicer, or pair with a model that has an Orca profile")
+    # Each run writes into its own new, empty folder, and only a file this run made is accepted.
+    # An old G-code in out_dir can never be reported as this slice.
+    with tempfile.TemporaryDirectory(prefix="gantrel-slice-") as tmp:
+        work = Path(tmp)
+        if kind == "prusaslicer":
+            out = work / final.name
+            argv = found[kind] + ["--export-gcode"] + (["--binary-gcode"] if ext == ".bgcode" else []) \
+                + prusa_args(s, printer) + ["--output", str(out), str(model_path)]
+        else:
+            machine, process, filament = orca_overrides(s, printer)
+            cfg_dir = work / "settings"
+            cfg_dir.mkdir()
+            files = []
+            for name, data in (("machine", machine), ("process", process), ("filament", filament)):
+                f = cfg_dir / f"gantrel-{name}.json"
+                f.write_text(json.dumps(data, indent=2))
+                files.append(str(f))
+            outdir = work / "out"
+            outdir.mkdir()
+            argv = found[kind] + ["--slice", "0", "--load-settings", f"{files[0]};{files[1]}", "--load-filaments",
+                                  files[2], "--outputdir", str(outdir), str(model_path)]
+        try:
+            proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            raise PrinterError(f"{kind} took longer than {timeout}s", "Try a smaller model or the draft quality") from None
+        if proc.returncode != 0:
+            tail = (proc.stderr or proc.stdout).strip().splitlines()[-5:]
+            raise PrinterError(f"{kind} failed (exit {proc.returncode})", " | ".join(tail)[:400])
+        if kind == "orcaslicer":
+            made = sorted(outdir.glob("*.gcode"))
+            if len(made) != 1:
+                raise PrinterError(f"{kind} made {len(made)} G-code files, expected exactly 1",
+                                   "Check the model is a valid STL or 3MF with one plate")
+            out = made[0]
+        if not out.is_file() or out.stat().st_size == 0:
+            raise PrinterError(f"{kind} finished but wrote no output file", "Check the model is a valid STL or 3MF")
+        shutil.move(str(out), final)
+    return final, kind, argv
 
 
 # ---------------------------------------------------------------- reading gcode
