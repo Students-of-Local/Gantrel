@@ -34,7 +34,7 @@ Ask before installing anything or spending money, never print keys, and never tr
 
 ## Skills
 
-Skills live in `skills/maintainer/` (for building this project) and `skills/runtime/` (used by agents inside the app). None exist yet. `skills/plugin/` holds the skills the Local Studio plugin ships; today that is smoothstone, synced from baney75/smoothstone with `scripts/sync-smoothstone.sh`, never edited by hand. Each one must be original and tested before it merges; see `skills/README.md`. Load the skill that matches your task before starting, and improve it when you learn something.
+Skills live in `skills/maintainer/` (for building this project) and `skills/runtime/` (used by agents inside the app). None exist yet. `skills/plugin/` holds the skills the Local Studio plugin ships; today that is smoothstone, synced from baney75/smoothstone with `scripts/sync-smoothstone.sh`, never edited by hand. Each one must be original and tested before it merges; see `skills/README.md`. Load the skill that matches your task before starting, and improve it when you learn something. Improvements to the smoothstone skill (including what its own closing rule asks for) go to baney75/smoothstone and come back here through `scripts/sync-smoothstone.sh`; the other plugin skills, such as printers, are edited in this repo.
 
 ## Testing and honesty
 

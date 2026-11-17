@@ -27,6 +27,10 @@ for c in cmds.values():
 print(f"ok   plugin.toml: id gantrel, skills {sorted(names)}, commands {sorted('/' + n for n in cmds)}")
 PY
 
+if [ -n "$(git status --porcelain -- skills/plugin README.md 2>/dev/null)" ]; then
+  echo "FAIL skills/plugin or README.md has uncommitted changes; commit or stash them first (this check resyncs over them)"
+  exit 1
+fi
 sha="$(sed -n 2p skills/plugin/smoothstone/UPSTREAM)"
 digest() { find skills/plugin README.md -type f -print0 | sort -z | xargs -0 sha256sum; }
 before="$(digest)"
