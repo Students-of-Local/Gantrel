@@ -14,11 +14,13 @@ git clone --quiet "$repo_url" "$tmp/src"
 git -C "$tmp/src" -c advice.detachedHead=false checkout --quiet "$ref"
 sha="$(git -C "$tmp/src" rev-parse HEAD)"
 
-rm -rf "$dest"
-mkdir -p "$dest"
-cp -R "$tmp/src/skill/." "$dest/"
+# Build the new skill in a staging folder and swap it in only after every step passed,
+# so a failed sync never leaves a half-synced skill behind.
+stage="$tmp/stage"
+mkdir -p "$stage"
+cp -R "$tmp/src/skill/." "$stage/"
 
-python3 - "$dest/SKILL.md" "$preamble" "$sha" <<'PY'
+python3 - "$stage/SKILL.md" "$preamble" "$sha" <<'PY'
 import sys
 skill, preamble, sha = sys.argv[1:]
 lines = open(skill, encoding="utf-8").read().splitlines(keepends=True)
@@ -30,7 +32,7 @@ lines[heading + 1:heading + 1] = ["\n", block]
 open(skill, "w", encoding="utf-8").write("".join(lines))
 PY
 
-python3 - "$dest/tiers/L.md" "$root/scripts/smoothstone-tier-L.md" "$sha" <<'PY'
+python3 - "$stage/tiers/L.md" "$root/scripts/smoothstone-tier-L.md" "$sha" <<'PY'
 import sys
 card, note, sha = sys.argv[1:]
 lines = open(card, encoding="utf-8").read().splitlines(keepends=True)
@@ -42,6 +44,9 @@ lines[at + 1:at + 1] = [block]
 open(card, "w", encoding="utf-8").write("".join(lines))
 PY
 
-printf '%s\n%s\n' "$repo_url" "$sha" > "$dest/UPSTREAM"
+printf '%s\n%s\n' "$repo_url" "$sha" > "$stage/UPSTREAM"
+rm -rf "$dest"
+mkdir -p "$(dirname "$dest")"
+mv "$stage" "$dest"
 sed -i -E "s/(smoothstone[@/](tree\/)?)[0-9a-f]{40}/\1$sha/g; s/(Pinned smoothstone: \`)[0-9a-f]{40}/\1$sha/" "$root/README.md"
 echo "smoothstone skill synced at $sha"
