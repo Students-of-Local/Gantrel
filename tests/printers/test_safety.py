@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import fcntl
-import json
 import os
 import pty
 import re
 import select
 import subprocess
 import sys
-import termios
 import time
 
 import pytest
@@ -164,12 +161,12 @@ def test_confirm_refuses_without_a_controlling_terminal():
 def _confirm_on_a_pty(args: list[str], answer: str) -> tuple[int, str]:
     """Run confirm the way a person would: a real terminal that is the process's controlling tty."""
     master, slave = pty.openpty()
-
-    def make_controlling():
-        fcntl.ioctl(0, termios.TIOCSCTTY, 0)
-
-    p = subprocess.Popen([sys.executable, "-m", "gantrel_printer.cli", *args], stdin=slave, stdout=slave,
-                         stderr=slave, start_new_session=True, preexec_fn=make_controlling, env=os.environ.copy())
+    # The child makes the pty its controlling terminal, then execs the CLI. No preexec_fn: running
+    # Python between fork and exec is unsafe while the fake printer's threads are alive.
+    boot = ("import fcntl, os, sys, termios; fcntl.ioctl(0, termios.TIOCSCTTY, 0); "
+            "os.execv(sys.executable, [sys.executable, '-m', 'gantrel_printer.cli', *sys.argv[1:]])")
+    p = subprocess.Popen([sys.executable, "-c", boot, *args], stdin=slave, stdout=slave, stderr=slave,
+                         start_new_session=True, env=os.environ.copy())
     os.close(slave)
     out, sent = b"", False
     deadline = time.monotonic() + 60

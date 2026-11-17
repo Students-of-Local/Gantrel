@@ -249,7 +249,7 @@ def cmd_confirm(args):
         cmd = f"gantrel-printer start {job.id} --token {token}"
     print(f"Confirmed. This token works once, for {safety.TOKEN_TTL_S // 60} minutes:")
     print(cmd)
-    print(f"NEXT: run that command now, or paste it to your assistant to run")
+    print("NEXT: run that command now, or paste it to your assistant to run")
 
 
 def cmd_start(args):
