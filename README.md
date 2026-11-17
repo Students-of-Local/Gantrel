@@ -30,9 +30,9 @@ Install:
 
 3. Check it: `local-studio plugin validate ~/.local-studio/plugins/gantrel` prints `OK gantrel 0.1.0 (1 skills, 0 prompts, 1 commands)`.
 
-The skill's first step tells the model to check for `stone` and, if it is missing, give you the install command and stop without installing anything. That step is not tested yet on a machine without `stone`.
+The skill's first action is `stone status`; if that prints `stone: command not found`, the model is told to give you the install command and stop without installing anything. That step is not tested yet on a machine without `stone`.
 
-The skill is a copy of smoothstone's `skill/` folder, pinned to one commit. Pinned smoothstone: `fefce749a2e03f7094307da3347d868593dc63e8` ([skill at that commit](https://github.com/baney75/smoothstone/tree/fefce749a2e03f7094307da3347d868593dc63e8/skill)). Gantrel adds one step to it: check for `stone` first. To move to another smoothstone commit:
+The skill is a copy of smoothstone's `skill/` folder, pinned to one commit. Pinned smoothstone: `fefce749a2e03f7094307da3347d868593dc63e8` ([skill at that commit](https://github.com/baney75/smoothstone/tree/fefce749a2e03f7094307da3347d868593dc63e8/skill)). Gantrel adds one first action to it: run `stone status` and follow its NEXT line. To move to another smoothstone commit:
 
 ```
 scripts/sync-smoothstone.sh <sha or ref>

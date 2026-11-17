@@ -5,15 +5,9 @@ description: Make 3D printable parts that look designed, from a text request or 
 
 # smoothstone
 
-## Before you start
-
-Run `command -v stone`. If it prints nothing, stone is not installed. Tell the user to install it
-with this one command, then stop and do nothing else:
-
-    uv tool install git+https://github.com/baney75/smoothstone@fefce749a2e03f7094307da3347d868593dc63e8
-
-Never install it yourself. If it prints a path, run `stone status` next and follow its NEXT line.
-stone status prints your tier card's rules, so you can start without opening the tier files.
+First, run `stone status` with the bash tool and do what its NEXT line says. If bash prints
+`stone: command not found`, tell the user to install it with this one command, then stop:
+`uv tool install git+https://github.com/baney75/smoothstone@fefce749a2e03f7094307da3347d868593dc63e8`. Never install it yourself.
 
 stone turns a request into a print-ready STL. The model picks a recipe and sets its numbers;
 stone builds the part with OpenSCAD, checks that it prints (watertight, one piece, flat base,
