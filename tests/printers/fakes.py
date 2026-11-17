@@ -874,7 +874,8 @@ class FakeDuet:
             return h._send(200, {"err": 0, "sessionTimeout": 8000, "boardType": "duet3mb6hc", "sessionKey": int(key),
                                  "apiLevel": 1})
         if not url.path.startswith("/rr_"):
-            return h._send(404, {})
+            # A standalone RepRapFirmware board serves Duet Web Control for any other path, with 200.
+            return h._send(200, b"<!DOCTYPE html><html><title>Duet Web Control</title></html>", "text/html")
         if not self._session_ok(h):
             return h._send(401, {})
         if url.path == "/rr_disconnect":
@@ -1271,6 +1272,10 @@ class FakeMarlin:
 
     def __init__(self, brain: Brain, sd: bool = True, corrupt_line: int | None = None):
         self.brain, self.sd, self.corrupt_line = brain, sd, corrupt_line
+        # heating: inside a blocking M109/M190. Commands queue with no ok, and the board prints only
+        # busy and temperature lines, except M112, which the emergency parser runs at once.
+        self.heating = False
+        self.queued: list[str] = []
         self.master, self.slave = os.openpty()
         tty.setraw(self.slave)
         self.path = os.ttyname(self.slave)
@@ -1282,6 +1287,19 @@ class FakeMarlin:
         self.received: list[str] = []
         self.stop = False
         threading.Thread(target=self._loop, daemon=True).start()
+        threading.Thread(target=self._busy_loop, daemon=True).start()
+
+    def _busy_loop(self):
+        while not self.stop:
+            time.sleep(0.3)
+            if self.heating and not self.halted:
+                self.say("echo:busy: processing", " T:180.00 /215.00 B:60.00 /60.00 @:127 B@:0")
+
+    def finish_heating(self) -> None:
+        self.heating = False
+        queued, self.queued = self.queued, []
+        for line in queued:
+            self.handle(line)
 
     def say(self, *lines: str) -> None:
         os.write(self.master, "".join(f"{ln}\n" for ln in lines).encode())
@@ -1307,6 +1325,14 @@ class FakeMarlin:
         self.received.append(line)
         if self.halted:
             return self.say("Error:Printer halted. kill() called!")
+        if line.split()[0].upper() == "M112":
+            self.halted = True
+            self.brain.act("estop")
+            return self.say("Error:Printer halted. kill() called!")
+        if self.heating:
+            self.received.pop()
+            self.queued.append(line)
+            return
         m = re.match(r"N(\d+)\s+(.*)\*(\d+)$", line)
         if m:
             n, cmd = int(m.group(1)), m.group(2)
@@ -1346,6 +1372,9 @@ class FakeMarlin:
         if word == "M110":
             self.line_no = int(arg.strip().lstrip("N") or 0)
             return self.say("ok")
+        if word in ("M21", "M28") and busy:
+            b.act("cancel")  # real Marlin: remounting or writing the card mid-print kills the print
+            self.selected = ""
         if word == "M21":
             return self.say("echo:SD card ok", "ok")
         if word == "M20":

@@ -53,10 +53,18 @@ class DuetAdapter(Adapter):
             return "dsf"  # DSF answered and refused the password; the call that follows reports it
         except (NotFound, Refused, ProtocolError):
             return "rr"
+        # A standalone board's web server answers unknown paths with 200 and its web page, so only a
+        # JSON reply that holds a sessionKey proves DSF is there.
         try:
-            key = net.parse_json(data, self.cfg.name).get("sessionKey") if data.strip() else None
+            reply = net.parse_json(data, self.cfg.name) if data.strip() else None
+        except Exception:
+            reply = None
+        key = reply.get("sessionKey") if isinstance(reply, dict) else None
+        if key is None:
+            return "rr"
+        try:
             net.request("GET", f"{self.base}/machine/disconnect", what=self.cfg.name,
-                        headers={"X-Session-Key": str(key)} if key else {})
+                        headers={"X-Session-Key": str(key)})
         except Exception:
             pass
         return "dsf"

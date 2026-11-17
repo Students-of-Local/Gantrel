@@ -40,9 +40,25 @@ class PrusaLinkAdapter(Adapter):
         return str(self.cfg.extra.get("user") or "maker"), self.secret or ""
 
     def _req(self, method: str, path: str, **kw):
-        headers = {**kw.pop("headers", {}), **self._h()}
-        return net.request(method, self.base + path, headers=headers, digest=self._digest(), what=self.cfg.name,
-                           **kw)
+        """Send the secret one way only: as an API key, or as a digest password, never both.
+
+        The first call finds which one the printer takes and records it, so a digest password is
+        never also sent in the clear as X-Api-Key.
+        """
+        extra = kw.pop("headers", {})
+        scheme = self.cfg.extra.get("auth")
+        if scheme == "digest":
+            return net.request(method, self.base + path, headers=extra, digest=self._digest(),
+                               what=self.cfg.name, **kw)
+        if scheme == "key":
+            return net.request(method, self.base + path, headers={**extra, **self._h()}, what=self.cfg.name, **kw)
+        try:
+            # Ask with neither first: the printer's challenge says which scheme it wants.
+            realm = net.challenge(self.base + "/api/version", 3.0)
+        except Exception:
+            realm = ""
+        self.cfg.extra["auth"] = "digest" if realm.lower().startswith("digest") else "key"
+        return self._req(method, path, headers=extra, **kw)
 
     def _get(self, path: str) -> dict:
         _, _, data = self._req("GET", path)

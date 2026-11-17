@@ -7,6 +7,8 @@ port, Duet over DSF, resin uploads, and Marlin on USB serial. Every printer here
 from __future__ import annotations
 
 import json
+import threading
+import time
 
 import pytest
 
@@ -489,3 +491,63 @@ def test_serial_unplugged_is_unreachable(tmp_path):
     cfg = PrinterConfig(name="gone", type="serial", host=str(tmp_path / "ttyUSB9"), port=115200)
     with pytest.raises(Unreachable):
         build(cfg).status()
+
+
+def test_serial_estop_works_while_the_board_is_heating(marlin):
+    # Inside M109/M190 Marlin sends no ok for minutes; estop must not wait for a handshake.
+    brain, fm, cfg = marlin
+    fm.heating = True
+    t0 = time.monotonic()
+    msg = build(cfg).emergency_stop()
+    assert time.monotonic() - t0 < 5
+    assert fm.halted and "M112" in msg
+    assert fm.received[0] == "M112"  # the first thing on the wire, before any M105
+
+
+def test_serial_pause_waits_out_a_heating_board(marlin, tmp_path):
+    brain, fm, cfg = marlin
+    a = build(cfg)
+    f = tmp_path / "part.gcode"
+    f.write_bytes(GCODE)
+    name = a.upload(f, "part-0123456789ab.gcode")
+    brain.start(name)
+    fm.heating = True
+    threading.Timer(2.5, fm.finish_heating).start()
+    a.pause()  # the handshake reads busy lines as alive and waits for the ok instead of giving up
+    assert brain.state == "paused"
+
+
+def test_serial_upload_during_an_sd_print_is_refused_and_the_print_goes_on(marlin, tmp_path):
+    brain, fm, cfg = marlin
+    a = build(cfg)
+    f = tmp_path / "part.gcode"
+    f.write_bytes(GCODE)
+    name = a.upload(f, "part-0123456789ab.gcode")
+    brain.start(name)
+    g = tmp_path / "next.gcode"
+    g.write_bytes(GCODE + b"G1 X20\n")
+    with pytest.raises(Refused, match="printing from its SD card"):
+        a.upload(g, "next-0123456789ab.gcode")
+    assert brain.state == "printing"
+    assert not any(ln.split()[0] in ("M21", "M28") for ln in fm.received[-5:])
+
+
+def test_prusalink_digest_password_is_never_sent_as_an_api_key(prusa_digest, tmp_path, monkeypatch):
+    from gantrel_printer import net
+
+    brain, _, cfg = prusa_digest
+    sent = []
+    real = net.request
+
+    def spy(method, url, *, headers=None, **kw):
+        sent.append(dict(headers or {}))
+        return real(method, url, headers=headers, **kw)
+
+    monkeypatch.setattr(net, "request", spy)
+    a = build(cfg, SECRET)
+    assert a.status().state == "idle"
+    f = tmp_path / "part.gcode"
+    f.write_bytes(GCODE)
+    a.upload(f, "part-0123456789ab.gcode")
+    assert sent and all("X-Api-Key" not in h for h in sent)
+    assert cfg.extra["auth"] == "digest"

@@ -296,8 +296,15 @@ def test_start_refused_while_printing_even_with_a_token(rig, tmp_path):
     a = rig.adapter()
     first = upload_job(rig, tmp_path, "one.gcode")
     start_print(rig, a, first)
-    second = upload_job(rig, tmp_path, "two.gcode", GCODE + b"G1 X20\n")
     from gantrel_printer.errors import Refused
+
+    if rig.type == "serial":
+        # Marlin on USB refuses the upload itself during an SD print (touching the card could stop it).
+        with pytest.raises(Refused):
+            upload_job(rig, tmp_path, "two.gcode", GCODE + b"G1 X20\n")
+        assert rig.brain.current == first.remote_name and rig.brain.state == "printing"
+        return
+    second = upload_job(rig, tmp_path, "two.gcode", GCODE + b"G1 X20\n")
 
     with pytest.raises(Refused):
         a.start(second, start_token(second))

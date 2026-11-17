@@ -67,8 +67,17 @@ def cmd_discover(args):
     if not found:
         nxt = "Nothing found. Ask the person for the printer's IP address (printer screen: Network), then pair it"
     else:
-        r = found[0]
-        nxt = f"gantrel-printer pair <name> --type {r['type']} --host {r['host']} --port {r['port']} --model <model>"
+        # A USB serial device may be any gadget (a Zigbee stick, a UPS cable), so never suggest
+        # pairing one by itself; network hits come first.
+        net_hits = [r for r in found if r.get("via") != "usb" and r.get("type") != "serial"]
+        if net_hits:
+            r = net_hits[0]
+            nxt = (f"gantrel-printer pair <name> --type {r['type']} --host {r['host']} --port {r['port']}"
+                   " --model <model>")
+        else:
+            nxt = ("Only USB serial devices were found, and any of them may not be a printer. Ask the person which "
+                   "one is the printer and that it is idle, then: gantrel-printer pair <name> --type serial "
+                   "--host <device path> --model <model>")
     out(args, {"printers": found}, "\n".join(lines) or "No printers found.", nxt)
 
 

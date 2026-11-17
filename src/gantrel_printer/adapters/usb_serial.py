@@ -30,6 +30,8 @@ DEFAULT_BAUD = 115200
 TEMP_RE = re.compile(r"\bT0?:\s*(-?[\d.]+)\s*/\s*(-?[\d.]+)")
 BED_RE = re.compile(r"\bB:\s*(-?[\d.]+)\s*/\s*(-?[\d.]+)")
 CHAMBER_RE = re.compile(r"\bC:\s*(-?[\d.]+)\s*/\s*(-?[\d.]+)")
+ALIVE_TEMP_RE = re.compile(r"\s*T\d?:\s*-?\d")  # temperature report or autoreport line
+HEAT_WAIT = 900.0  # seconds a busy board may take to finish a blocking command before we give up
 SD_RE = re.compile(r"SD printing byte\s+(\d+)\s*/\s*(\d+)")
 SHA_RE = re.compile(r"-([0-9a-f]{12})\.[A-Za-z0-9]+$")
 NO_SD = ("this printer's board does not report SD card support (M115 has no Cap:SDCARD:1), and Gantrel "
@@ -71,7 +73,7 @@ def card_lines(data: bytes) -> list[str]:
 class _Link:
     """One open serial connection that speaks Marlin's line protocol."""
 
-    def __init__(self, path: str, baud: int, what: str, timeout: float = 8.0):
+    def __init__(self, path: str, baud: int, what: str, timeout: float = 8.0, handshake: bool = True):
         try:
             import serial  # pyserial
         except ImportError:  # pragma: no cover - pyserial is a dependency
@@ -86,6 +88,8 @@ class _Link:
                               else "Check the USB cable and the device path (ls /dev/serial/by-id/)") from None
         self._keep_dtr()
         self.buf = b""
+        if not handshake:
+            return
         try:
             self._handshake(timeout)
         except BaseException:
@@ -131,10 +135,17 @@ class _Link:
         self.s.flush()
 
     def _handshake(self, timeout: float) -> None:
-        """Boards that reset on open print a banner first. Ask M105 until one 'ok' comes back."""
+        """Boards that reset on open print a banner first. Ask M105 until one 'ok' comes back.
+
+        A board busy with a blocking command (M109, M190, G29) answers nothing but busy and
+        temperature lines until that command ends. Those prove it is alive: stop asking and wait for
+        the ok of the M105 already queued, for up to HEAT_WAIT seconds.
+        """
         deadline = time.monotonic() + timeout
+        alive = False
         while time.monotonic() < deadline:
-            self.write("M105")
+            if not alive:
+                self.write("M105")
             step = min(deadline, time.monotonic() + 1.0)
             while True:
                 line = self.readline(step)
@@ -145,6 +156,11 @@ class _Link:
                 if line.startswith("ok"):
                     self._drain()
                     return
+                if line.startswith("echo:busy") or ALIVE_TEMP_RE.match(line):
+                    if not alive:
+                        alive = True
+                        deadline = time.monotonic() + HEAT_WAIT
+                    step = min(deadline, time.monotonic() + 1.0)
         raise Unreachable(f"{self.what} did not answer M105 on the serial port",
                           "Check the baud rate (pair with --port 250000 for some boards) and that it runs Marlin")
 
@@ -286,6 +302,12 @@ class SerialAdapter(Adapter):
         with self._open() as link:
             if "Cap:SDCARD:1" not in " ".join(link.cmd("M115")):
                 raise Unsupported(NO_SD, NO_SD_HINT)
+            # M21 or M28 during an SD print can stop or corrupt it, so look before touching the card.
+            # Marlin reports "SD printing byte" while printing and while paused (the file stays open).
+            m27 = " ".join(link.cmd("M27"))
+            if SD_RE.search(m27):
+                raise Refused(f"{self.cfg.name} is printing from its SD card (or paused mid-print)",
+                              "Upload when the printer is idle; the file is kept on this computer")
             link.cmd("M21")  # mount the card
             if name in self._listing(link):
                 raise Refused(f"{name} is already on {self.cfg.name}'s SD card; uploads never replace a file",
@@ -361,7 +383,9 @@ class SerialAdapter(Adapter):
         self._clear_marker()
 
     def emergency_stop(self) -> str:
-        with self._open() as link:
+        # No handshake: a board inside M109/M190/G29 sends no ok for minutes. Marlin's emergency
+        # parser acts on M112 the moment it arrives, so send it first and read afterward.
+        with _Link(self.cfg.host, self.port, self.cfg.name, handshake=False) as link:
             link.write("M112")
             end = time.monotonic() + 1.0
             while link.readline(end) is not None:
