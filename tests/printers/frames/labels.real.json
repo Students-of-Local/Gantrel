@@ -1,0 +1,5 @@
+[
+ {"file": "good/k2-real-finished-vase.jpg", "label": "ok", "kind": "printing", "part": "twisted vase", "color": "blue",
+  "status": {"state": "printing", "progress": 0.99, "layer": 990, "total_layers": 1000},
+  "source": "real: chamber camera of the maintainer's Creality K2 through go2rtc, 2026-11-17, read-only snapshot of a finished print"}
+]

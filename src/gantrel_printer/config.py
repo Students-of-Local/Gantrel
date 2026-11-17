@@ -133,3 +133,35 @@ def delete_secret(name: str) -> None:
         pass
     except keyring.errors.KeyringError:
         pass
+
+
+# ---------------------------------------------------------------- watch settings (vision guard, notices)
+
+NOTIFY_KEY = "_notify_url"  # keyring name; printer names can't start with "_", so it never collides
+
+
+def watch_settings_path() -> Path:
+    return home() / "watch.json"
+
+
+def load_watch_settings() -> dict:
+    """{"vision": {...}, "notify": {...}}. Holds no secrets: the notice URL lives in the OS keyring."""
+    path = watch_settings_path()
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+    except ValueError:
+        raise ConfigError(f"{path} is not valid JSON", "Fix or delete it, then run gantrel-printer watch-config") from None
+    return data if isinstance(data, dict) else {}
+
+
+def save_watch_settings(data: dict) -> None:
+    path = watch_settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    tmp = path.with_suffix(".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        json.dump(data, fh, indent=2, sort_keys=True)
+        fh.write("\n")
+    os.replace(tmp, path)

@@ -37,6 +37,18 @@ These are packaging checks, not design results. Each one passed on 2026-11-16 wi
 
 Calibration prints (`gantrel-printer calibrate <printer> first-layer|temp-tower|retraction|flow`) are checked by tests for every filament printer profile: moves inside the bed, nozzle temperatures inside the material's range, tower bands as stated. None has been printed on a real printer yet.
 
+### Watching a print
+
+`gantrel-printer watch` (frames, status lines, timelapse, notices) and its failure guard. Details in [docs/PRINTERS.md](docs/PRINTERS.md#watching-a-print).
+
+| Part | Proven |
+|---|---|
+| Frames and status every N seconds, ending with the print | Fake, for all 12 adapter types (`tests/printers/test_watch.py`). Real: one read-only 62 s run on the Creality K2 through go2rtc, 5 frames, with the printer idle after a finished print. Never watched a real print from start to end. |
+| Failure guard pauses after K failed frames, never on suspect or malformed answers, never resumes, starts or cancels | Fake only: a fake printer and a fake vision server. The guard has never paused a real printer. |
+| Vision models for the guard | Measured on 27 renders and 1 real K2 frame (table in [docs/PRINTERS.md](docs/PRINTERS.md#which-model-measured-2026-11-17)). None passed the gate (80% right, no good frame judged failed), so the guard is off unless the person asks for it and says it is experimental. The default, `gemma3:4b`, judged no good frame failed but caught only spaghetti (7 of 15 failed frames). |
+| Timelapse MP4 | Fake frames checked with ffprobe; real: the K2 run's 5-frame H.264 MP4. Needs ffmpeg. |
+| Notices to ntfy or a JSON webhook | Fake ntfy topic and webhook on 127.0.0.1 only. No real ntfy server has been tried. |
+
 ## Not supported yet
 
 - Making a part through `/gantrel` on LFM2.5-8B-A1B or LFM2.5-24B-A2B. In 5 runs the 8B always ran `stone status` first, then lost the request: three times it asked the user what to make, once it ran `stone new` and then wandered through the job files, once it printed the NEXT line as text instead of running it. The 24B on parish1 (split across CPU and GPU) never sent a token within Eukhe's 300 and 600 s stream timeouts, in 2 runs straight to Ollama and 2 through the controller.

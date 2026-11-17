@@ -90,8 +90,11 @@ surfaces), follow "Calibration prints" below.
 8. Tell the person the file name the upload printed and where to start it (the upload message
    says: the printer's screen, its web page, or the maker's app). Ask them to check the bed is
    empty first. Then wait until they say it started.
-9. Watch: run `gantrel-printer status <name>` and `gantrel-printer camera <name> --out cam.jpg`
-    every few minutes during the first layers.
+9. Watch: after the person says the print started, run
+
+       gantrel-printer watch <name> --timelapse --background
+
+   See "Watching a print" below. Then tell the person Gantrel is watching.
 10. Trouble you see on the camera: follow "First: is this a stop request?" above. Tell the person
     what you did and what you saw. Only they can resume it, on the printer.
 
@@ -121,6 +124,25 @@ the ones the problem needs:
    small tab. Ask them which band or patch looks best, or look at a camera image with them.
 5. Tell them the value to use and where it goes (the setting named in the NEXT line). Gantrel's own
    slice defaults don't change by themselves; say so.
+
+## Watching a print
+
+- `gantrel-printer watch <name> --timelapse --background` returns at once. It saves a camera frame
+  every 30 seconds until the print ends, then makes a timelapse video.
+- The failure guard is off unless the person asks for it. Then run
+  `gantrel-printer watch <name> --guard --timelapse --background` instead. It sends each frame to a
+  local vision model. If two frames in a row show a failed print, it pauses the printer.
+  It never resumes, starts or cancels. Tell the person it is experimental: it misses many failed
+  prints, so they should still check the camera.
+- If watch prints ERROR about the vision model (no answer, or no such model), tell the person what
+  it said, then run the same command without `--guard` and say the failure guard is off.
+- Add `--notify` only if `gantrel-printer watch-config` shows a Notices line that is not "not set".
+  Never set a notice URL yourself; the person pipes it in with `watch-config --notify-url-stdin`.
+- When the person asks how the print is going, run `gantrel-printer frames <name>`. The newest job
+  is first. Look at the last image in its folder's `frames/`, or show it to the person.
+- If a job says `paused_by_guard`, tell the person it was paused and the "paused because" reason.
+  Only they can resume it, on the printer, after they look at the print.
+- If watch says the printer is already being watched, don't start another watch.
 
 ## Rules and checks
 

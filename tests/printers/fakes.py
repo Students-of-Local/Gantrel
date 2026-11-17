@@ -1435,3 +1435,89 @@ class FakeMarlin:
                 os.close(fd)
             except OSError:
                 pass
+
+
+# ---------------------------------------------------------------- watch: camera, vision model, notice target
+
+
+class FakeFrameCamera:
+    """A camera at /cam.jpg serving the given image files in turn; the last one repeats."""
+
+    def __init__(self, paths):
+        self.frames = [open(p, "rb").read() for p in paths]
+        self.served = 0
+        cam = self
+
+        def routes(h, method):
+            if urllib.parse.urlsplit(h.path).path != "/cam.jpg":
+                return h._send(404, {})
+            data = cam.frames[min(cam.served, len(cam.frames) - 1)]
+            cam.served += 1
+            return h._send(200, data, "image/jpeg")
+
+        self.srv = serve_http(Brain(), routes)
+        self.url = f"http://127.0.0.1:{self.srv.server_address[1]}/cam.jpg"
+
+    def close(self):
+        self.srv.shutdown()
+
+
+class FakeVision:
+    """An OpenAI-compatible /v1/chat/completions server answering from a script of reply texts.
+
+    The last reply repeats. reject_json_mode answers 400 to a request carrying response_format, as
+    LM Studio does for json_object.
+    """
+
+    def __init__(self, replies, reject_json_mode=False):
+        self.replies = list(replies)
+        self.requests: list[dict] = []
+        self.reject_json_mode = reject_json_mode
+        fv = self
+
+        def routes(h, method):
+            if method == "GET" and urllib.parse.urlsplit(h.path).path == "/v1/models":
+                return h._send(200, {"object": "list", "data": [{"id": "fake-vl", "object": "model"}]})
+            if method != "POST" or urllib.parse.urlsplit(h.path).path != "/v1/chat/completions":
+                return h._send(404, {})
+            body = json.loads(h._body())
+            if fv.reject_json_mode and "response_format" in body:
+                return h._send(400, {"error": "'response_format.type' must be 'json_schema' or 'text'"})
+            fv.requests.append(body)
+            text = fv.replies[min(len(fv.requests) - 1, len(fv.replies) - 1)]
+            return h._send(200, {"id": "x", "object": "chat.completion", "model": body.get("model"),
+                                 "choices": [{"index": 0, "message": {"role": "assistant", "content": text},
+                                              "finish_reason": "stop"}]})
+
+        self.srv = serve_http(Brain(), routes)
+        self.url = f"http://127.0.0.1:{self.srv.server_address[1]}/v1"
+
+    def images(self) -> list[bytes]:
+        import base64
+        out = []
+        for r in self.requests:
+            for part in r["messages"][0]["content"]:
+                if part["type"] == "image_url":
+                    out.append(base64.b64decode(part["image_url"]["url"].split(",", 1)[1]))
+        return out
+
+    def close(self):
+        self.srv.shutdown()
+
+
+class FakeHook:
+    """A notice target (ntfy topic or JSON webhook) that records every request and answers "ok"."""
+
+    def __init__(self):
+        self.got: list[dict] = []
+        fh = self
+
+        def routes(h, method):
+            fh.got.append({"method": method, "path": h.path, "headers": dict(h.headers), "body": h._body()})
+            return h._send(200, b"ok", "text/plain")
+
+        self.srv = serve_http(Brain(), routes)
+        self.base = f"http://127.0.0.1:{self.srv.server_address[1]}"
+
+    def close(self):
+        self.srv.shutdown()

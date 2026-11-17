@@ -160,3 +160,39 @@ def is_image(data: bytes) -> str | None:
     if data[:8] == b"\x89PNG\r\n\x1a\n":
         return "png"
     return None
+
+
+_CGNAT = None
+
+
+def is_local_address(addr: str) -> bool:
+    """Loopback, private (RFC 1918, ULA), link-local, or the 100.64.0.0/10 range Tailscale uses."""
+    import ipaddress
+
+    global _CGNAT
+    if _CGNAT is None:
+        _CGNAT = ipaddress.ip_network("100.64.0.0/10")
+    try:
+        ip = ipaddress.ip_address(addr.split("%")[0])
+    except ValueError:
+        return False
+    if getattr(ip, "ipv4_mapped", None):
+        ip = ip.ipv4_mapped
+    return ip.is_loopback or ip.is_private or ip.is_link_local or (ip.version == 4 and ip in _CGNAT)
+
+
+def host_is_local(url: str, timeout: float = 3.0) -> bool:
+    """True when every address the URL's host resolves to is on this machine or the local network."""
+    host = urllib.parse.urlsplit(url).hostname or ""
+    if not host:
+        return False
+    old = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(timeout)
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except (OSError, UnicodeError):
+        return False
+    finally:
+        socket.setdefaulttimeout(old)
+    addrs = {i[4][0] for i in infos}
+    return bool(addrs) and all(is_local_address(a) for a in addrs)

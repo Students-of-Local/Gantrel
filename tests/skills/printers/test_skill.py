@@ -54,3 +54,20 @@ def test_skill_teaches_every_calibration_kind_and_that_it_never_starts():
         assert f"| {kind} |" in text
     section = text[text.index("## Calibration prints"):text.index("## Rules and checks")]
     assert "It never starts a print" in section and "--upload" in section
+
+
+def test_watch_section_uses_real_flags_and_keeps_the_guard_honest():
+    text = SKILL.read_text()
+    assert "gantrel-printer watch <name> --guard --timelapse --background" in text
+    # No measured model passed the gate, so the default step leaves the guard off (docs/PRINTERS.md).
+    step = text[text.index("9. Watch"):text.index("10. ")]
+    assert "--guard" not in step and "--timelapse --background" in step
+    assert "experimental" in text
+    watch = parser()._subparsers._group_actions[0].choices["watch"]
+    flags = {o for a in watch._actions for o in a.option_strings}
+    used = set(re.findall(r"gantrel-printer watch <name>((?: --[a-z-]+)+)", text))
+    assert used
+    for group in used:
+        assert set(group.split()) <= flags, set(group.split()) - flags
+    assert "It never resumes, starts or cancels" in text
+    assert "## Watching a print" in text

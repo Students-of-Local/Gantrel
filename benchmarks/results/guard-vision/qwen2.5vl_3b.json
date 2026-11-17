@@ -1,0 +1,309 @@
+{
+ "summary": {
+  "model": "qwen2.5vl:3b",
+  "host": "abbey1 (GTX 1650 SUPER 4 GB, Ollama 0.12.6)",
+  "date": "2026-11-17",
+  "frames": {
+   "good": 13,
+   "failed": 15
+  },
+  "accuracy": 0.786,
+  "failed_caught": "12/15",
+  "false_failed_on_good": 3,
+  "good_called_ok": 9,
+  "malformed": 0,
+  "unreachable": 0,
+  "latency_s": {
+   "median": 33.3,
+   "max": 181.5
+  },
+  "by_kind": {
+   "detached": "5/6",
+   "empty_bed": "0/2",
+   "spaghetti": "7/7"
+  },
+  "passes_gate": false
+ },
+ "frames": [
+  {
+   "file": "good/k2-real-finished-vase.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "suspect",
+   "reason": "the bed is covered with a blue fabric",
+   "source": "model",
+   "latency_s": 181.51,
+   "raw": "{\"reason\": \"the bed is covered with a blue fabric\", \"verdict\": \"suspect\"}"
+  },
+  {
+   "file": "good/good-00.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "the bed is clean and flat",
+   "source": "model",
+   "latency_s": 32.48,
+   "raw": "{\"reason\": \"the bed is clean and flat\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-01.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "failed",
+   "reason": "the part has come loose from the bed, fallen over, moved, or is stuck to the nozzle",
+   "source": "model",
+   "latency_s": 33.5,
+   "raw": "{\"reason\": \"the part has come loose from the bed, fallen over, moved, or is stuck to the nozzle\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "good/good-02.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "failed",
+   "reason": "the part has come loose from the bed, fallen over, moved, or is stuck to the nozzle",
+   "source": "model",
+   "latency_s": 33.43,
+   "raw": "{\"reason\": \"the part has come loose from the bed, fallen over, moved, or is stuck to the nozzle\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "good/good-03.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "the bed is clean and smooth",
+   "source": "model",
+   "latency_s": 32.28,
+   "raw": "{\"reason\": \"the bed is clean and smooth\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-04.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "the bed is clean and flat with no visible debris or misalignment",
+   "source": "model",
+   "latency_s": 33.22,
+   "raw": "{\"reason\": \"the bed is clean and flat with no visible debris or misalignment\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-05.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "the bed is clean and flat",
+   "source": "model",
+   "latency_s": 32.59,
+   "raw": "{\"reason\": \"the bed is clean and flat\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-06.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "the bed is clean and smooth",
+   "source": "model",
+   "latency_s": 32.37,
+   "raw": "{\"reason\": \"the bed is clean and smooth\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-07.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "The bed appears to be clean and free of debris.",
+   "source": "model",
+   "latency_s": 29.77,
+   "raw": "{?  \"reason\": \"The bed appears to be clean and free of debris.\",?  \"verdict\": \"ok\"?}"
+  },
+  {
+   "file": "good/good-08.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "the bed is clean and flat",
+   "source": "model",
+   "latency_s": 29.19,
+   "raw": "{\"reason\": \"the bed is clean and flat\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-09.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "the bed is clean and the object is well-formed",
+   "source": "model",
+   "latency_s": 29.24,
+   "raw": "{\"reason\": \"the bed is clean and the object is well-formed\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-10.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "ok",
+   "reason": "the bed is clean and smooth",
+   "source": "model",
+   "latency_s": 32.2,
+   "raw": "{\"reason\": \"the bed is clean and smooth\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "good/good-11.jpg",
+   "label": "ok",
+   "kind": "printing",
+   "verdict": "failed",
+   "reason": "the part has come loose from the bed, fallen over, moved, or is stuck to the nozzle",
+   "source": "model",
+   "latency_s": 33.56,
+   "raw": "{\"reason\": \"the part has come loose from the bed, fallen over, moved, or is stuck to the nozzle\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/spaghetti-12.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "The bed is covered with tangled strands of plastic.",
+   "source": "model",
+   "latency_s": 31.9,
+   "raw": "{?  \"reason\": \"The bed is covered with tangled strands of plastic.\",?  \"verdict\": \"failed\"?}"
+  },
+  {
+   "file": "failed/spaghetti-13.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "The bed is covered with tangled strands of plastic, resembling spaghetti.",
+   "source": "model",
+   "latency_s": 33.51,
+   "raw": "{?  \"reason\": \"The bed is covered with tangled strands of plastic, resembling spaghetti.\",?  \"verdict\": \"failed\"?}"
+  },
+  {
+   "file": "failed/spaghetti-14.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "The bed is covered with tangled blue strands of plastic.",
+   "source": "model",
+   "latency_s": 33.74,
+   "raw": "{?  \"reason\": \"The bed is covered with tangled blue strands of plastic.\",?  \"verdict\": \"failed\"?}"
+  },
+  {
+   "file": "failed/spaghetti-15.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "The bed is covered with tangled strands of plastic, indicating a spaghetti failure.",
+   "source": "model",
+   "latency_s": 38.77,
+   "raw": "{?  \"reason\": \"The bed is covered with tangled strands of plastic, indicating a spaghetti failure.\",?  \"verdict\": \"failed\"?}"
+  },
+  {
+   "file": "failed/spaghetti-16.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "spaghetti",
+   "source": "model",
+   "latency_s": 35.06,
+   "raw": "{\"reason\": \"spaghetti\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/spaghetti-17.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "The bed is covered with tangled strands of plastic.",
+   "source": "model",
+   "latency_s": 35.41,
+   "raw": "{?  \"reason\": \"The bed is covered with tangled strands of plastic.\",?  \"verdict\": \"failed\"?}"
+  },
+  {
+   "file": "failed/spaghetti-18.jpg",
+   "label": "failed",
+   "kind": "spaghetti",
+   "verdict": "failed",
+   "reason": "The bed is covered with tangled strands of plastic, indicating a spaghetti failure.",
+   "source": "model",
+   "latency_s": 35.06,
+   "raw": "{?  \"reason\": \"The bed is covered with tangled strands of plastic, indicating a spaghetti failure.\",?  \"verdict\": \"failed\"?}"
+  },
+  {
+   "file": "failed/detached-19.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "ok",
+   "reason": "the bed is clean and smooth",
+   "source": "model",
+   "latency_s": 36.21,
+   "raw": "{\"reason\": \"the bed is clean and smooth\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "failed/detached-20.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "failed",
+   "reason": "spaghetti strands of plastic",
+   "source": "model",
+   "latency_s": 33.89,
+   "raw": "{\"reason\": \"spaghetti strands of plastic\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/detached-21.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "failed",
+   "reason": "the bed is covered with tangled strands of plastic",
+   "source": "model",
+   "latency_s": 35.27,
+   "raw": "{\"reason\": \"the bed is covered with tangled strands of plastic\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/detached-22.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "failed",
+   "reason": "spaghetti strands of plastic",
+   "source": "model",
+   "latency_s": 33.66,
+   "raw": "{\"reason\": \"spaghetti strands of plastic\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/detached-23.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "failed",
+   "reason": "the bed is covered with tangled strands of plastic",
+   "source": "model",
+   "latency_s": 31.97,
+   "raw": "{\"reason\": \"the bed is covered with tangled strands of plastic\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/detached-24.jpg",
+   "label": "failed",
+   "kind": "detached",
+   "verdict": "failed",
+   "reason": "the blue object is connected to the black object with a blue wire",
+   "source": "model",
+   "latency_s": 30.38,
+   "raw": "{\"reason\": \"the blue object is connected to the black object with a blue wire\", \"verdict\": \"failed\"}"
+  },
+  {
+   "file": "failed/empty_bed-25.jpg",
+   "label": "failed",
+   "kind": "empty_bed",
+   "verdict": "ok",
+   "reason": "the bed is clean and flat",
+   "source": "model",
+   "latency_s": 30.83,
+   "raw": "{\"reason\": \"the bed is clean and flat\", \"verdict\": \"ok\"}"
+  },
+  {
+   "file": "failed/empty_bed-26.jpg",
+   "label": "failed",
+   "kind": "empty_bed",
+   "verdict": "ok",
+   "reason": "the bed is clean and smooth",
+   "source": "model",
+   "latency_s": 32.64,
+   "raw": "{\"reason\": \"the bed is clean and smooth\", \"verdict\": \"ok\"}"
+  }
+ ]
+}
