@@ -1,0 +1,47 @@
+"""Errors every adapter raises. Each carries a plain-language hint for the person."""
+
+
+class PrinterError(Exception):
+    """Base error. code is a short stable word scripts can match on."""
+
+    code = "printer"
+
+    def __init__(self, message: str, hint: str = ""):
+        super().__init__(message)
+        self.message = message
+        self.hint = hint
+
+    def __str__(self) -> str:
+        return f"{self.message}. {self.hint}".strip() if self.hint else self.message
+
+
+class Unreachable(PrinterError):
+    code = "unreachable"
+
+
+class AuthFailed(PrinterError):
+    code = "auth"
+
+
+class Refused(PrinterError):
+    """The printer, or this tool, refused the action (busy, wrong state, bad file)."""
+
+    code = "refused"
+
+
+class ProtocolError(PrinterError):
+    code = "protocol"
+
+
+class Unsupported(PrinterError):
+    code = "unsupported"
+
+
+class SafetyError(PrinterError):
+    """A safety rule blocked the action. Never retry around one of these."""
+
+    code = "safety"
+
+
+class ConfigError(PrinterError):
+    code = "config"
