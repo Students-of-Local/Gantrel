@@ -2,8 +2,8 @@
 
 GPL-3.0; API only. Older firmware authenticates with an API key (X-Api-Key). Newer firmware (MK4, XL,
 MINI, Core One) uses HTTP digest auth with the user "maker" and the password the printer shows in
-Settings, Network, PrusaLink. The adapter sends the key header and answers a digest challenge with the
-same secret, so either works. Digest answers go only to the printer's own address (net.request).
+Settings, Network, PrusaLink. The adapter tries the scheme the printer's challenge names, falls back
+to the other once, and from then on sends the secret only the way the printer accepted. Digest answers go only to the printer's own address (net.request).
 PrusaConnect is cloud and comes after v0.
 """
 
@@ -53,12 +53,24 @@ class PrusaLinkAdapter(Adapter):
         if scheme == "key":
             return net.request(method, self.base + path, headers={**extra, **self._h()}, what=self.cfg.name, **kw)
         try:
-            # Ask with neither first: the printer's challenge says which scheme it wants.
+            # Ask with neither first: the printer's challenge says which scheme to try first.
             realm = net.challenge(self.base + "/api/version", 3.0)
         except Exception:
             realm = ""
-        self.cfg.extra["auth"] = "digest" if realm.lower().startswith("digest") else "key"
-        return self._req(method, path, headers=extra, **kw)
+        # A digest challenge alone does not prove the secret is meant for digest. PrusaLink on an MK3
+        # Pi challenges with digest yet takes an API key. Try the scheme the challenge names, fall back
+        # to the other once, and keep whichever the printer accepted.
+        order = ("digest", "key") if realm.lower().startswith("digest") else ("key", "digest")
+        last: AuthFailed | None = None
+        for s in order:
+            self.cfg.extra["auth"] = s
+            try:
+                return self._req(method, path, headers=extra, **kw)
+            except AuthFailed as err:
+                last = err
+        self.cfg.extra.pop("auth", None)
+        assert last is not None
+        raise last
 
     def _get(self, path: str) -> dict:
         _, _, data = self._req("GET", path)

@@ -65,7 +65,7 @@ For "how is my printer" or "show me the camera", do steps 1, 2, 4 and 5 only, th
    | Prusa with PrusaLink | prusalink | The PrusaLink password or API key: printer menu Settings, Network, PrusaLink. Add --user if the login name is not maker. |
    | Bambu Lab | bambu | --serial (Settings, Device) and the LAN access code (Settings, Network). LAN-only mode and Developer Mode on. |
    | Elegoo Centauri Carbon, Saturn, Mars | elegoo | Only the IP address. The mainboard ID is found automatically. |
-   | Duet | duet | The board password, only if one was set (most have none). |
+   | Duet | duet | The board password, only if one was set (most have none). Pair in a terminal asks for it; press Enter when there is none. |
    | FlashForge Adventurer 5M, 5M Pro, AD5X | flashforge | --serial (Settings, About) and the check code shown in network settings once LAN-only mode is on. |
    | Snapmaker 2.0 | snapmaker | No code: accept the request on the touchscreen during pair. |
    | UltiMaker S3, S5, S7, UM3 | ultimaker | No code: allow Gantrel on the screen during pair. Gantrel can't upload to UltiMaker; the person sends the file from Cura or a USB stick. |

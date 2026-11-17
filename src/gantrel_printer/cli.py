@@ -110,6 +110,9 @@ def cmd_pair(args):
         print(cls.approval_prompt, file=sys.stderr)
     elif args.secret_stdin:
         secret = sys.stdin.readline().strip() or None
+    elif cls.asks_secret and sys.stdin.isatty():
+        # Optional (a Duet board password, a Moonraker key): an empty answer means it has none.
+        secret = getpass.getpass(f"{cls.secret_label}: ").strip() or None
     elif cls.needs_secret:
         if not sys.stdin.isatty():
             raise ConfigError(f"{cls.label} needs its {cls.secret_label}",

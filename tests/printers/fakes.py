@@ -268,6 +268,10 @@ def prusalink_routes(h: _Handler, method: str):
         # Newer Buddy firmware: digest auth (user maker) on every call, /api/version included.
         if not digest_ok(h, digest, "Printer API"):
             return digest_challenge(h, "Printer API")
+    elif getattr(h, "key_challenges_digest", False) and not h._authed():
+        # PrusaLink on an MK3 Pi: takes an API key, yet answers every unauthenticated call,
+        # /api/version included, with a digest challenge.
+        return digest_challenge(h, "Printer API")
     elif not (method == "GET" and url.path == "/api/version") and not h._authed():
         return h._send(401, {"title": "Unauthorized"})
     if method == "GET" and url.path == "/api/version":

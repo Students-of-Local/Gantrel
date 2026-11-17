@@ -551,3 +551,42 @@ def test_prusalink_digest_password_is_never_sent_as_an_api_key(prusa_digest, tmp
     a.upload(f, "part-0123456789ab.gcode")
     assert sent and all("X-Api-Key" not in h for h in sent)
     assert cfg.extra["auth"] == "digest"
+
+
+# ---------------------------------------------------------------- review round 2 (PR #5)
+
+
+def test_prusalink_api_key_still_works_when_the_printer_challenges_with_digest(monkeypatch):
+    # PrusaLink on an MK3 Pi takes an API key but answers unauthenticated calls with a digest challenge.
+    import io
+    import sys
+
+    brain = fakes.Brain(secret=SECRET)
+    srv = fakes.serve_http(brain, fakes.prusalink_routes, key_challenges_digest=True)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(SECRET + "\n"))
+    try:
+        assert _pair("mk3", "prusalink", srv.server_address[1], "--secret-stdin") == 0
+        cfg = config.load_all()["mk3"]
+        assert cfg.extra["auth"] == "key"
+        cfg.extra.pop("auth")  # a printer paired before the scheme was recorded
+        assert build(cfg, SECRET).status().state == "idle"
+    finally:
+        srv.shutdown()
+
+
+@pytest.mark.parametrize("typed", [SECRET, ""])
+def test_duet_pair_in_a_terminal_asks_for_the_optional_board_password(monkeypatch, typed):
+    import getpass
+    import sys
+
+    brain = fakes.Brain(secret=SECRET if typed else None)
+    duet = fakes.FakeDuet(brain)
+    asked = []
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(getpass, "getpass", lambda prompt: asked.append(prompt) or typed)
+    try:
+        assert _pair("duet1", "duet", duet.port) == 0
+    finally:
+        duet.http.shutdown()
+    assert asked and "Duet board password" in asked[0]
+    assert config.get_secret("duet1") == (SECRET if typed else None)

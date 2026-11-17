@@ -23,6 +23,8 @@ class Adapter(ABC):
     label: str = ""
     default_port: int = 80
     needs_secret: bool = False
+    # An optional secret: pair asks for it in a terminal and takes an empty answer as "none".
+    asks_secret: bool = False
     secret_label: str = "API key"
     # Honest record of what has been checked. "fake" means only against the fake in tests/printers.
     proven: str = "fake"

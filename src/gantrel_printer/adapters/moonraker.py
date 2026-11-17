@@ -24,6 +24,7 @@ class MoonrakerAdapter(Adapter):
     label = "Klipper (Moonraker)"
     default_port = 7125
     needs_secret = False  # optional API key, only when Moonraker's authorization requires it
+    asks_secret = True
     secret_label = "Moonraker API key (leave empty if your printer doesn't ask for one)"
     proven = "real hardware: Creality K2 (read-only status and camera via go2rtc), 2026-11-16"
 

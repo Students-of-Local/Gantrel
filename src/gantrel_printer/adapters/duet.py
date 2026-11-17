@@ -32,6 +32,7 @@ class DuetAdapter(Adapter):
     label = "Duet (RepRapFirmware)"
     default_port = 80
     needs_secret = False  # optional board password
+    asks_secret = True
     secret_label = "Duet board password (leave empty if it has none)"
 
     @property
