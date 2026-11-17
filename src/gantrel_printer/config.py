@@ -138,6 +138,7 @@ def delete_secret(name: str) -> None:
 # ---------------------------------------------------------------- watch settings (vision guard, notices)
 
 NOTIFY_KEY = "_notify_url"  # keyring name; printer names can't start with "_", so it never collides
+FONSVIVA_KEY = "_fonsviva_key"  # Gantrel's Fonsviva app key, sent as the bearer to the vision model
 
 
 def watch_settings_path() -> Path:

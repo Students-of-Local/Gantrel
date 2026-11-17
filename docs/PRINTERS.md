@@ -111,8 +111,12 @@ or more, and `ended` otherwise.
 
 ### Failure guard (`--guard`)
 
-With `--guard`, each frame taken while the printer reports printing goes to a vision model over an
-OpenAI-compatible `/v1/chat/completions` endpoint, by default Ollama at `http://127.0.0.1:11434/v1`.
+With `--guard`, each frame taken while the printer reports printing goes to a vision model through
+[Fonsviva](https://github.com/baney75/Fonsviva), like all of Gantrel's compute: Fonsviva's
+OpenAI-compatible `/v1/chat/completions` endpoint, by default `http://127.0.0.1:7341/v1`. Gantrel
+sends its own Fonsviva app key as the bearer. The guard is measured (below), off by default, and has
+not yet been run through a real Fonsviva install: every guard test uses a fake Fonsviva that requires
+the key.
 The prompt (in `src/gantrel_printer/guard.py`) gives the printer's state, progress and layer, lists
 spaghetti, a part loose from the bed, blobs, layer shift, a clog or no extrusion, and an empty bed
 during a print, and asks for `{"reason": "...", "verdict": "ok|suspect|failed"}`.
@@ -125,14 +129,27 @@ during a print, and asks for `{"reason": "...", "verdict": "ok|suspect|failed"}`
 - The watch reaches the printer through `monitor.PrinterHandle`, which exposes status, frames and
   pause only. It has no start, resume or cancel, and the tests fail if the watch calls any of them.
 - Frames are pictures of the person's home, so the vision URL must resolve to this machine or the
-  local network (loopback, private ranges, link-local, or Tailscale's 100.64.0.0/10). Gantrel stores
-  no key for it; a server that wants a bearer credential gets it from the `GANTREL_VISION_BEARER`
-  environment variable at run time.
+  local network (loopback, private ranges, link-local, or Tailscale's 100.64.0.0/10). Each request
+  looks the host up once, checks every address, and connects to that address, so a DNS answer that
+  changes between the check and the connection cannot send a frame or the key elsewhere. Over https
+  the certificate is still checked against the host name.
+- Gantrel's Fonsviva app key lives in the OS keyring, never in a file or a log. The person sets it
+  with `gantrel-printer watch-config --fonsviva-key-stdin` (approve the app first with
+  `fonsviva keys approve gantrel`; see [Connect to Fonsviva](setup/connect-fonsviva.md)).
+- Each verdict records where it ran: Fonsviva's host and port, the model asked for, and the model
+  and any `X-Fonsviva-*` headers Fonsviva sent back. They go in `guard.jsonl`, in `job.json` (the
+  last 50 verdicts under `guard.verdicts`), in `pause.json`, and in the watch log line.
+- If Fonsviva does not answer, refuses the key, has no key saved, or lacks the model, `watch --guard`
+  stops before it starts with an ERROR that names `fonsviva status`; run the watch again without
+  `--guard`, as the skill does.
+- Only a whole JSON object counts as an answer, with at most one Markdown code fence around it. An
+  array, or prose around the object, is malformed (suspect), so it never pauses.
 - If the pause call fails, the watch keeps going, retries on the next failed frame, and sends a
   `pause_failed` notice once.
 
-Set the model and URL once with `gantrel-printer watch-config --vision-url <url> --vision-model <model>`
-(saved in `watch.json` next to `printers.json`), or per run with `--vision-url` and `--vision-model`.
+Set the model once with `gantrel-printer watch-config --vision-model <model>` (saved in `watch.json`
+next to `printers.json`), or per run with `--vision-model`. `--vision-url` is only for Fonsviva at
+another address on the local network, such as another machine's Tailscale name.
 
 #### Which model (measured 2026-11-17)
 
@@ -172,9 +189,11 @@ the printer status in each frame's label (`benchmarks/guard_vision.py`; every an
 - The renders are cleaner than a real chamber camera. A model that passes here is a candidate, not
   proof that it catches real failures.
 
-Measure another model the same way and add its row:
+Measure another model the same way and add its row. The benchmark is a developer tool: it talks to a
+model server directly (the rows above ran against Ollama), with no Fonsviva key, so a model can be
+measured before it is offered through Fonsviva. The watch never does this.
 
-    uv run python benchmarks/guard_vision.py --url http://127.0.0.1:11434/v1 --model <model> --host "<machine and GPU>"
+    uv run python benchmarks/guard_vision.py --url <model server>/v1 --model <model> --host "<machine and GPU>"
     uv run python benchmarks/guard_vision.py --table
 
 One read-only real check: frame 5 of the K2 run (state complete, 100%, a finished vase on the bed)
@@ -191,10 +210,13 @@ Set one with:
     printf '%s\n' 'http://192.168.1.20:8123/api/webhook/<id>' | gantrel-printer watch-config --notify-url-stdin --notify-kind webhook
 
 The URL goes to the OS keyring, not a file, because webhook URLs often carry a token; `watch.json`
-keeps only the kind and the host. An ntfy topic gets a POST with Title, Priority and Tags headers, or
+keeps only the kind and the host. A notice that fails is logged with only `scheme://host:port` and
+the kind of error, never the path, query or user of the URL, in the foreground and in a background
+watch's `watch.log`. An ntfy topic gets a POST with Title, Priority and Tags headers, or
 a PUT with the last frame as an attachment. A webhook gets a JSON POST:
 `{"event", "title", "message", "printer", "file", "time", "frame": {"name", "content_type", "base64"}}`.
-The frame goes along only when the target is on the local network, or after
+The frame goes along only when the target is on the local network (decided on each send, from the
+same DNS answer the send connects to), or after
 `watch-config --attach-frame`: anyone who knows a public ntfy topic's name can read it, so use a
 long random topic name or a self-hosted ntfy server. `--no-attach-frame` turns frames off, and
 `--clear-notify` forgets the target. A notice that fails is logged and never stops the watch.

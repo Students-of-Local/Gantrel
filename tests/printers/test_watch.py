@@ -10,6 +10,7 @@ import base64
 import io
 import json
 import shutil
+import socket
 import subprocess
 import threading
 import time
@@ -96,7 +97,7 @@ def moon(tmp_path, tls_cert):
 def vision(replies, **kw):
     k = kw.pop("consecutive", 2)
     v = fakes.FakeVision(replies, **kw)
-    return v, vguard.VisionGuard(v.url, "fake-vl", timeout=10, consecutive=k)
+    return v, vguard.VisionGuard(v.url, "fake-vl", timeout=10, consecutive=k, key=v.key)
 
 
 def run_watch(rig, *, guard=None, notifier=None, n_stop=None, on_tick=None, **kw):
@@ -321,7 +322,7 @@ def test_the_watch_has_no_way_to_start_resume_or_cancel():
 @pytest.mark.parametrize("text,want", [
     (FAILED_JSON, ("failed", "spaghetti on the bed", "model")),
     ('```json\n{"verdict": "OK", "reason": "fine"}\n```', ("ok", "fine", "model")),
-    ('Sure. {"verdict": "suspect", "reason": "dark"}', ("suspect", "dark", "model")),
+    ('Sure. {"verdict": "suspect", "reason": "dark"}', ("suspect", "the model's answer was not JSON", "malformed")),
     ('{"verdict": "failed"}', ("failed", "", "model")),
     ("nope", ("suspect", "the model's answer was not JSON", "malformed")),
 ])
@@ -332,7 +333,7 @@ def test_parse_verdict(text, want):
 def test_vision_url_must_be_on_the_local_network(capsys):
     with pytest.raises(ConfigError, match="not on this machine or the local network"):
         vguard.VisionGuard("http://8.8.8.8/v1", "x").check()
-    vguard.check_local("http://127.0.0.1:11434/v1")
+    vguard.check_local("http://127.0.0.1:7341/v1")
     vguard.check_local("http://100.104.23.40:18091/v1")  # Tailscale address
     assert cli.main(["watch-config", "--vision-url", "http://8.8.8.8/v1"]) == cli.EXIT_ERROR
     assert not config.watch_settings_path().exists()
@@ -341,13 +342,13 @@ def test_vision_url_must_be_on_the_local_network(capsys):
 def test_guard_check_finds_a_missing_server_or_model_before_the_watch_starts():
     v = fakes.FakeVision([OK_JSON])
     try:
-        vguard.VisionGuard(v.url, "fake-vl").check()
-        with pytest.raises(ConfigError, match="ollama pull qwen-missing"):
-            vguard.VisionGuard(v.url, "qwen-missing").check()
+        vguard.VisionGuard(v.url, "fake-vl", key=v.key).check()
+        with pytest.raises(ConfigError, match="fonsviva models list --app gantrel"):
+            vguard.VisionGuard(v.url, "qwen-missing", key=v.key).check()
     finally:
         v.close()
-    with pytest.raises(ConfigError, match="did not answer"):
-        vguard.VisionGuard("http://127.0.0.1:9/v1", "x").check()
+    with pytest.raises(ConfigError, match="did not answer.*fonsviva status"):
+        vguard.VisionGuard("http://127.0.0.1:9/v1", "x", key="k").check()
 
 
 # ---------------------------------------------------------------- timelapse
@@ -430,10 +431,23 @@ def test_ntfy_gets_paused_by_guard_with_the_frame_attached(moon):
     assert got["body"] == (res.job_dir / "frames" / "000002.jpg").read_bytes()
 
 
-def test_a_target_outside_the_network_gets_no_frame_unless_asked():
-    assert notify.Notifier("http://8.8.8.8/topic", "ntfy").attach_frame is False
-    assert notify.Notifier("http://8.8.8.8/topic", "ntfy", attach_frame=True).attach_frame is True
-    assert notify.Notifier("http://127.0.0.1:1/topic").attach_frame is True
+def test_a_target_outside_the_network_gets_no_frame_unless_asked(monkeypatch, tmp_path):
+    """Whether the frame may go is decided on each send, from the one DNS answer that send connects to."""
+    hook = fakes.FakeHook()
+    frame = tmp_path / "f.jpg"
+    frame.write_bytes(GOOD[0].read_bytes())
+    real_connect = socket.socket.connect
+    # 8.8.8.8 stands for a public target; its connection is sent to the local fake hook instead.
+    monkeypatch.setattr(socket.socket, "connect",
+                        lambda self, sa: real_connect(self, ("127.0.0.1", hook.port) if sa[0] == "8.8.8.8" else sa))
+    try:
+        notify.Notifier(f"http://8.8.8.8:{hook.port}/topic", "webhook").send("finished", "k2", "m", frame=frame)
+        notify.Notifier(f"http://8.8.8.8:{hook.port}/topic", "webhook", attach_frame=True).send(
+            "finished", "k2", "m", frame=frame)
+        notify.Notifier(f"{hook.base}/topic", "webhook").send("finished", "k2", "m", frame=frame)
+    finally:
+        hook.close()
+    assert ["frame" in json.loads(g["body"]) for g in hook.got] == [False, True, True]
     assert notify.shown("https://hooks.example.com/services/T0/B0/xyz") == "https://hooks.example.com/..."
 
 
@@ -461,6 +475,7 @@ def test_cli_watch_then_frames(moon, capsys):
     config.set_secret(moon.cfg.name, moon.secret)
     pair_moon(moon)
     v, _ = vision([OK_JSON])
+    config.set_secret(config.FONSVIVA_KEY, v.key)
     timer = threading.Timer(0.8, lambda: setattr(moon.brain, "state", "complete"))
     timer.start()
     try:
@@ -471,7 +486,8 @@ def test_cli_watch_then_frames(moon, capsys):
         v.close()
     out = capsys.readouterr().out
     assert code == 0, out
-    assert "Guard on: fake-vl" in out and "guard ok" in out and "experimental" in out
+    assert "Guard on: fake-vl through Fonsviva" in out and "guard ok" in out and "experimental" in out
+    assert v.key not in out
     assert "ended: finished" in out and out.rstrip().splitlines()[-1].startswith("NEXT: ")
     assert cli.main(["frames", moon.cfg.name, "--json"]) == 0
     data = json.loads(capsys.readouterr().out)

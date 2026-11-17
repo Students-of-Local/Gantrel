@@ -101,6 +101,7 @@ class Result:
     timelapse_note: str = ""
     pause: dict = field(default_factory=dict)
     last_status: dict = field(default_factory=dict)
+    job: dict = field(default_factory=dict)  # job.json as written; the guard adds each verdict to it
 
 
 def now_iso() -> str:
@@ -254,7 +255,9 @@ def run(adapter, opts: WatchOptions, *, guard=None, notifier=None, job_dir: Path
                "pid": os.getpid(), "interval_s": opts.interval, "guard": None, "timelapse": opts.timelapse,
                "notify": opts.notify, "frames": 0}
         if guard:
-            job["guard"] = {"model": guard.model, "url": guard.url, "consecutive": guard.consecutive}
+            job["guard"] = {"model": guard.model, "url": guard.url, "consecutive": guard.consecutive,
+                            "ran_on": guard.ran_on(), "verdicts": []}
+        res.job = job
         write_json(job_dir / "job.json", job)
         try:
             _loop(handle, opts, guard, notifier, res, log, on_tick, sleep)
@@ -352,6 +355,7 @@ def _loop(handle, opts, guard, notifier, res, log, on_tick, sleep):
             verdict.update(frame=f"frames/{frame.name}", time=line["time"])
             line["verdict"] = verdict
             append_line(res.job_dir / "guard.jsonl", verdict)
+            _record_verdict(res, verdict)
             keep_ring(res.job_dir / "guard", frame, verdict, opts.ring)
             streak = streak + [verdict] if verdict["verdict"] == "failed" else []
         elif st.state != "printing":
@@ -382,11 +386,22 @@ def _loop(handle, opts, guard, notifier, res, log, on_tick, sleep):
                     pause_failed_sent = True
                 continue
             res.pause = {"time": now_iso(), "reason": streak[-1].get("reason", ""), "frames": streak,
-                         "model": guard.model, "consecutive": guard.consecutive}
+                         "model": guard.model, "ran_on": streak[-1].get("ran_on") or guard.ran_on(),
+                         "consecutive": guard.consecutive}
             write_json(res.job_dir / "pause.json", res.pause)
             res.outcome = "paused_by_guard"
             log(f"PAUSED {handle.name}: {res.pause['reason']}")
             return
+
+
+def _record_verdict(res: Result, verdict: dict, keep: int = 50) -> None:
+    """The last `keep` verdicts, each with where it ran, in job.json next to the guard settings."""
+    g = res.job.get("guard")
+    if not isinstance(g, dict):
+        return
+    keys = ("time", "frame", "verdict", "reason", "source", "latency_s", "ran_on")
+    g["verdicts"] = g.get("verdicts", [])[-(keep - 1):] + [{k: verdict.get(k) for k in keys}]
+    write_json(res.job_dir / "job.json", res.job)
 
 
 def _tick_text(st: Status, frame: Path | None, verdict: dict | None) -> str:
@@ -399,5 +414,9 @@ def _tick_text(st: Status, frame: Path | None, verdict: dict | None) -> str:
     bits.append(f"frame {frame.name}" if frame else "no frame")
     if verdict:
         bits.append(f"guard {verdict['verdict']}" + (f" ({verdict['reason']})" if verdict.get("reason") else ""))
+        ran = verdict.get("ran_on") or {}
+        if ran:
+            bits.append(f"[ran on {ran.get('via', '?')} at {ran.get('host', '?')}, model "
+                        f"{(ran.get('served') or {}).get('model') or ran.get('model', '?')}]")
     return " ".join(bits)
 

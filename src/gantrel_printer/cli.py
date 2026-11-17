@@ -362,7 +362,8 @@ def cmd_watch(args):
             print(line, flush=True)
 
     if guard and not quiet:
-        print(f"Guard on: {guard.model} at {guard.url}; pauses after {guard.consecutive} failed frames in a row.\n"
+        print(f"Guard on: {guard.model} through Fonsviva at {guard.host}; pauses after {guard.consecutive} "
+              "failed frames in a row.\n"
               + vguard.EXPERIMENTAL, flush=True)
     res = monitor.run(adapter, opts, guard=guard, notifier=notifier, job_dir=job_dir, log=log)
     nxt = {
@@ -468,6 +469,14 @@ def cmd_watch_config(args):
         if args.consecutive < 1:
             raise ConfigError("--consecutive must be 1 or more")
         vision["consecutive"] = args.consecutive
+    if args.fonsviva_key_stdin and args.notify_url_stdin:
+        raise ConfigError("--fonsviva-key-stdin and --notify-url-stdin both read stdin",
+                          "Run watch-config once for each")
+    if args.fonsviva_key_stdin:
+        key = sys.stdin.readline().strip()
+        if not key:
+            raise ConfigError("no Fonsviva key on stdin", "Pipe Gantrel's Fonsviva app key in; it is never printed")
+        config.set_secret(config.FONSVIVA_KEY, key)
     url = None
     if args.notify_url_stdin:
         url = sys.stdin.readline().strip()
@@ -485,12 +494,15 @@ def cmd_watch_config(args):
         data["notify"] = note = {}
     config.save_watch_settings(data)
     has_url = bool(config.get_secret(config.NOTIFY_KEY))
-    text = (f"Vision model: {vision.get('model', vguard.DEFAULT_MODEL)} at {vision.get('url', vguard.DEFAULT_URL)}, "
-            f"pause after {vision.get('consecutive', vguard.DEFAULT_CONSECUTIVE)} failed frames in a row.\n"
+    has_key = bool(config.get_secret(config.FONSVIVA_KEY))
+    text = (f"Vision model: {vision.get('model', vguard.DEFAULT_MODEL)} through Fonsviva at "
+            f"{vision.get('url', vguard.DEFAULT_URL)}, pause after "
+            f"{vision.get('consecutive', vguard.DEFAULT_CONSECUTIVE)} failed frames in a row.\n"
+            f"Fonsviva key: {'saved in the OS keyring' if has_key else 'not set'}.\n"
             + (f"Notices: {note.get('kind', 'auto')} to {note.get('target', 'a saved URL')}, frame attached: "
                f"{ {True: 'yes', False: 'no', None: 'only to a local address'}[note.get('attach_frame')] }."
                if has_url else "Notices: not set."))
-    out(args, {"vision": vision, "notify": {**note, "set": has_url}}, text,
+    out(args, {"vision": vision, "fonsviva_key": has_key, "notify": {**note, "set": has_url}}, text,
         "gantrel-printer watch <name> --timelapse --background" + (" --notify" if has_url else "")
         + " (add --guard only if the person asks for the experimental failure guard)")
 
@@ -575,7 +587,8 @@ def parser() -> argparse.ArgumentParser:
                     help="experimental: check each frame with a local vision model and pause after repeated failures")
     sp.add_argument("--timelapse", action="store_true", help="make timelapse.mp4 when the print ends (needs ffmpeg)")
     sp.add_argument("--notify", action="store_true", help="send a notice when it ends (set up with watch-config)")
-    sp.add_argument("--vision-url", help=f"OpenAI-compatible endpoint on your network (default {vguard.DEFAULT_URL})")
+    sp.add_argument("--vision-url", help=f"Fonsviva's OpenAI-compatible endpoint on your network "
+                                         f"(default {vguard.DEFAULT_URL})")
     sp.add_argument("--vision-model", help=f"vision model name (default {vguard.DEFAULT_MODEL})")
     sp.add_argument("--consecutive", type=int, help="failed frames in a row before the guard pauses (default 2)")
     sp.add_argument("--start-timeout", type=float, default=600.0,
@@ -590,9 +603,11 @@ def parser() -> argparse.ArgumentParser:
     sp.add_argument("name")
     sp.add_argument("--timelapse", metavar="JOB", help="(re)make the timelapse for one job")
     sp = add("watch-config", cmd_watch_config, "set the vision model and where notices go")
-    sp.add_argument("--vision-url")
+    sp.add_argument("--vision-url", help=f"Fonsviva's OpenAI-compatible endpoint (default {vguard.DEFAULT_URL})")
     sp.add_argument("--vision-model")
     sp.add_argument("--consecutive", type=int)
+    sp.add_argument("--fonsviva-key-stdin", action="store_true",
+                    help="read Gantrel's Fonsviva app key from stdin; it is kept in the OS keyring and never shown")
     sp.add_argument("--notify-url-stdin", action="store_true",
                     help="read the ntfy topic or webhook URL from stdin; it is kept in the OS keyring")
     sp.add_argument("--notify-kind", choices=list(notify.KINDS))

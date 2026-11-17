@@ -45,9 +45,10 @@ Calibration prints (`gantrel-printer calibrate <printer> first-layer|temp-tower|
 |---|---|
 | Frames and status every N seconds, ending with the print | Fake, for all 12 adapter types (`tests/printers/test_watch.py`). Real: one read-only 62 s run on the Creality K2 through go2rtc, 5 frames, with the printer idle after a finished print. Never watched a real print from start to end. |
 | Failure guard pauses after K failed frames, never on suspect or malformed answers, never resumes, starts or cancels | Fake only: a fake printer and a fake vision server. The guard has never paused a real printer. |
+| Guard runs through Fonsviva with Gantrel's app key from the OS keyring, sends frames only to a checked local address, and records where each verdict ran | Fake only: a fake Fonsviva that requires the key (`tests/printers/test_watch_review.py`). Fonsviva has not been run on a real host for this feature yet. Off by default. |
 | Vision models for the guard | Measured on 27 renders and 1 real K2 frame (table in [docs/PRINTERS.md](docs/PRINTERS.md#which-model-measured-2026-11-17)). None passed the gate (80% right, no good frame judged failed), so the guard is off unless the person asks for it and says it is experimental. The default, `gemma3:4b`, judged no good frame failed but caught only spaghetti (7 of 15 failed frames). |
 | Timelapse MP4 | Fake frames checked with ffprobe; real: the K2 run's 5-frame H.264 MP4. Needs ffmpeg. |
-| Notices to ntfy or a JSON webhook | Fake ntfy topic and webhook on 127.0.0.1 only. No real ntfy server has been tried. |
+| Notices to ntfy or a JSON webhook | Fake ntfy topic and webhook on 127.0.0.1 only. No real ntfy server has been tried. A failed notice logs only `scheme://host:port`, never the URL's token parts (tested in the foreground and in `watch.log`). |
 
 ## Not supported yet
 

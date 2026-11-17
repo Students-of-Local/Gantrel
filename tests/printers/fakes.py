@@ -96,9 +96,11 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    def _send(self, code: int, data=None, ctype="application/json"):
+    def _send(self, code: int, data=None, ctype="application/json", headers: dict | None = None):
         body = b"" if data is None else (data if isinstance(data, bytes) else json.dumps(data).encode())
         self.send_response(code)
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         if body:
             self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -1462,20 +1464,31 @@ class FakeFrameCamera:
         self.srv.shutdown()
 
 
-class FakeVision:
-    """An OpenAI-compatible /v1/chat/completions server answering from a script of reply texts.
+FONSVIVA_TEST_KEY = "fv-test-app-key-0123456789"
 
+
+class FakeVision:
+    """Stands in for Fonsviva's OpenAI-compatible /v1 API, answering from a script of reply texts.
+
+    Every request must carry `Authorization: Bearer <key>` (Gantrel's Fonsviva app key), or it gets
+    401, as Fonsviva answers an unknown app; key=None accepts any request. Replies carry an
+    X-Fonsviva-Machine header and a served model name, so tests can check where a verdict says it ran.
     The last reply repeats. reject_json_mode answers 400 to a request carrying response_format, as
     LM Studio does for json_object.
     """
 
-    def __init__(self, replies, reject_json_mode=False):
+    def __init__(self, replies, reject_json_mode=False, key: str | None = FONSVIVA_TEST_KEY):
         self.replies = list(replies)
         self.requests: list[dict] = []
+        self.auth: list[str] = []
         self.reject_json_mode = reject_json_mode
+        self.key = key
         fv = self
 
         def routes(h, method):
+            fv.auth.append(h.headers.get("Authorization", ""))
+            if fv.key and h.headers.get("Authorization") != "Bearer " + fv.key:
+                return h._send(401, {"error": {"message": "unknown app key"}})
             if method == "GET" and urllib.parse.urlsplit(h.path).path == "/v1/models":
                 return h._send(200, {"object": "list", "data": [{"id": "fake-vl", "object": "model"}]})
             if method != "POST" or urllib.parse.urlsplit(h.path).path != "/v1/chat/completions":
@@ -1485,9 +1498,10 @@ class FakeVision:
                 return h._send(400, {"error": "'response_format.type' must be 'json_schema' or 'text'"})
             fv.requests.append(body)
             text = fv.replies[min(len(fv.requests) - 1, len(fv.replies) - 1)]
-            return h._send(200, {"id": "x", "object": "chat.completion", "model": body.get("model"),
+            return h._send(200, {"id": "x", "object": "chat.completion", "model": f"served/{body.get('model')}",
                                  "choices": [{"index": 0, "message": {"role": "assistant", "content": text},
-                                              "finish_reason": "stop"}]})
+                                              "finish_reason": "stop"}]},
+                           headers={"X-Fonsviva-Machine": "fake-fonsviva-host"})
 
         self.srv = serve_http(Brain(), routes)
         self.url = f"http://127.0.0.1:{self.srv.server_address[1]}/v1"
@@ -1506,18 +1520,26 @@ class FakeVision:
 
 
 class FakeHook:
-    """A notice target (ntfy topic or JSON webhook) that records every request and answers "ok"."""
+    """A notice target (ntfy topic or JSON webhook) that records every request and answers "ok".
 
-    def __init__(self):
+    status other than 200 answers that code with the request path echoed in the body, as many servers
+    do on an error page.
+    """
+
+    def __init__(self, status: int = 200):
         self.got: list[dict] = []
+        self.port = 0
         fh = self
 
         def routes(h, method):
             fh.got.append({"method": method, "path": h.path, "headers": dict(h.headers), "body": h._body()})
+            if status != 200:
+                return h._send(status, f"no route for {h.path}".encode(), "text/plain")
             return h._send(200, b"ok", "text/plain")
 
         self.srv = serve_http(Brain(), routes)
-        self.base = f"http://127.0.0.1:{self.srv.server_address[1]}"
+        self.port = self.srv.server_address[1]
+        self.base = f"http://127.0.0.1:{self.port}"
 
     def close(self):
         self.srv.shutdown()

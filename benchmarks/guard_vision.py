@@ -7,6 +7,10 @@
 Sends every frame through the same VisionGuard.classify() the watch uses, with the printer status in
 its label, and writes benchmarks/results/guard-vision/<model>.json. The gate for shipping a model as
 the default: accuracy of 80% or more on failed vs not failed, and no good frame judged failed.
+
+This is a developer tool: it talks to a model server directly (such as Ollama), with no Fonsviva
+key, so models can be measured before they are offered through Fonsviva. The watch itself never
+does this; its guard runs only through Fonsviva (src/gantrel_printer/guard.py).
 """
 
 from __future__ import annotations
@@ -63,7 +67,7 @@ def main() -> int:
         return 0
     if not (args.url and args.model and args.host):
         ap.error("--url, --model and --host are needed to run a measurement")
-    guard = VisionGuard(args.url, args.model, timeout=args.timeout)
+    guard = VisionGuard(args.url, args.model, timeout=args.timeout, direct=True)
     guard.check()
     rows = []
     for item in labels():

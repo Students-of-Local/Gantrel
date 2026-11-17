@@ -131,11 +131,14 @@ the ones the problem needs:
   every 30 seconds until the print ends, then makes a timelapse video.
 - The failure guard is off unless the person asks for it. Then run
   `gantrel-printer watch <name> --guard --timelapse --background` instead. It sends each frame to a
-  local vision model. If two frames in a row show a failed print, it pauses the printer.
-  It never resumes, starts or cancels. Tell the person it is experimental: it misses many failed
-  prints, so they should still check the camera.
-- If watch prints ERROR about the vision model (no answer, or no such model), tell the person what
-  it said, then run the same command without `--guard` and say the failure guard is off.
+  local vision model through Fonsviva, with Gantrel's Fonsviva key. If two frames in a row show a
+  failed print, it pauses the printer. It never resumes, starts or cancels. Tell the person it is
+  experimental: it was measured and misses many failed prints, so they should still check the
+  camera. The guard has not yet run through a real Fonsviva install.
+- If watch prints ERROR about Fonsviva or the vision model (no answer, no key, key refused, or no
+  such model), tell the person what it said, including the `fonsviva status` check it names. Then run
+  the same command without `--guard` and say the failure guard is off.
+- Never set the Fonsviva key yourself; the person pipes it in with `watch-config --fonsviva-key-stdin`.
 - Add `--notify` only if `gantrel-printer watch-config` shows a Notices line that is not "not set".
   Never set a notice URL yourself; the person pipes it in with `watch-config --notify-url-stdin`.
 - When the person asks how the print is going, run `gantrel-printer frames <name>`. The newest job
