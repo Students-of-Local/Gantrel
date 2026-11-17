@@ -12,7 +12,7 @@ The parts and licenses are in [docs/STACK.md](docs/STACK.md), and the printer pl
 
 This repo is a Local Studio plugin package: `plugin.toml` at the root, with its skills in `skills/plugin/`. It adds one command to the Local Studio palette:
 
-- `/gantrel <what you want>` asks the model for a printable part. It loads the [smoothstone](https://github.com/baney75/smoothstone) skill, so the model drives the `stone` CLI: it picks a tested parametric recipe, sets its sizes, builds the STL with OpenSCAD and checks that it prints (watertight, one piece, flat base, walls, overhangs, size). The part lands in `stone-job/` in your project. No local model has finished a part through `/gantrel` yet; see [SUPPORTED.md](SUPPORTED.md) for what is proven.
+- `/gantrel <what you want>` asks the model for a printable part. It loads the [smoothstone](https://github.com/baney75/smoothstone) skill, so the model drives the `stone` CLI: it picks a tested parametric recipe, sets its sizes, builds the STL with OpenSCAD and checks that it prints (watertight, one piece, flat base, walls, overhangs, size). The part lands in `stone-job/` in your project. On the local fleet, LFM3-1.7B has made a 40 mm fan guard this way that passes every stone check; the LFM2.5 8B and 24B have not. See [SUPPORTED.md](SUPPORTED.md) for what is proven.
 
 Install:
 
