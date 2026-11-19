@@ -2,6 +2,8 @@
 
 Gantrel Studio is a local 3D viewport for one smoothstone job. It shows the part stone built, lets you change the recipe's settings with controls, rebuilds, and follows edits an agent makes from chat as they land on disk.
 
+![Gantrel Studio with a 120 mm fan guard, ready to print](images/studio-1280.png)
+
 ## Start it
 
 ```
