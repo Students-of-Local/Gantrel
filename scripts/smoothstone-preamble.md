@@ -8,6 +8,12 @@ the whole time: every step below works toward that one part.
 3. Keep going, one stone command per bash call, until stone says the part is ready. Run every
    command in the foreground and read its output before the next one: never run stone in the
    background, and use only the bash tool (there is no wait or jobs tool).
+4. When stone says the part is ready, run `gantrel-studio --job ./stone-job --detach` once. It
+   prints `Give the person this link: [Open Gantrel Studio](...)`. Put that Markdown link in your
+   reply exactly as printed, so they can turn the part and adjust its sizes. If that command is
+   not found, skip this step. Where the steps below say to stop when the part is ready, do this
+   step first, then stop.
 
-If bash prints `stone: command not found`, tell the person to install it with this one command,
-then stop: `uv tool install git+https://github.com/baney75/smoothstone@@SHA@`. Never install it yourself.
+If bash prints `stone: command not found`, tell the person stone is not installed, give them
+the install steps at https://github.com/baney75/Gantrel#local-studio-plugin (smoothstone commit
+`@SHA@`), then stop. Never install it yourself.
