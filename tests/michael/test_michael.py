@@ -172,6 +172,14 @@ class MichaelTests(unittest.TestCase):
         finally:
             store.close()
 
+    def test_single_lockfile_inventory_overflow_is_refused(self):
+        previous = self.run_repo()
+        packages = {str(i): {"version": "1"} for i in range(2001)}
+        (self.repo / "package-lock.json").write_text(json.dumps({"packages": packages}))
+        result = self.cli("assess-repo", str(self.repo), expected=2)
+        self.assertIn("inventory_limit", result.stderr)
+        self.assertEqual(json.loads(self.cli("findings").stdout)["run_id"], previous)
+
     def test_oversized_record_and_export_are_refused_before_creation(self):
         store = m.Store(self.state)
         try:

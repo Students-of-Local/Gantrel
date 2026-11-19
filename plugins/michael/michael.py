@@ -341,7 +341,7 @@ def scan_repo(target, scope, report_path=None):
                         packages = lock.get("packages", {})
                         if not isinstance(packages, dict):
                             raise ValueError()
-                        for package, metadata in list(packages.items())[:MAX_FILES]:
+                        for package, metadata in packages.items():
                             if not isinstance(metadata, dict) or not isinstance(package, str):
                                 continue
                             version = metadata.get("version", "")
