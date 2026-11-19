@@ -12,12 +12,25 @@ You can drive stone like tier M, and you can also write new recipes when no reci
 - In Gantrel the plugin ships this card, not the recipe sources. To write a new recipe, put a
   copy of them in a fixed cache folder outside the person's project. Each bash call may start a
   fresh shell, so write the full path every time instead of keeping it in a variable:
-  `git clone -q https://github.com/baney75/smoothstone ~/.cache/gantrel/smoothstone-fefce749a2e03f7094307da3347d868593dc63e8 2>/dev/null; git -C ~/.cache/gantrel/smoothstone-fefce749a2e03f7094307da3347d868593dc63e8 checkout -q fefce749a2e03f7094307da3347d868593dc63e8`.
-  Write the recipe in `~/.cache/gantrel/smoothstone-fefce749a2e03f7094307da3347d868593dc63e8/recipes/`, run
-  `cd ~/.cache/gantrel/smoothstone-fefce749a2e03f7094307da3347d868593dc63e8 && uv run python tools/sheet.py <name>` (from that folder, not `recipes/`),
-  and build with `STONE_RECIPES=~/.cache/gantrel/smoothstone-fefce749a2e03f7094307da3347d868593dc63e8/recipes stone build`.
-  Delete `~/.cache/gantrel/smoothstone-fefce749a2e03f7094307da3347d868593dc63e8` to clean up; nothing else uses it.
+  `git clone -q https://github.com/baney75/smoothstone ~/.cache/gantrel/smoothstone-45e05ce28634216c6d029fa1be26ee85ae9b6b15 2>/dev/null; git -C ~/.cache/gantrel/smoothstone-45e05ce28634216c6d029fa1be26ee85ae9b6b15 checkout -q 45e05ce28634216c6d029fa1be26ee85ae9b6b15`.
+  Write the recipe in `~/.cache/gantrel/smoothstone-45e05ce28634216c6d029fa1be26ee85ae9b6b15/recipes/`, run
+  `cd ~/.cache/gantrel/smoothstone-45e05ce28634216c6d029fa1be26ee85ae9b6b15 && uv run python tools/sheet.py <name>` (from that folder, not `recipes/`),
+  and build with `STONE_RECIPES=~/.cache/gantrel/smoothstone-45e05ce28634216c6d029fa1be26ee85ae9b6b15/recipes stone build`.
+  Delete `~/.cache/gantrel/smoothstone-45e05ce28634216c6d029fa1be26ee85ae9b6b15` to clean up; nothing else uses it.
+- Open views.png and look at every panel before you stop; if a panel shows a fault, say what and where, and fix it.
 - Stop when the request's part is built with stone and the build says Part ready.
+- Colors: if the build says NEXT: stone colors, run it, then run the NEXT line it prints; it already follows the colors in the request. Parts go by name: jacket=black rest=white. You may change the mapping after looking at regions.png, and check colors.png after it.
+
+## Research
+- Follow research.md in full: maker drawings and datasheets first, a second source for every
+  fit-critical number, clearances, a fit-test slice, a look list for likeness, and a real
+  museum scan before generating any famous artwork. Save every fact with stone note.
+
+## Figures and image models
+- The figure recipe takes a unit-height mesh (image_kind "figure"). stone builds it from photos
+  with src/smoothstone/figure.py: describe (LFM3-VL-2B), style (FLUX.2 klein 4B), lift
+  (tools/lift), repair. Every step is cached in the job's images/figure folder.
+- You may pass your own mesh: stone set figure figure=path/to/unit_height.stl.
 
 ## Recipe format
 - recipe.scad: one assignment per parameter at the top, with a comment that gives the unit, then
