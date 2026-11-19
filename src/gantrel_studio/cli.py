@@ -46,6 +46,12 @@ def url_for(port: int, launch_id: str) -> str:
     return f"http://127.0.0.1:{port}/?t={launch_id}"
 
 
+def announce(port: int, launch_id: str) -> None:
+    url = url_for(port, launch_id)
+    print(f"Gantrel Studio: {url}", flush=True)
+    print(f"Give the person this link: [Open Gantrel Studio]({url})", flush=True)
+
+
 def read_state(path: Path) -> dict | None:
     try:
         data = json.loads(path.read_text())
@@ -86,7 +92,7 @@ def detach(args: argparse.Namespace, job: Path) -> int:
     path = state_path(job)
     data = read_state(path)
     if data and alive(data, job):
-        print(f"Gantrel Studio: {url_for(int(data['port']), str(data['launch_id']))}", flush=True)
+        announce(int(data["port"]), str(data["launch_id"]))
         return 0
     path.unlink(missing_ok=True)
     state_dir().mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -104,7 +110,7 @@ def detach(args: argparse.Namespace, job: Path) -> int:
     while time.monotonic() < deadline:
         data = read_state(path)
         if data and data.get("pid") == proc.pid:
-            print(f"Gantrel Studio: {url_for(int(data['port']), str(data['launch_id']))}", flush=True)
+            announce(int(data["port"]), str(data["launch_id"]))
             return 0
         if proc.poll() is not None:
             break

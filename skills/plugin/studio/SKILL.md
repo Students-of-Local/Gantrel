@@ -15,8 +15,10 @@ The person has a working link to Gantrel Studio for this project's part, and kno
 
    `gantrel-studio --job ./stone-job --detach`
 
-2. It prints one line that starts with `Gantrel Studio: http://127.0.0.1:`. Give the person that
-   whole link exactly as printed. It carries a private key, so never shorten or change it.
+2. It prints a line that starts with `Give the person this link: [Open Gantrel Studio](`. Copy
+   everything after the colon, `[Open Gantrel Studio](...)`, into your reply exactly as printed.
+   That is a Markdown link, which Local Studio makes clickable. It carries a private key, so
+   never shorten or change it.
 3. Tell the person, in one or two sentences: open the link in Local Studio's browser pane or any
    browser on this computer. Turning the sliders rebuilds the part in about two seconds, and the
    changes you make from the chat show up there too.

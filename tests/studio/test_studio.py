@@ -455,9 +455,10 @@ def test_detach_returns_a_link_reuses_it_and_stop_ends_it(job, fake_stone, tmp_p
     first = run_cli("--job", str(job), "--detach", "--port", "0", env=env)
     try:
         assert first.returncode == 0, first.stderr
-        m = re.fullmatch(r"Gantrel Studio: http://127\.0\.0\.1:(\d+)/\?t=([A-Za-z0-9_-]{22})", first.stdout.strip())
+        m = re.fullmatch(r"Gantrel Studio: (http://127\.0\.0\.1:(\d+)/\?t=([A-Za-z0-9_-]{22}))\n"
+                         r"Give the person this link: \[Open Gantrel Studio\]\(\1\)\n", first.stdout)
         assert m, first.stdout
-        port, key = int(m.group(1)), m.group(2)
+        port, key = int(m.group(2)), m.group(3)
         conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
         conn.request("GET", f"/api/state?t={key}", headers={"Host": f"127.0.0.1:{port}"})
         assert conn.getresponse().status == 200

@@ -29,7 +29,7 @@ gantrel-studio --job ./stone-job --detach
 gantrel-studio --job ./stone-job --stop
 ```
 
-`--detach` starts the studio in its own session, prints the same one line, and returns at once, so an agent's shell call doesn't hang. Run it again for the same job and it prints the link of the studio already running instead of starting another. `--stop` ends it. The background studio keeps its port and key in `~/.cache/gantrel-studio/<job hash>.json` (mode 0600, in a 0700 folder) and its output in the matching `.log` (also 0600). The state file is removed when the studio stops, and the key is never written to the log.
+`--detach` starts the studio in its own session, prints the same line plus a ready Markdown link (`Give the person this link: [Open Gantrel Studio](...)`, since Local Studio makes only Markdown links clickable), and returns at once, so an agent's shell call doesn't hang. Run it again for the same job and it prints the link of the studio already running instead of starting another. `--stop` ends it. The background studio keeps its port and key in `~/.cache/gantrel-studio/<job hash>.json` (mode 0600, in a 0700 folder) and its output in the matching `.log` (also 0600). The state file is removed when the studio stops, and the key is never written to the log.
 
 It needs `stone` with `stone show <recipe> --json` (smoothstone after baney75/smoothstone#11) on `PATH`.
 
