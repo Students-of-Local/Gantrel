@@ -430,3 +430,50 @@ def test_real_stone_builds_through_the_studio(tmp_path):
     finally:
         httpd.shutdown()
         httpd.server_close()
+
+
+def test_a_part_that_fails_a_print_check_is_not_a_failed_build(studio, monkeypatch):
+    monkeypatch.setenv("FAKE_STONE_CHECKFAIL", "1")
+    assert studio.json("POST", "/api/params", {"params": {"size": 60}})[0] == 202
+    final = settled(studio)
+    assert final["error"] is None
+    assert final["check"]["passed"] is False
+    assert final["check"]["results"][0]["name"] == "bodies"
+    assert final["part"]["size_mm"][0] == 60
+
+
+# background studio
+
+
+def run_cli(*args, env):
+    return subprocess.run([sys.executable, "-m", "gantrel_studio.cli", *args], capture_output=True, text=True,
+                          timeout=30, env=env)
+
+
+def test_detach_returns_a_link_reuses_it_and_stop_ends_it(job, fake_stone, tmp_path):
+    env = {**os.environ, "XDG_CACHE_HOME": str(tmp_path / "cache")}
+    first = run_cli("--job", str(job), "--detach", "--port", "0", env=env)
+    try:
+        assert first.returncode == 0, first.stderr
+        m = re.fullmatch(r"Gantrel Studio: http://127\.0\.0\.1:(\d+)/\?t=([A-Za-z0-9_-]{22})", first.stdout.strip())
+        assert m, first.stdout
+        port, key = int(m.group(1)), m.group(2)
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        conn.request("GET", f"/api/state?t={key}", headers={"Host": f"127.0.0.1:{port}"})
+        assert conn.getresponse().status == 200
+        conn.close()
+        cache = tmp_path / "cache" / "gantrel-studio"
+        assert cache.stat().st_mode & 0o777 == 0o700
+        for f in cache.iterdir():
+            assert f.stat().st_mode & 0o777 == 0o600, f
+            if f.suffix == ".log":
+                assert key not in f.read_text()
+        again = run_cli("--job", str(job), "--detach", "--port", "0", env=env)
+        assert again.returncode == 0 and again.stdout == first.stdout
+    finally:
+        stopped = run_cli("--job", str(job), "--stop", env=env)
+    assert stopped.returncode == 0 and "Stopped" in stopped.stdout
+    with pytest.raises(OSError):
+        socket.create_connection(("127.0.0.1", port), timeout=2).close()
+    assert not list((tmp_path / "cache" / "gantrel-studio").glob("*.json"))
+    assert "No studio" in run_cli("--job", str(job), "--stop", env=env).stdout

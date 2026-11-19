@@ -20,6 +20,15 @@ Gantrel Studio: http://127.0.0.1:7342/?t=<token>
 
 The token is new on every launch. Open that exact URL; the page needs the token for every call it makes.
 
+### In the background
+
+```
+gantrel-studio --job ./stone-job --detach
+gantrel-studio --job ./stone-job --stop
+```
+
+`--detach` starts the studio in its own session, prints the same one line, and returns at once, so an agent's shell call doesn't hang. Run it again for the same job and it prints the link of the studio already running instead of starting another. `--stop` ends it. The background studio keeps its port and key in `~/.cache/gantrel-studio/<job hash>.json` (mode 0600, in a 0700 folder) and its output in the matching `.log` (also 0600). The state file is removed when the studio stops, and the key is never written to the log.
+
 It needs `stone` with `stone show <recipe> --json` (smoothstone after baney75/smoothstone#11) on `PATH`.
 
 ## Security rules
@@ -47,6 +56,6 @@ All JSON unless noted. Every `/api/*` path needs the token.
 | `GET /api/export/part.stl`, `GET /api/export/part.3mf` | Downloads named after the recipe. The 3MF is written from the STL in millimeters. |
 | `GET /api/printers` | Configured printers from `gantrel-printer` (name and kind), read only. |
 
-Builds run one at a time. Settings sent while a build runs are merged, and at most one more build follows with the latest values. When stone exits with an error, `error` holds the last 20 lines of its output.
+Builds run one at a time. Settings sent while a build runs are merged, and at most one more build follows with the latest values. When stone exits with an error, `error` holds the last 20 lines of its output. A part that built but fails a print check is not an error: `check` carries the failed check and its advice, and the page shows which one.
 
 The studio watches `brief.md`, `status.json`, `plan.json`, `build/params.json`, `build/check.json` and `build/part.stl` every 250 ms, so a change made from chat shows up on the page without a reload.

@@ -1,16 +1,16 @@
-# Open-source stack (planned)
+# Open-source stack
 
-Nothing here is built yet. This is the list of existing projects Gantrel v0 plans to assemble, in build order, with each license and how Gantrel uses it. Gantrel's own code stays MIT.
+Most of this is planned. three.js is in use now, in Gantrel Studio. This is the list of existing projects Gantrel v0 plans to assemble, in build order, with each license and how Gantrel uses it. Gantrel's own code stays MIT.
 
 | Build | Part | License | How Gantrel uses it |
 |---|---|---|---|
 | 1 | [t3code](https://github.com/pingdotgg/t3code) | MIT | Forked for the desktop app, projects, threads and provider layer. Upstream isn't taking big features, so Gantrel keeps a fork and rebases. |
-| 1 | [Local Studio](https://github.com/sybil-solutions/local-studio) | MIT | Sybil's t3code fork; its local provider code. |
-| 1 | [Backplane](https://github.com/BackplaneWorks/Backplane) | MIT | A t3code fork for agentic hardware design with KiCad and FreeCAD viewers. Reference for adding CAD panes and skills to a t3code fork. Its KiCad fork keeps KiCad's license (GPL-3.0) and isn't used. |
+| 1 | [Local Studio](https://github.com/baney75/local-studio) | MIT | A native local-LLM workspace (GTK4 and libadwaita on Linux, SwiftUI on macOS) on the Eukhe core. Gantrel ships first as its plugin, and Gantrel Studio opens in its browser panel. |
+| 1 | [Backplane](https://github.com/BackplaneWorks/Backplane) | MIT | A native Rust (GPUI) app for agentic hardware design, with a hub and KiCad and FreeCAD viewers. The pattern Gantrel takes: the agent shows a file in a viewer beside the chat, and the viewer follows every save. Its KiCad fork keeps KiCad's license (GPL-3.0) and isn't used. |
 | 2 | [build123d](https://github.com/gumyr/build123d), [CadQuery](https://github.com/CadQuery/cadquery) | Apache-2.0 | The CAD libraries the model writes code for. |
 | 2 | OpenCascade (OCP wheels) | LGPL-2.1 | Used unmodified as a library. |
 | 2, 9 | [bubblewrap](https://github.com/containers/bubblewrap) | LGPL-2.0+ | Sandbox on Linux for model-written scripts and agent-written adapters. macOS uses sandbox-exec. |
-| 3 | [three.js](https://github.com/mrdoob/three.js) | MIT | 3D viewer. |
+| 3 | [three.js](https://github.com/mrdoob/three.js) | MIT | 3D viewer. In use: Gantrel Studio vendors r170 unmodified in `src/gantrel_studio/web/vendor/three/`. |
 | 3 | occt-import-js | LGPL-2.1 | Opens STEP files in the viewer, unmodified. |
 | 3, 4, 13 | [trimesh](https://github.com/mikedh/trimesh) | MIT | Mesh import, checks and export. |
 | 4 | [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer), [PrusaSlicer](https://github.com/prusa3d/PrusaSlicer), [Creality Print](https://github.com/CrealityOfficial/CrealityPrint) | AGPL-3.0 | Slicing from the command line. Run as separate programs, not linked or modified. |

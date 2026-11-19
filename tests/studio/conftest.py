@@ -103,6 +103,12 @@ elif cmd == "build":
         sys.exit(1)
     size, t = float(merged["size"]), float(merged["thickness"])
     wj(job / "build" / "params.json", {"recipe": plan["recipe"], "params": merged})
+    if os.environ.get("FAKE_STONE_CHECKFAIL"):
+        wj(job / "build" / "check.json", {"passed": False, "size_mm": [size, size, t],
+           "results": [{"name": "bodies", "ok": False, "value": 2, "detail": "2 bodies (max 1)"}]})
+        (job / "build" / "part.stl").write_bytes(box_stl(size, size, t))
+        print("FIX: bodies 2 bodies (max 1)")
+        sys.exit(1)
     wj(job / "build" / "check.json", {"passed": True, "size_mm": [size, size, t],
        "results": [{"name": "watertight", "ok": True, "value": True, "detail": "closed surface"}]})
     (job / "build" / "part.stl").write_bytes(box_stl(size, size, t))
@@ -134,6 +140,7 @@ def fake_stone(tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_STONE_LOG", str(log))
     monkeypatch.delenv("FAKE_STONE_DELAY", raising=False)
     monkeypatch.delenv("FAKE_STONE_FAIL", raising=False)
+    monkeypatch.delenv("FAKE_STONE_CHECKFAIL", raising=False)
 
     class Fake:
         path = exe

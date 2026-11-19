@@ -1,6 +1,6 @@
 id = "gantrel"
-version = "0.1.0"
-description = "Gantrel for Local Studio: design 3D printable parts with a local model and the smoothstone recipes, then slice, upload and watch them on your printers"
+version = "0.2.0"
+description = "Gantrel for Local Studio: design 3D printable parts with a local model and the smoothstone recipes, see and adjust them live in Gantrel Studio, then slice, upload and watch them on your printers"
 skills = "skills/plugin"
 capabilities = []
 
@@ -13,3 +13,8 @@ skill = "smoothstone"
 name = "print"
 description = "Slice, upload and watch a print on your printer"
 skill = "printers"
+
+[[commands]]
+name = "studio"
+description = "See and adjust the part in 3D"
+skill = "studio"

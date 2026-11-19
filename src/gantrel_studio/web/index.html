@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gantrel Studio</title>
+<link rel="stylesheet" href="/static/studio.css">
+<script type="importmap">{"imports":{"three":"/static/vendor/three/three.module.min.js"}}</script>
+</head>
+<body>
+<div class="app">
+  <main class="viewport" aria-label="3D view of the part">
+    <canvas id="view"></canvas>
+    <p class="empty" id="empty" hidden>No part yet. Ask in the chat, for example: <code>/gantrel a guard for a 40 mm fan</code></p>
+    <div class="tools" role="toolbar" aria-label="View">
+      <button type="button" data-view="fit">Fit</button>
+      <button type="button" data-view="iso">3D</button>
+      <button type="button" data-view="top">Top</button>
+      <button type="button" data-view="front">Front</button>
+      <button type="button" id="overhangs" aria-pressed="false">Overhangs</button>
+    </div>
+  </main>
+  <aside class="panel">
+    <div class="label" id="title">Gantrel Studio</div>
+    <div class="dims" id="dims">&nbsp;</div>
+    <div class="status" id="status" role="status" aria-live="polite">Connecting</div>
+    <div class="error" id="error" hidden><p id="error-text"></p><details><summary>Details</summary><pre id="error-log"></pre></details></div>
+    <div class="actions">
+      <a class="primary" id="export-stl" href="#" download>Export STL</a>
+      <a class="quiet" id="export-3mf" href="#" download>3MF</a>
+    </div>
+    <form id="params" autocomplete="off"></form>
+    <button type="button" class="quiet reset" id="reset" hidden>Reset to defaults</button>
+    <details id="checks-box"><summary id="checks-summary">Print checks</summary><ul id="checks"></ul></details>
+    <p class="request" id="request"></p>
+  </aside>
+</div>
+<script type="module" src="/static/studio.js"></script>
+</body>
+</html>

@@ -295,8 +295,16 @@ class Studio:
             code, out = self.run_stone(*args)
             if code != 0:
                 return tail(out)
+        check = self.job / "build" / "check.json"
+        before = stamp(check)
         code, out = self.run_stone("build", *jobarg)
-        return tail(out) if code != 0 else None
+        if code == 0:
+            return None
+        # stone exits 1 when the part built but a print check failed; the checks carry that result.
+        after = read_json(check)
+        if stamp(check) != before and isinstance(after, dict) and after.get("results"):
+            return None
+        return tail(out)
 
     def threemf_bytes(self) -> bytes | None:
         f = self.job / "build" / "part.stl"
@@ -310,6 +318,14 @@ class Studio:
             return None
         self._3mf_cache = (key, data)
         return data
+
+
+def stamp(path: Path) -> tuple[int, int] | None:
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_size)
 
 
 def printers() -> list[dict]:

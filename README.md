@@ -10,30 +10,41 @@ The parts and licenses are in [docs/STACK.md](docs/STACK.md), and the printer pl
 
 ## Local Studio plugin
 
-This repo is a Local Studio plugin package: `plugin.toml` at the root, with its skills in `skills/plugin/`. It adds one command to the Local Studio palette:
+This repo is a Local Studio plugin package: `plugin.toml` at the root, with its skills in `skills/plugin/`. It adds three commands to the Local Studio palette:
 
 - `/gantrel <what you want>` asks the model for a printable part. It loads the [smoothstone](https://github.com/baney75/smoothstone) skill, so the model drives the `stone` CLI: it picks a tested parametric recipe, sets its sizes, builds the STL with OpenSCAD and checks that it prints (watertight, one piece, flat base, walls, overhangs, size). The part lands in `stone-job/` in your project. On the local fleet, LFM3-1.7B has made a 40 mm fan guard this way that passes every stone check; the LFM2.5 8B and 24B have not. See [SUPPORTED.md](SUPPORTED.md) for what is proven.
+- `/studio` opens Gantrel Studio on the part: a 3D view with soft studio light and a 220 mm build plate, every recipe size as a slider and a typed value, a rebuild in a few seconds, the print checks with what to fix, an overhang overlay, and STL or 3MF export. It follows the job folder, so a change the model makes from chat shows up without a reload. After stone builds a part, `/gantrel` also starts the studio and gives you its link. See [docs/STUDIO.md](docs/STUDIO.md).
 - `/print` loads the printers skill, so the model uses the `gantrel-printer` CLI to check a printer's status and camera, slice with that printer's profile, upload, pause, cancel or stop. Gantrel's tools never start or resume a print: you start it on the printer. See [docs/PRINTERS.md](docs/PRINTERS.md).
 
 Install:
 
-1. Install `stone` (it needs uv and OpenSCAD 2026 or newer):
+1. Install `stone` (it needs uv and OpenSCAD 2026 or newer). Install it from a clone: stone reads its recipes from the source folder, so a plain `uv tool install git+...` finds no recipes ([smoothstone#12](https://github.com/baney75/smoothstone/issues/12)):
 
    ```
-   uv tool install git+https://github.com/baney75/smoothstone@fefce749a2e03f7094307da3347d868593dc63e8
+   git clone https://github.com/baney75/smoothstone ~/.local/share/smoothstone
+   git -C ~/.local/share/smoothstone checkout 45e05ce28634216c6d029fa1be26ee85ae9b6b15
+   uv tool install -e ~/.local/share/smoothstone
    ```
 
-2. Put this repo in Local Studio's plugins folder. The folder must be named `gantrel`, the plugin id, so clone or copy it there; a symlink to a folder with another name fails the id check:
+   Check it: `stone recipes` lists 17 recipes.
+
+2. Install Gantrel's own tools, which include `gantrel-studio`:
+
+   ```
+   uv tool install git+https://github.com/baney75/Gantrel
+   ```
+
+3. Put this repo in Local Studio's plugins folder. The folder must be named `gantrel`, the plugin id, so clone or copy it there; a symlink to a folder with another name fails the id check:
 
    ```
    git clone https://github.com/baney75/Gantrel ~/.local-studio/plugins/gantrel
    ```
 
-3. Check it: `local-studio plugin validate ~/.local-studio/plugins/gantrel` prints `OK gantrel 0.1.0 (2 skills, 0 prompts, 2 commands)`.
+4. Check it: `local-studio plugin validate ~/.local-studio/plugins/gantrel` prints `OK gantrel 0.2.0 (3 skills, 0 prompts, 3 commands)`.
 
 The skill's first action is `stone status`; if that prints `stone: command not found`, the model is told to give you the install command and stop without installing anything. That step is not tested yet on a machine without `stone`.
 
-The skill is a copy of smoothstone's `skill/` folder, pinned to one commit. Pinned smoothstone: `fefce749a2e03f7094307da3347d868593dc63e8` ([skill at that commit](https://github.com/baney75/smoothstone/tree/fefce749a2e03f7094307da3347d868593dc63e8/skill)). Gantrel adds one first action to it: run `stone status` and follow its NEXT line. To move to another smoothstone commit:
+The skill is a copy of smoothstone's `skill/` folder, pinned to one commit. Pinned smoothstone: `45e05ce28634216c6d029fa1be26ee85ae9b6b15` ([skill at that commit](https://github.com/baney75/smoothstone/tree/45e05ce28634216c6d029fa1be26ee85ae9b6b15/skill)). Gantrel adds two steps to it: first run `stone status` and follow its NEXT line, and once the part is ready, start Gantrel Studio and give the person its link. To move to another smoothstone commit:
 
 ```
 scripts/sync-smoothstone.sh <sha or ref>
