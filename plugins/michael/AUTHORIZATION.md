@@ -4,6 +4,8 @@ Repository-controlled paths are retained only as opaque file fingerprints, never
 
 An inaccessible repository subtree refuses the assessment instead of reporting complete coverage. Symlink-loop resolution errors, including the older Python RuntimeError, produce fixed refusal codes. A scanner cannot be marked completed without a valid report; exit 1 without findings is a failed check. HTTPS contexts do not honor `SSLKEYLOGFILE` and retain certificate and hostname verification with system roots.
 
+Run the executable entrypoint or the documented `/usr/bin/python3 -I` invocation. Isolated startup excludes inherited PYTHONPATH and user-site modules before imports. An unisolated interpreter can execute injected modules before Michael starts, so it is outside the supported invocation. Scanner and local-rule evidence consistently count LF-delimited lines.
+
 The owner supplies an existing explicit allowlist. Michael never decides that a target is authorized because it responds, is on a LAN, or appears in repository text. Only the selected exact canonical repository root or exact service URL can be assessed. This example is a schema illustration; replace it only with systems you own or have permission to assess:
 
 ```json

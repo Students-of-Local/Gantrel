@@ -12,6 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check existing encryption dependency
-        run: /usr/bin/python3 -c 'import cryptography'
+        run: /usr/bin/python3 -I -c 'import cryptography'
       - name: Run fixture and refusal gates
-        run: /usr/bin/python3 -m unittest discover -s tests/michael -v
+        run: /usr/bin/python3 -I -m unittest discover -s tests/michael -v

@@ -14,9 +14,9 @@ A bounded repository assessment saved as encrypted records, with skipped checks 
 
 # Steps
 
-1. Locate this installed plugin folder, named michael. Check `python3 michael.py --help` from that folder; if Python or cryptography is absent, stop. Do not install tools.
+1. Locate this installed plugin folder, named michael. Check `/usr/bin/python3 -I /absolute/path/to/michael/michael.py --help` from that folder; if Python or cryptography is absent, stop. Do not install tools.
 2. Ask the owner for the scope file, repository path, and state directory if missing. Read the scope and confirm the requested exact canonical repository is listed. Never add a target or authorize it yourself.
-3. Run `python3 michael.py --state STATE --scope SCOPE assess-repo REPOSITORY` with the owner-supplied arguments as separate shell arguments. Add `--trivy-report REPORT` only when the owner supplied that existing local report.
+3. Run `/usr/bin/python3 -I /absolute/path/to/michael/michael.py --state STATE --scope SCOPE assess-repo REPOSITORY` with the owner-supplied arguments as separate shell arguments. Add `--trivy-report REPORT` only when the owner supplied that existing local report.
 4. On refusal, report the reason and stop this assessment. Do not try another scanner or broaden scope.
 5. Read the resulting run through the findings skill. Return the run id, check statuses, finding count, and limitations. A completed run never means secure.
 

@@ -64,7 +64,7 @@ class MichaelTests(unittest.TestCase):
         self.scope.write_text(json.dumps(self.scope_data))
 
     def cli(self, *arguments, expected=0, env=None):
-        result = subprocess.run([sys.executable, str(PACKAGE / "michael.py"), "--state", str(self.state), "--scope", str(self.scope), *arguments], text=True, capture_output=True, timeout=30, env=env)
+        result = subprocess.run([sys.executable, "-I", str(PACKAGE / "michael.py"), "--state", str(self.state), "--scope", str(self.scope), *arguments], text=True, capture_output=True, timeout=30, env=env)
         self.assertEqual(result.returncode, expected, result.stderr)
         self.assertTrue(self.seed not in result.stdout + result.stderr, "secret value appeared in command output")
         return result
@@ -298,6 +298,38 @@ class MichaelTests(unittest.TestCase):
                 run = json.loads(self.cli("findings").stdout)
                 check = next(c for c in run["checks"] if c["check"] == "gitleaks")
                 self.assertEqual(check["status"], "failed")
+
+    def test_scanner_locations_follow_lf_boundaries(self):
+        (self.repo / "a.py").write_text("# \v\u2028\n")
+        (self.repo / "b.py").write_text("api_key = '" + self.seed + "' # marker-for-b\n")
+        home = self.base / "line-scanner-home"
+        executable = home / ".local/bin/gitleaks"
+        executable.parent.mkdir(parents=True)
+        executable.write_text("#!/usr/bin/python3\nimport sys, json\n"
+                              "if sys.argv[1] == 'version':\n print('8.0.0')\n sys.exit(0)\n"
+                              "lines = sys.stdin.read().split('\\n')\n"
+                              "line = next(i for i, value in enumerate(lines, 1) if 'marker-for-b' in value)\n"
+                              "path = sys.argv[sys.argv.index('--report-path') + 1]\n"
+                              "open(path, 'w').write(json.dumps([{'StartLine': line}]))\n"
+                              "sys.exit(1)\n")
+        executable.chmod(0o700)
+        self.cli("assess-repo", str(self.repo), env=dict(os.environ, HOME=str(home)))
+        run = json.loads(self.cli("findings").stdout)
+        evidence = [f["evidence"] for f in run["findings"] if f["provenance"]["tool"] == "gitleaks"]
+        self.assertEqual([(e["location"], e["line"]) for e in evidence], [(m.path_label("b.py"), 1)])
+
+    def test_isolated_entrypoint_ignores_repository_pythonpath(self):
+        marker = self.base / "repository-code-executed"
+        payload = "open(" + repr(str(marker)) + ", 'w').write('executed')\n"
+        (self.repo / "argparse.py").write_text(payload)
+        (self.repo / "sitecustomize.py").write_text(payload)
+        environment = dict(os.environ, PYTHONPATH=str(self.repo))
+        self.cli("assess-repo", str(self.repo), env=environment)
+        self.assertFalse(marker.exists())
+        result = subprocess.run([str(PACKAGE / "michael.py"), "--help"],
+                                env=environment, capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 0)
+        self.assertFalse(marker.exists())
 
     def test_secret_bearing_symlink_loop_has_fixed_refusal(self):
         loop = self.base / self.seed

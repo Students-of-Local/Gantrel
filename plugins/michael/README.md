@@ -17,14 +17,14 @@ local-studio plugin validate "$HOME/.local-studio/plugins/michael"
 
 The manifest declares four skills and four commands: `/michael-repo`, `/michael-service`, `/michael-findings`, and `/michael-export`. The validator should print `OK michael 0.1.0 (4 skills, 0 prompts, 4 commands)`. An older GUI executable may lack the plugin CLI; use the matching Local Studio core CLI. Validation proves packaging, not a successful model-led assessment.
 
-Use `python3 /path/to/michael/michael.py --help` for the runner. There is no dashboard, background daemon, browser extension, account, telemetry, shell hook, or provider key.
+Use `/usr/bin/python3 -I /path/to/michael/michael.py --help` for the runner, or execute `michael.py` directly with its isolated shebang. Use these commands as written: isolated mode ignores repository-injected Python modules. The system interpreter must be at least Python 3.11 with `cryptography` available in isolated mode; check with `/usr/bin/python3 -I -c 'import cryptography'`. There is no dashboard, background daemon, browser extension, account, telemetry, shell hook, or provider key.
 
 ## First safe assessment
 
 Create a new empty scratch directory. The following Python creates only a deliberately weak owned fixture and scope. Run it there, outside any real repository:
 
 ```sh
-python3 - <<'PY'
+/usr/bin/python3 -I - <<'PY'
 import json
 from pathlib import Path
 repo = Path('fixture').absolute()
@@ -36,10 +36,10 @@ Path('scope.json').write_text(json.dumps({
     'repositories': [str(repo)], 'services': []
 }))
 PY
-python3 /path/to/michael/michael.py --state ./private-state --scope ./scope.json assess-repo "$PWD/fixture"
-python3 /path/to/michael/michael.py --state ./private-state findings --format markdown
-python3 /path/to/michael/michael.py --state ./private-state export --output ./assessment.michael
-python3 /path/to/michael/michael.py --state ./private-state findings --from-export ./assessment.michael
+/usr/bin/python3 -I /path/to/michael/michael.py --state ./private-state --scope ./scope.json assess-repo "$PWD/fixture"
+/usr/bin/python3 -I /path/to/michael/michael.py --state ./private-state findings --format markdown
+/usr/bin/python3 -I /path/to/michael/michael.py --state ./private-state export --output ./assessment.michael
+/usr/bin/python3 -I /path/to/michael/michael.py --state ./private-state findings --from-export ./assessment.michael
 ```
 
 The first command reports the run id and finding count. The next shows evidence locations, check statuses and remediation. All stored run/audit records and exports are AES-256-GCM encrypted. Terminal findings are decrypted in memory; keep the terminal private and do not redirect them into plaintext files. Exports require the originating state directory's report key. Michael never displays that key.
@@ -47,7 +47,7 @@ The first command reports the run id and finding count. The next shows evidence 
 For a service you own, list its exact canonical URL in the scope, such as `http://127.0.0.1:8765/`. Start only your own loopback fixture separately, then run:
 
 ```sh
-python3 /path/to/michael/michael.py --state ./private-state --scope ./scope.json assess-service http://127.0.0.1:8765/
+/usr/bin/python3 -I /path/to/michael/michael.py --state ./private-state --scope ./scope.json assess-service http://127.0.0.1:8765/
 ```
 
 HTTP outside loopback is refused. Private lab HTTPS must have a trusted certificate valid for its literal IP address. A self-signed untrusted certificate is refused. See [AUTHORIZATION.md](AUTHORIZATION.md) for full boundaries.
@@ -57,7 +57,7 @@ HTTP outside loopback is refused. Private lab HTTPS must have a trusted certific
 An existing Trivy JSON schema 2 report can be imported during a repository run:
 
 ```sh
-python3 /path/to/michael/michael.py --state ./private-state --scope ./scope.json assess-repo /absolute/owned/repo --trivy-report /absolute/authorized/offline-trivy.json
+/usr/bin/python3 -I /path/to/michael/michael.py --state ./private-state --scope ./scope.json assess-repo /absolute/owned/repo --trivy-report /absolute/authorized/offline-trivy.json
 ```
 
 This imports a historical snapshot. Michael does not execute Trivy, update its database, verify that its report matches the current tree, or interpret its untrusted descriptions. It retains only validated advisory identifiers, severity, package fingerprints and report provenance. A dependency fingerprint is the first 16 hex characters of SHA-256 of the report's `PkgName`; inventory package ids use the package-lock entry key. Compare locally against the original report to identify a dependency. No raw scanner message, snippet or credential field is stored. Database freshness remains unknown. Absence of an imported report is an explicit skipped check.

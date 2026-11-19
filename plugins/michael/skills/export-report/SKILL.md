@@ -14,9 +14,9 @@ A new encrypted report file with private permissions and the original assessment
 # Steps
 
 1. Locate the installed michael folder and confirm the owner's state directory and exact destination. Never read report.key or secret stores yourself.
-2. Run `python3 michael.py --state STATE export --run RUN_ID --output NEW_FILE` using separate arguments. Omit `--run` only for an explicitly requested latest report.
+2. Run `/usr/bin/python3 -I /absolute/path/to/michael/michael.py --state STATE export --run RUN_ID --output NEW_FILE` using separate arguments. Omit `--run` only for an explicitly requested latest report.
 3. The output must say `exported_encrypted`. Existing destinations are refused; choose another only with the owner's instruction.
-4. Read back with `python3 michael.py --state STATE findings --from-export NEW_FILE`. Verify the run id matches. This decrypts in memory for terminal viewing.
+4. Read back with `/usr/bin/python3 -I /absolute/path/to/michael/michael.py --state STATE findings --from-export NEW_FILE`. Verify the run id matches. This decrypts in memory for terminal viewing.
 5. Tell the owner the originating state key is required to read the export, and that no message or upload has been sent. Report the path and run id.
 
 # Rules and checks

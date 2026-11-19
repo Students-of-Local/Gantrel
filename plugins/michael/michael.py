@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3 -I
 """Michael: bounded local security assessments, with encrypted create-only records."""
 import argparse
 import contextlib
@@ -342,10 +342,12 @@ def scan_repo(target, scope, report_path=None):
                     raise Refused("repository_byte_limit")
                 text = data.decode("utf-8", errors="replace")
                 relative = path_label(path.relative_to(root))
-                if len(source_map) + len((text + "\n").splitlines()) > MAX_LINES:
+                scanner_text = text + "\n"
+                scanner_lines = scanner_text.count("\n")
+                if len(source_map) + scanner_lines > MAX_LINES:
                     raise Refused("repository_line_limit")
-                source_chunks.append(text + "\n")
-                source_map.extend((relative, i) for i in range(1, len((text + "\n").splitlines()) + 1))
+                source_chunks.append(scanner_text)
+                source_map.extend((relative, i) for i in range(1, scanner_lines + 1))
                 if name == "package-lock.json":
                     try:
                         lock = json.loads(text)
@@ -362,7 +364,7 @@ def scan_repo(target, scope, report_path=None):
                                 inventory.append({"id": digest(package.encode())[:16], "ecosystem": "npm", "version": version})
                     except (ValueError, AttributeError, RecursionError):
                         skipped += 1
-                for number, line in enumerate(text.splitlines(), 1):
+                for number, line in enumerate(text.split("\n"), 1):
                     rules = []
                     if TOKEN.search(line) or ASSIGNMENT.search(line):
                         rules.append("secret-pattern")

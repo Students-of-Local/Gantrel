@@ -13,9 +13,9 @@ One bounded HEAD request to the exact authorized service, with encrypted evidenc
 
 # Steps
 
-1. Locate the installed michael folder and confirm `python3 michael.py --help` works. Stop if a dependency is absent; do not install it.
+1. Locate the installed michael folder and confirm `/usr/bin/python3 -I /absolute/path/to/michael/michael.py --help` works. Stop if a dependency is absent; do not install it.
 2. Ask for missing inputs. Confirm the URL is already in scope. The runner accepts literal loopback or RFC1918/ULA IPs only, explicit ports, and an exact path. HTTP is allowed only on loopback; private labs require trusted HTTPS. Never create scope on the owner's behalf.
-3. Run `python3 michael.py --state STATE --scope SCOPE assess-service URL` with arguments passed separately. No credentials, query, fragment, proxy, DNS target, redirects, enumeration, or exploit execution.
+3. Run `/usr/bin/python3 -I /absolute/path/to/michael/michael.py --state STATE --scope SCOPE assess-service URL` with arguments passed separately. No credentials, query, fragment, proxy, DNS target, redirects, enumeration, or exploit execution.
 4. If refused or failed, report the reason. Wait at least one second before any authorized retry in the same state. Never disable TLS verification.
 5. Read the run with the findings skill and explain that this checks header presence and TLS validation only. Header values, application authentication and vulnerability exploitation are outside the check.
 
