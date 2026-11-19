@@ -120,6 +120,7 @@ def test_cli_prints_one_line_and_never_logs_the_token(job, fake_stone):
 
 @pytest.mark.parametrize("params", [
     {"size": 300},             # above max
+    {"size": 10**400},         # too big for a float
     {"size": 10},              # below min
     {"size": "60"},            # a string for a number
     {"size": True},            # a bool for a number
@@ -487,3 +488,24 @@ def test_a_stone_set_from_chat_shows_before_it_builds_and_survives_a_page_edit(s
     assert studio.json("POST", "/api/params", {"params": {"size": 60}})[0] == 202
     final = settled(studio)
     assert final["params"]["size"] == 60 and final["params"]["thickness"] == 4
+
+
+def test_ping_answers_with_the_token_only(studio):
+    assert studio.json("GET", "/api/ping")[0] == 200
+    conn = http.client.HTTPConnection("127.0.0.1", studio.port, timeout=10)
+    conn.request("GET", "/api/ping", headers={"Host": f"127.0.0.1:{studio.port}"})
+    assert conn.getresponse().status == 403
+    conn.close()
+
+
+def test_head_on_events_returns_at_once(studio):
+    conn = http.client.HTTPConnection("127.0.0.1", studio.port, timeout=5)
+    conn.request("HEAD", f"/api/events?t={studio.key}", headers={"Host": f"127.0.0.1:{studio.port}"})
+    resp = conn.getresponse()
+    assert resp.status == 200 and resp.read() == b""
+    conn.close()
+
+
+def test_host_must_be_loopback():
+    out = subprocess.run([sys.executable, "-m", "gantrel_studio.cli", "--host", "0.0.0.0"], capture_output=True, text=True)
+    assert out.returncode == 2 and "invalid choice" in out.stderr

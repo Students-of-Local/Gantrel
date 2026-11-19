@@ -420,6 +420,7 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/static/"):
             return self._static(path[len("/static/"):])
         routes = {
+            "/api/ping": lambda: self._json(200, {"ok": True}),
             "/api/state": lambda: self._json(200, self.studio.state()),
             "/api/part.stl": lambda: self._file(self.studio.job / "build" / "part.stl", "model/stl"),
             "/api/preview.png": lambda: self._file(self.studio.job / "build" / "preview.png", "image/png"),
@@ -466,6 +467,11 @@ class Handler(BaseHTTPRequestHandler):
     def _events(self) -> None:
         st = self.studio
         self.close_connection = True
+        if self.command == "HEAD":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            return
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-store")

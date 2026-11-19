@@ -148,10 +148,19 @@ function view(name) {
   render();
 }
 
+// Loads can finish out of order; only the newest request may replace the mesh.
 async function loadPart(url) {
-  const response = await fetch(api(url), { headers: { "X-Gantrel-Token": token } });
-  if (!response.ok) return;
-  const geometry = new STLLoader().parse(await response.arrayBuffer());
+  const ticket = (ui.loadTicket = (ui.loadTicket || 0) + 1);
+  let geometry;
+  try {
+    const response = await fetch(api(url), { headers: { "X-Gantrel-Token": token } });
+    if (!response.ok) throw new Error(`part ${response.status}`);
+    geometry = new STLLoader().parse(await response.arrayBuffer());
+  } catch {
+    if (ticket === ui.loadTicket) ui.partUrl = "";
+    return;
+  }
+  if (ticket !== ui.loadTicket) return;
   geometry.computeBoundingBox();
   const box = geometry.boundingBox;
   geometry.translate(-(box.min.x + box.max.x) / 2, -(box.min.y + box.max.y) / 2, -box.min.z);
@@ -252,7 +261,7 @@ function control(entry, value) {
     box.type = "checkbox";
     box.id = id;
     box.name = param.name;
-    box.checked = Boolean(value);
+    box.checked = value === true || value === "true";
     box.addEventListener("change", () => send(param));
     row.append(box);
   } else if (param.type === "number" || param.type === "int") {
@@ -395,7 +404,7 @@ function syncForm(state) {
       if (shown) shown.textContent = value ? String(value).split("/").pop() : "none";
       continue;
     }
-    if (param.type === "bool") field.checked = Boolean(value);
+    if (param.type === "bool") field.checked = value === true || value === "true";
     else if (param.type === "number" || param.type === "int") {
       field.value = trim(Number(value));
       const slider = wrap.querySelector('input[type="range"]');

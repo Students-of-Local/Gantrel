@@ -7,7 +7,7 @@ Gantrel Studio is a local 3D viewport for one smoothstone job. It shows the part
 ## Start it
 
 ```
-gantrel-studio [--job DIR] [--port 7342] [--host 127.0.0.1] [--no-open]
+gantrel-studio [--job DIR] [--port 7342] [--host 127.0.0.1|localhost] [--no-open] [--detach | --stop]
 ```
 
 - `--job` is the stone job folder (default `./stone-job`).
@@ -50,6 +50,7 @@ All JSON unless noted. Every `/api/*` path needs the token.
 | Call | What it does |
 | --- | --- |
 | `GET /`, `GET /static/<path>` | The page from `src/gantrel_studio/web/`. |
+| `GET /api/ping` | 200 when the token is right; `--detach` uses it to find a running studio. |
 | `GET /api/state` | The job: request, recipe, schema, current params, status, check, part (`url`, `size_mm`, `faces`), `building`, `error` and `version`. |
 | `GET /api/events` | Server-Sent Events. An `event: state` message at connect and each time `version` changes, and a keepalive comment every 15 s. |
 | `GET /api/part.stl`, `GET /api/preview.png` | The built part and its preview. |

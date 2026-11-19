@@ -31,7 +31,11 @@ def check_one(p: dict, value) -> str:
     if kind in NUMBER_TYPES:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ParamProblem(f"{name} needs a number")
-        if not math.isfinite(value):
+        try:
+            finite = math.isfinite(value)
+        except OverflowError:
+            finite = False
+        if not finite:
             raise ParamProblem(f"{name} needs a finite number")
         if kind == "int" and not float(value).is_integer():
             raise ParamProblem(f"{name} needs a whole number")

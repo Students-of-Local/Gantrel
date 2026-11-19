@@ -24,7 +24,7 @@ def make_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="gantrel-studio", description="Local 3D viewport for a smoothstone job.")
     p.add_argument("--job", default="./stone-job", help="job folder (default ./stone-job)")
     p.add_argument("--port", type=int, default=7342, help="first port to try; the next 10 are tried if it is taken")
-    p.add_argument("--host", default="127.0.0.1", help="address to bind (default 127.0.0.1)")
+    p.add_argument("--host", default="127.0.0.1", choices=("127.0.0.1", "localhost"), help="loopback address to bind (default 127.0.0.1)")
     p.add_argument("--no-open", action="store_true", help="do not open a browser")
     p.add_argument("--detach", action="store_true", help="run in the background, print the link and return at once; reuses a studio already running for this job")
     p.add_argument("--stop", action="store_true", help="stop the background studio for this job")
@@ -78,7 +78,7 @@ def alive(data: dict, job: Path) -> bool:
     except (OSError, ValueError):
         return False
     req = urllib.request.Request(
-        f"http://127.0.0.1:{int(data['port'])}/api/state",
+        f"http://127.0.0.1:{int(data['port'])}/api/ping",
         headers={"X-Gantrel-Token": str(data["launch_id"])},
     )
     try:

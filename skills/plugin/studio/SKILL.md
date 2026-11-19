@@ -16,7 +16,8 @@ The person has a working link to Gantrel Studio for this project's part, and kno
    `gantrel-studio --job ./stone-job --detach`
 
 2. It prints a line that starts with `Give the person this link: [Open Gantrel Studio](`. Copy
-   everything after the colon, `[Open Gantrel Studio](...)`, into your reply exactly as printed.
+   the text that starts with `[Open Gantrel Studio](` and ends with `)` into your reply, exactly
+   as printed.
    That is a Markdown link, which Local Studio makes clickable. It carries a private key, so
    never shorten or change it.
 3. Tell the person, in one or two sentences: open the link in Local Studio's browser pane or any

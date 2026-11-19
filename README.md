@@ -42,7 +42,7 @@ Install:
 
 4. Check it: `local-studio plugin validate ~/.local-studio/plugins/gantrel` prints `OK gantrel 0.2.0 (3 skills, 0 prompts, 3 commands)`.
 
-The skill's first action is `stone status`; if that prints `stone: command not found`, the model is told to give you the install command and stop without installing anything. That step is not tested yet on a machine without `stone`.
+The skill's first action is `stone status`; if that prints `stone: command not found`, the model is told to point you to these install steps and stop without installing anything. That step is not tested yet on a machine without `stone`.
 
 The skill is a copy of smoothstone's `skill/` folder, pinned to one commit. Pinned smoothstone: `45e05ce28634216c6d029fa1be26ee85ae9b6b15` ([skill at that commit](https://github.com/baney75/smoothstone/tree/45e05ce28634216c6d029fa1be26ee85ae9b6b15/skill)). Gantrel adds two steps to it: first run `stone status` and follow its NEXT line, and once the part is ready, start Gantrel Studio and give the person its link. To move to another smoothstone commit:
 
