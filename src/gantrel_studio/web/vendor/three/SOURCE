@@ -1,1 +1,3 @@
 three.js r170 (npm three@0.170.0), MIT. Files copied unmodified from the npm package: build/three.module.min.js, examples/jsm/controls/OrbitControls.js, examples/jsm/loaders/STLLoader.js, examples/jsm/environments/RoomEnvironment.js.
+
+sha256 of each file is pinned in tests/studio/test_vendor.py, checked against the npm tarball on 2026-11-18.
