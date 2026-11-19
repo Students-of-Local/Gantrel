@@ -1,0 +1,19 @@
+# Michael supported checks
+
+Status: first-slice runner and declarative package. No released application capability is implied. The named behavior suite is `python3 -m unittest discover -s tests/michael -v` from the Gantrel root. Individual test names below are the falsifiable gates; consult the PR's recorded command result for the tested revision.
+
+| Surface | Evidence and limits |
+| --- | --- |
+| Manifest | `test_manifest_and_skills_are_coherent`; Local Studio's real validator must separately print `OK michael 0.1.0 (4 skills, 0 prompts, 4 commands)` on the installed package path. The source package folder is also named michael. |
+| Safe local fixture and loopback headers | `test_safe_lab_pass`: generated weak source/config/lockfile and imported fixture report, plus a real loopback HEAD server. Connection attempts are restricted by the test to that fixture. |
+| Authorization refusal | `test_scope_refusal_pass_no_network_or_dns`, `test_public_allowlist_rejected`, `test_symlink_and_out_of_scope_repository_refused`. Refusal is checked before DNS or connect. |
+| Secret redaction | `test_secret_redaction_pass_all_generated_outputs`, `test_credentials_in_filenames_and_directories_are_not_disclosed`: runtime-generated fake credentials in source and paths are absent from stdout/stderr, decrypted JSON, Markdown, audit data, encrypted state files, and exports. Input fixtures deliberately contain the tokens. Repository paths become opaque fingerprints. No source snippets or scanner descriptions are retained. |
+| Source/config patterns | Dynamic Python eval, disabled verification, YAML privileged mode, and Terraform public ingress are shallow review hints. Their presence is tested; broad language/semantic security analysis is unsupported. External source lint is explicitly skipped. |
+| Gitleaks adapter | Real installed binary uses stdin and redacted in-memory JSON. Optional; absent binary is skipped. Default rules and scanner version are recorded. A completed scanner check is shown explicitly; a skipped check proves nothing. |
+| Dependency inventory | Numeric npm package-lock versions and hashed package entries only, capped at 2000 entries globally. `test_aggregate_inventory_limit_preserves_readable_state` verifies overflow refuses without poisoning existing state. No dependency resolution, full SBOM standard export, complete ecosystem support, or live advisory lookup. |
+| Known vulnerabilities | Existing Trivy schema 2 JSON imports validated CVE/GHSA ids and severity only. Report hash and scanner version, when present, are recorded. Snapshot freshness and match to current source are unverified. Without a report, the check is skipped. |
+| HTTP/TLS | Header presence, status, redirects recorded without following; HTTPS verifies against system trust. `test_wall_deadline_bounds_slow_response`, `test_redirect_is_never_followed`, `test_private_lab_requires_tls_and_verification`, `test_rate_limit_persists_across_processes`. Private physical lab TLS has not been tested live. |
+| Reports/audit | AES-GCM state and encrypted exports, create-only records, sequence/hash checks, exclusive output files, run comparison. `test_records_encrypted_and_tampering_refused`, `test_export_does_not_overwrite`, `test_audit_sequence_gap_refused`, `test_remediation_history`, `test_oversized_record_and_export_are_refused_before_creation`. Same-user/root rewrite or final-record truncation is outside the integrity guarantee. |
+| Local Studio model execution and GUI | Untested. No model has passed these four skills. Palette visibility and skill execution in the installed GUI are untested live. There is no dashboard or custom pane. Use the verified CLI only until a real local-model run is recorded. |
+
+No automatic security fix is supported. The runner writes only its selected state and new encrypted exports. Assessment results are review evidence, never a certificate that a system is secure.
