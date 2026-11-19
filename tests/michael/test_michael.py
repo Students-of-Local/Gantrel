@@ -63,10 +63,10 @@ class MichaelTests(unittest.TestCase):
     def write_scope(self):
         self.scope.write_text(json.dumps(self.scope_data))
 
-    def cli(self, *arguments, expected=0):
-        result = subprocess.run([sys.executable, str(PACKAGE / "michael.py"), "--state", str(self.state), "--scope", str(self.scope), *arguments], text=True, capture_output=True, timeout=30)
+    def cli(self, *arguments, expected=0, env=None):
+        result = subprocess.run([sys.executable, str(PACKAGE / "michael.py"), "--state", str(self.state), "--scope", str(self.scope), *arguments], text=True, capture_output=True, timeout=30, env=env)
         self.assertEqual(result.returncode, expected, result.stderr)
-        self.assertNotIn(self.seed, result.stdout + result.stderr)
+        self.assertTrue(self.seed not in result.stdout + result.stderr, "secret value appeared in command output")
         return result
 
     def run_repo(self):
@@ -282,6 +282,53 @@ class MichaelTests(unittest.TestCase):
         self.assertEqual(statuses["external-source-lint"], "skipped")
         self.assertEqual(run["status"], "completed_with_limits")
 
+    def test_scanner_failure_without_findings_is_not_completed(self):
+        home = self.base / "scanner-home"
+        executable = home / ".local/bin/gitleaks"
+        executable.parent.mkdir(parents=True)
+        for report in (None, "[]", "invalid-json"):
+            with self.subTest(report=report):
+                body = "#!/usr/bin/python3\nimport sys\nif sys.argv[1] == 'version':\n print('8.0.0')\n sys.exit(0)\n"
+                if report is not None:
+                    body += "open(sys.argv[sys.argv.index('--report-path') + 1], 'w').write(" + repr(report) + ")\n"
+                body += "sys.exit(1)\n"
+                executable.write_text(body)
+                executable.chmod(0o700)
+                self.cli("assess-repo", str(self.repo), env=dict(os.environ, HOME=str(home)))
+                run = json.loads(self.cli("findings").stdout)
+                check = next(c for c in run["checks"] if c["check"] == "gitleaks")
+                self.assertEqual(check["status"], "failed")
+
+    def test_secret_bearing_symlink_loop_has_fixed_refusal(self):
+        loop = self.base / self.seed
+        loop.symlink_to(loop.name)
+        self.scope_data["repositories"] = [str(loop)]
+        self.write_scope()
+        result = self.cli("assess-repo", str(loop), expected=2)
+        self.assertNotIn("Traceback", result.stderr)
+        output, errors = io.StringIO(), io.StringIO()
+        with patch.object(Path, "resolve", side_effect=RuntimeError("loop: " + self.seed)), contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+            try:
+                status = m.main(["--state", str(self.state), "--scope", str(self.scope), "assess-repo", str(loop)])
+            except RuntimeError:
+                status = None
+        self.assertEqual(status, 2, "legacy Python symlink error escaped refusal handling")
+        self.assertTrue(self.seed not in output.getvalue() + errors.getvalue(), "secret value appeared in refusal output")
+
+    def test_unreadable_subdirectory_refuses_incomplete_assessment(self):
+        if os.geteuid() == 0:
+            self.skipTest("requires unprivileged permission enforcement")
+        directory = self.repo / "unreadable"
+        directory.mkdir()
+        (directory / "source.py").write_text("eval(user_input)\n")
+        previous = self.run_repo()
+        directory.chmod(0)
+        try:
+            self.cli("assess-repo", str(self.repo), expected=2)
+            self.assertEqual(json.loads(self.cli("findings").stdout)["run_id"], previous)
+        finally:
+            directory.chmod(0o700)
+
     def test_redirect_is_never_followed(self):
         class Redirect(Handler):
             redirect = True
@@ -354,7 +401,14 @@ class MichaelTests(unittest.TestCase):
             url = f"https://127.0.0.1:{server.server_port}/"
             self.scope_data["services"] = [url]
             self.write_scope()
-            self.cli("assess-service", url, expected=2)
+            keylog = self.base / "tls-debug.log"
+            environment = dict(os.environ, SSLKEYLOGFILE=str(keylog))
+            self.cli("assess-service", url, expected=2, env=environment)
+            self.assertFalse(keylog.exists(), "TLS environment created an external plaintext log")
+            keylog.write_bytes(b"keep")
+            self.state = self.base / "second-state"
+            self.cli("assess-service", url, expected=2, env=environment)
+            self.assertEqual(keylog.read_bytes(), b"keep")
             self.assertEqual(Handler.hits, 0)
             store = m.Store(self.state)
             try:

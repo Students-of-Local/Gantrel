@@ -151,12 +151,21 @@ def scope_at(path):
         if not isinstance(scope[field], list) or len(scope[field]) > 32:
             raise Refused("invalid_scope")
     for repo in scope["repositories"]:
-        if not isinstance(repo, str) or not Path(repo).is_absolute() or str(Path(repo).resolve()) != repo:
+        if not isinstance(repo, str) or not Path(repo).is_absolute():
+            raise Refused("canonical_repository_required")
+        if str(resolve_repository(repo)) != repo:
             raise Refused("canonical_repository_required")
     for url in scope["services"]:
         if service_url(url)[0] != url:
             raise Refused("canonical_service_required")
     return scope, digest(canonical(scope))
+
+
+def resolve_repository(path):
+    try:
+        return Path(path).resolve()
+    except (RuntimeError, OSError) as error:
+        raise Refused("canonical_repository_required") from error
 
 
 def create_file(path, data, mode=0o400):
@@ -280,8 +289,10 @@ def open_directory(path):
 @contextlib.contextmanager
 def secure_walk(root):
     directory_fd = open_directory(root)
+    def traversal_error(error):
+        raise Refused("repository_traversal_failed") from error
     try:
-        yield os.fwalk(".", follow_symlinks=False, dir_fd=directory_fd)
+        yield os.fwalk(".", follow_symlinks=False, dir_fd=directory_fd, onerror=traversal_error)
     finally:
         os.close(directory_fd)
 
@@ -290,7 +301,7 @@ def scan_repo(target, scope, report_path=None):
     raw = Path(target)
     if any(p.is_symlink() for p in [raw.absolute(), *raw.absolute().parents]):
         raise Refused("repository_symlink")
-    root = raw.resolve()
+    root = resolve_repository(raw)
     if str(root) not in scope["repositories"] or not root.is_dir():
         raise Refused("repository_not_allowlisted")
     asset = "repo-" + digest(str(root).encode())[:16]
@@ -410,9 +421,17 @@ def gitleaks(data, locations, asset, assessed_root):
         if result.returncode not in {0, 1}:
             return [], {"check": "gitleaks", "status": "failed", "reason": "scanner_error", "provenance": origin}
         os.lseek(fd, 0, os.SEEK_SET)
-        report = json.loads(os.read(fd, MAX_REPORT + 1) or b"[]")
+        report_data = os.read(fd, MAX_REPORT + 1)
+        if not report_data or len(report_data) > MAX_REPORT:
+            return [], {"check": "gitleaks", "status": "failed", "reason": "scanner_report_missing_or_large", "provenance": origin}
+        try:
+            report = json.loads(report_data)
+        except (ValueError, UnicodeError, RecursionError):
+            return [], {"check": "gitleaks", "status": "failed", "reason": "scanner_report_invalid", "provenance": origin}
         if not isinstance(report, list) or len(report) > MAX_FINDINGS:
             raise Refused("scanner_report_limit")
+        if result.returncode == 1 and not report:
+            return [], {"check": "gitleaks", "status": "failed", "reason": "scanner_exit_without_findings", "provenance": origin}
         findings = []
         for item in report:
             line = item.get("StartLine") if isinstance(item, dict) else None
@@ -488,7 +507,10 @@ def assess_service(target, scope, store, scope_id):
         conn_type = http.client.HTTPSConnection if scheme == "https" else http.client.HTTPConnection
         options = {"timeout": NETWORK_TIMEOUT}
         if scheme == "https":
-            options["context"] = ssl.create_default_context()
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            context.verify_flags |= ssl.VERIFY_X509_STRICT
+            context.load_default_certs(ssl.Purpose.SERVER_AUTH)
+            options["context"] = context
         connection = conn_type(ip, port, **options)
         connection.request("HEAD", path, headers={"User-Agent": "Michael/" + VERSION, "Connection": "close"})
         response = connection.getresponse()
