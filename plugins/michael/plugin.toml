@@ -1,0 +1,25 @@
+id = "michael"
+version = "0.1.0"
+description = "Owner-authorized local security assessments with scoped checks, encrypted evidence, and explicit limits"
+skills = "skills"
+capabilities = []
+
+[[commands]]
+name = "michael-repo"
+description = "Assess an explicitly authorized local repository"
+skill = "assess-repo"
+
+[[commands]]
+name = "michael-service"
+description = "Check headers and TLS on an allowlisted local or private lab service"
+skill = "assess-service"
+
+[[commands]]
+name = "michael-findings"
+description = "Read findings, check status and remediation history"
+skill = "findings"
+
+[[commands]]
+name = "michael-export"
+description = "Export an encrypted assessment report"
+skill = "export-report"

@@ -1,0 +1,17 @@
+name: michael
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check existing encryption dependency
+        run: /usr/bin/python3 -I -c 'import cryptography'
+      - name: Run fixture and refusal gates
+        run: /usr/bin/python3 -I -m unittest discover -s tests/michael -v
