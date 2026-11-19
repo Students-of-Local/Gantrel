@@ -251,10 +251,10 @@ def test_events_follow_edits_made_on_disk(studio, job):
     first, _ = read_events(resp, lambda s: True)
     assert first[0]["params"]["size"] == 40
     time.sleep(0.5)  # long enough for a keepalive comment
-    # what the agent does from chat: rewrite the job files
-    built = json.loads((job / "build" / "params.json").read_text())
-    built["params"]["size"] = 55
-    (job / "build" / "params.json").write_text(json.dumps(built))
+    # what `stone set` does when the agent changes a size from chat
+    plan = json.loads((job / "plan.json").read_text())
+    plan["params"]["size"] = 55
+    (job / "plan.json").write_text(json.dumps(plan))
     states, ping = read_events(resp, lambda s: s["params"]["size"] == 55)
     assert ping and states[-1]["version"] > first[0]["version"]
     assert studio.httpd.studio.sse_clients == 1
@@ -478,3 +478,12 @@ def test_detach_returns_a_link_reuses_it_and_stop_ends_it(job, fake_stone, tmp_p
         socket.create_connection(("127.0.0.1", port), timeout=2).close()
     assert not list((tmp_path / "cache" / "gantrel-studio").glob("*.json"))
     assert "No studio" in run_cli("--job", str(job), "--stop", env=env).stdout
+
+
+def test_a_stone_set_from_chat_shows_before_it_builds_and_survives_a_page_edit(studio, job, fake_stone):
+    subprocess.run([str(fake_stone.path), "set", "--job", str(job), "fan_guard", "thickness=4"], check=True,
+                   capture_output=True)
+    assert wait_for(lambda: studio.json("GET", "/api/state")[1]["params"]["thickness"] == 4)
+    assert studio.json("POST", "/api/params", {"params": {"size": 60}})[0] == 202
+    final = settled(studio)
+    assert final["params"]["size"] == 60 and final["params"]["thickness"] == 4

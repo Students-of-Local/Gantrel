@@ -56,7 +56,7 @@ def tail(text: str, n: int = ERROR_LINES) -> str:
 
 
 def new_launch_id() -> str:
-    """The per-launch value every /api/* call must carry. New each launch, never written to disk."""
+    """The per-launch value every /api/* call must carry. New each launch; written only to the 0600 state file under --detach."""
     return secrets.token_urlsafe(16)
 
 
@@ -190,14 +190,15 @@ class Studio:
         return " ".join(lines)
 
     def current_params(self, recipe: str | None, schema: list[dict]) -> dict:
-        built = read_json(self.job / "build" / "params.json")
-        if recipe and isinstance(built, dict) and built.get("recipe") == recipe and isinstance(built.get("params"), dict):
-            return built["params"]
+        # plan.json is what the next build uses, so a `stone set` from chat shows before it builds.
         plan = self.plan() or {}
         if recipe and plan.get("recipe") == recipe:
             out = {p["name"]: p.get("default") for p in schema if isinstance(p, dict) and "name" in p}
             out.update(plan.get("params") or {})
             return out
+        built = read_json(self.job / "build" / "params.json")
+        if recipe and isinstance(built, dict) and built.get("recipe") == recipe and isinstance(built.get("params"), dict):
+            return built["params"]
         return {}
 
     def part_info(self) -> dict | None:

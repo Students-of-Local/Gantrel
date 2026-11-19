@@ -25,15 +25,20 @@ function api(path) {
 }
 
 async function post(path, body) {
-  const response = await fetch(api(path), {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Gantrel-Token": token },
-    body: JSON.stringify(body || {}),
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    showError("The studio refused that change.", text);
+  let problem = "";
+  try {
+    const response = await fetch(api(path), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Gantrel-Token": token },
+      body: JSON.stringify(body || {}),
+    });
+    if (!response.ok) problem = await response.text();
+  } catch (error) {
+    problem = String(error);
   }
+  if (!problem) return;
+  if (ui.state) renderState(ui.state);
+  showError("The studio refused that change.", problem);
 }
 
 const canvas = $("view");
@@ -117,8 +122,8 @@ function view(name) {
   const sphere = mesh.geometry.boundingSphere;
   const center = sphere.center.clone();
   const fov = THREE.MathUtils.degToRad(camera.fov);
-  const fit = Math.max(1, Math.min(camera.aspect, 1));
-  const distance = (sphere.radius / Math.sin(fov / 2) / fit) * 1.08;
+  const half = Math.atan(Math.tan(fov / 2) * Math.min(camera.aspect, 1));
+  const distance = (sphere.radius / Math.sin(half)) * 1.08;
   const directions = {
     fit: camera.position.clone().sub(controls.target).normalize(),
     iso: new THREE.Vector3(0.9, -1.3, 1.0).normalize(),
@@ -209,11 +214,12 @@ function trim(value) {
 function stepFor(param) {
   if (param.step) return param.step;
   if (param.type === "int") return 1;
-  return param.max - param.min > 50 ? 1 : 0.1;
+  return Number.isFinite(param.min) && Number.isFinite(param.max) && param.max - param.min > 50 ? 1 : 0.1;
 }
 
 function control(entry, value) {
-  const { param, help } = entry;
+  const { param } = entry;
+  let help = entry.help;
   const id = `p-${param.name}`;
   const wrap = document.createElement("div");
   wrap.className = "param";
@@ -238,7 +244,7 @@ function control(entry, value) {
     select.value = value;
     select.addEventListener("change", () => {
       applyConditions();
-      send();
+      send(param);
     });
     row.append(select);
   } else if (param.type === "bool") {
@@ -247,7 +253,7 @@ function control(entry, value) {
     box.id = id;
     box.name = param.name;
     box.checked = Boolean(value);
-    box.addEventListener("change", send);
+    box.addEventListener("change", () => send(param));
     row.append(box);
   } else if (param.type === "number" || param.type === "int") {
     const out = document.createElement("span");
@@ -256,8 +262,9 @@ function control(entry, value) {
     field.type = "number";
     field.id = id;
     field.name = param.name;
-    field.min = param.min;
-    field.max = param.max;
+    const bounded = Number.isFinite(param.min) && Number.isFinite(param.max);
+    if (Number.isFinite(param.min)) field.min = param.min;
+    if (Number.isFinite(param.max)) field.max = param.max;
     field.step = stepFor(param);
     field.value = trim(value);
     field.inputMode = "decimal";
@@ -275,27 +282,40 @@ function control(entry, value) {
     slider.addEventListener("input", () => {
       field.value = trim(Number(slider.value));
     });
-    slider.addEventListener("change", send);
+    slider.addEventListener("change", () => send(param));
+    let last = Number(value);
     field.addEventListener("change", () => {
-      const number = Math.min(param.max, Math.max(param.min, Number(field.value)));
-      if (Number.isNaN(number)) {
-        field.value = trim(Number(slider.value));
+      const typed = Number(field.value);
+      if (field.value.trim() === "" || !Number.isFinite(typed)) {
+        field.value = trim(last);
         return;
       }
+      let number = typed;
+      if (Number.isFinite(param.min)) number = Math.max(param.min, number);
+      if (Number.isFinite(param.max)) number = Math.min(param.max, number);
+      last = number;
       field.value = trim(number);
       slider.value = number;
-      send();
+      send(param);
     });
-    wrap.append(slider);
-  } else {
+    if (bounded) wrap.append(slider);
+  } else if (param.type === "text" || param.type === "string") {
     const field = document.createElement("input");
     field.type = "text";
     field.id = id;
     field.name = param.name;
     field.maxLength = 200;
     field.value = value ?? "";
-    field.addEventListener("change", send);
+    field.addEventListener("change", () => send(param));
     row.append(field);
+  } else {
+    // Pictures name files on disk, so they change only from the chat (stone image).
+    const shown = document.createElement("span");
+    shown.className = "fixed";
+    shown.textContent = value ? String(value).split("/").pop() : "none";
+    row.append(shown);
+    help = help ? `${help}. Change it from the chat.` : "Change it from the chat.";
+    wrap.classList.add("from-chat");
   }
   if (help) {
     const note = document.createElement("p");
@@ -347,23 +367,19 @@ function applyConditions() {
   });
 }
 
-function readForm() {
-  const params = {};
-  for (const { param } of ui.entries || []) {
-    const field = $("params").elements.namedItem(param.name);
-    if (!field) continue;
-    if (param.type === "bool") params[param.name] = field.checked;
-    else if (param.type === "number") params[param.name] = Number(field.value);
-    else if (param.type === "int") params[param.name] = Math.round(Number(field.value));
-    else params[param.name] = field.value;
-  }
-  return params;
+function readField(param) {
+  const field = $("params").elements.namedItem(param.name);
+  if (param.type === "bool") return field.checked;
+  if (param.type === "number") return Number(field.value);
+  if (param.type === "int") return Math.round(Number(field.value));
+  return field.value;
 }
 
-function send() {
+// Only the changed setting goes to the server; stone keeps every other value in plan.json.
+function send(param) {
   ui.sentAt = Date.now();
   setStatus("Building", "");
-  post("/api/params", { params: readForm() });
+  post("/api/params", { params: { [param.name]: readField(param) } });
 }
 
 function syncForm(state) {
@@ -374,6 +390,11 @@ function syncForm(state) {
     const wrap = form.querySelector(`.param[data-name="${CSS.escape(param.name)}"]`);
     if (!wrap || wrap.contains(document.activeElement)) continue;
     const field = form.elements.namedItem(param.name);
+    if (!field) {
+      const shown = wrap.querySelector(".fixed");
+      if (shown) shown.textContent = value ? String(value).split("/").pop() : "none";
+      continue;
+    }
     if (param.type === "bool") field.checked = Boolean(value);
     else if (param.type === "number" || param.type === "int") {
       field.value = trim(Number(value));

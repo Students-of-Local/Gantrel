@@ -74,7 +74,7 @@ legend { padding: 0; margin-bottom: 4px; font-size: 14px; font-weight: 600; colo
 .param .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
 .param label { min-width: 0; }
 .param .help { margin: 4px 0 0; font-size: 14px; color: var(--muted); }
-.param:not(:focus-within) .help { display: none; }
+.param:not(:focus-within):not(.from-chat) .help { display: none; }
 .value { display: inline-flex; align-items: center; gap: 4px; color: var(--sec); font-variant-numeric: tabular-nums; }
 .value input { width: 72px; padding: 4px 8px; min-height: 32px; text-align: right; background: var(--raised); border: 1px solid var(--line); border-radius: var(--r1); }
 .param input[type="range"] { display: block; width: 100%; height: 24px; margin: 4px 0 0; accent-color: var(--accent); }
@@ -97,3 +97,4 @@ summary { cursor: pointer; color: var(--sec); min-height: 24px; }
   .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: 48vh auto; height: auto; min-height: 100vh; }
   .panel { border-left: 0; border-top: 1px solid var(--line); padding: 16px; }
 }
+.fixed { color: var(--sec); max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

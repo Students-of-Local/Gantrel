@@ -119,10 +119,21 @@ def detach(args: argparse.Namespace, job: Path) -> int:
     return 1
 
 
+def ours(data: dict, job: Path) -> bool:
+    """The pid in the state file is still a gantrel-studio for this job (not a reused pid)."""
+    if data.get("job") != str(job.resolve()):
+        return False
+    try:
+        out = subprocess.run(["ps", "-o", "command=", "-p", str(int(data["pid"]))], capture_output=True, text=True, timeout=5)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return False
+    return "gantrel_studio" in out.stdout and str(job.resolve()) in out.stdout
+
+
 def stop(job: Path) -> int:
     path = state_path(job)
     data = read_state(path)
-    if not data or not alive(data, job):
+    if not data or not ours(data, job):
         path.unlink(missing_ok=True)
         print("No studio is running for this job.")
         return 0

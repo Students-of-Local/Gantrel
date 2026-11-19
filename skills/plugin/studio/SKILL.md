@@ -20,7 +20,7 @@ The person has a working link to Gantrel Studio for this project's part, and kno
    That is a Markdown link, which Local Studio makes clickable. It carries a private key, so
    never shorten or change it.
 3. Tell the person, in one or two sentences: open the link in Local Studio's browser pane or any
-   browser on this computer. Turning the sliders rebuilds the part in about two seconds, and the
+   browser on this computer. Moving a slider rebuilds the part in a few seconds for most parts (a figure can take minutes), and the
    changes you make from the chat show up there too.
 
 If there is no part yet, the studio still opens and shows how to start one. Make the part with
