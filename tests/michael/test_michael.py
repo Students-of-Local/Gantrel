@@ -231,6 +231,35 @@ class MichaelTests(unittest.TestCase):
         self.cli("export", "--output", str(output), expected=2)
         self.assertEqual(output.read_bytes(), b"keep")
 
+    def test_export_inside_state_refused_without_poisoning_history(self):
+        previous = self.run_repo()
+        for name in ("report.record", None):
+            destination = self.state / (name or f"{len(list(self.state.glob('*.record'))):08d}.record")
+            self.cli("export", "--output", str(destination), expected=2)
+            if name:
+                self.assertFalse(destination.exists())
+            self.assertEqual(json.loads(self.cli("findings").stdout)["run_id"], previous)
+
+    def test_partial_write_failure_preserves_previous_run(self):
+        previous = self.run_repo()
+        store = m.Store(self.state)
+        original = os.fdopen
+        @contextlib.contextmanager
+        def partial_stream(fd, *args, **kwargs):
+            with original(fd, *args, **kwargs) as stream:
+                class FailedWrite:
+                    def write(self, data):
+                        stream.write(data[:7])
+                        stream.flush()
+                        raise OSError("fixture partial write failure")
+                yield FailedWrite()
+        try:
+            with patch.object(os, "fdopen", partial_stream), self.assertRaises(OSError):
+                store.append({"kind": "fixture"})
+        finally:
+            store.close()
+        self.assertEqual(json.loads(self.cli("findings").stdout)["run_id"], previous)
+
     def test_audit_sequence_gap_refused(self):
         self.run_repo()
         (self.state / "00000000.record").rename(self.base / "moved.record")
@@ -273,6 +302,9 @@ class MichaelTests(unittest.TestCase):
         self.assertEqual(after["history"]["previous_run"], before["run_id"])
         self.assertTrue(after["history"]["no_longer_observed"])
         self.assertTrue(after["history"]["still_observed"])
+        report = self.cli("findings", "--format", "markdown").stdout
+        self.assertIn(before["run_id"], report)
+        self.assertIn(after["history"]["no_longer_observed"][0], report)
 
     def test_skipped_checks_are_visible(self):
         self.cli("assess-repo", str(self.repo))
@@ -317,6 +349,23 @@ class MichaelTests(unittest.TestCase):
         run = json.loads(self.cli("findings").stdout)
         evidence = [f["evidence"] for f in run["findings"] if f["provenance"]["tool"] == "gitleaks"]
         self.assertEqual([(e["location"], e["line"]) for e in evidence], [(m.path_label("b.py"), 1)])
+
+    def test_local_and_scanner_findings_share_aggregate_limit(self):
+        repository = self.base / "many-findings"
+        repository.mkdir()
+        (repository / "source.py").write_text("eval(user_input)\n" * 1999 + "value = 1\nvalue = 2\n")
+        self.scope_data["repositories"].append(str(repository))
+        self.write_scope()
+        home = self.base / "finding-scanner-home"
+        executable = home / ".local/bin/gitleaks"
+        executable.parent.mkdir(parents=True)
+        executable.write_text("#!/usr/bin/python3\nimport sys\n"
+                              "if sys.argv[1] == 'version':\n print('8.0.0')\n sys.exit(0)\n"
+                              "open(sys.argv[sys.argv.index('--report-path')+1], 'w').write('[{\"StartLine\":2000},{\"StartLine\":2001}]')\n"
+                              "sys.exit(1)\n")
+        executable.chmod(0o700)
+        result = self.cli("assess-repo", str(repository), expected=2, env=dict(os.environ, HOME=str(home)))
+        self.assertIn("finding_limit", result.stderr)
 
     def test_isolated_entrypoint_ignores_repository_pythonpath(self):
         marker = self.base / "repository-code-executed"
@@ -418,7 +467,12 @@ class MichaelTests(unittest.TestCase):
         certificate = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
                        .serial_number(x509.random_serial_number()).not_valid_before(now - timedelta(minutes=1))
                        .not_valid_after(now + timedelta(hours=1)).add_extension(x509.SubjectAlternativeName([
-                           x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]), critical=False).sign(key, hashes.SHA256()))
+                           x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]), critical=False)
+                       .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+                       .add_extension(x509.KeyUsage(True, False, True, False, False, True, True, None, None), critical=True)
+                       .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+                       .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(key.public_key()), critical=False)
+                       .sign(key, hashes.SHA256()))
         key_file, cert_file = self.base / "fixture.key", self.base / "fixture.pem"
         key_file.write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
         cert_file.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
@@ -441,6 +495,18 @@ class MichaelTests(unittest.TestCase):
             self.state = self.base / "second-state"
             self.cli("assess-service", url, expected=2, env=environment)
             self.assertEqual(keylog.read_bytes(), b"keep")
+            trusted = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            trusted.verify_flags |= ssl.VERIFY_X509_STRICT
+            trusted.load_verify_locations(cafile=str(cert_file))
+            with socket.create_connection(("127.0.0.1", server.server_port)) as raw:
+                with trusted.wrap_socket(raw, server_hostname="127.0.0.1") as connection:
+                    self.assertTrue(connection.getpeercert())
+                    connection.sendall(b"HEAD / HTTP/1.0\r\n\r\n")
+                    self.assertIn(b"200", connection.recv(4096))
+            Handler.hits = 0
+            self.state = self.base / "override-state"
+            overrides = dict(os.environ, SSL_CERT_FILE=str(cert_file), SSL_CERT_DIR=str(self.base / "absent"))
+            self.cli("assess-service", url, expected=2, env=overrides)
             self.assertEqual(Handler.hits, 0)
             store = m.Store(self.state)
             try:

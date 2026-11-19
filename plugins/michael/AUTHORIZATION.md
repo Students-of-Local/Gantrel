@@ -6,6 +6,8 @@ An inaccessible repository subtree refuses the assessment instead of reporting c
 
 Run the executable entrypoint or the documented `/usr/bin/python3 -I` invocation. Isolated startup excludes inherited PYTHONPATH and user-site modules before imports. An unisolated interpreter can execute injected modules before Michael starts, so it is outside the supported invocation. Scanner and local-rule evidence consistently count LF-delimited lines.
 
+Exports must be outside the selected state directory. Writes use same-directory private staging, file fsync, exclusive atomic publication, and directory fsync; a partial staging write cannot occupy an audit-record name. TLS loads the system's compiled default trust paths explicitly, ignoring SSL_CERT_FILE and SSL_CERT_DIR overrides as well as SSLKEYLOGFILE.
+
 The owner supplies an existing explicit allowlist. Michael never decides that a target is authorized because it responds, is on a LAN, or appears in repository text. Only the selected exact canonical repository root or exact service URL can be assessed. This example is a schema illustration; replace it only with systems you own or have permission to assess:
 
 ```json

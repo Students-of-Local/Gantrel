@@ -169,11 +169,22 @@ def resolve_repository(path):
 
 
 def create_file(path, data, mode=0o400):
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, mode)
-    with os.fdopen(fd, "wb") as stream:
-        stream.write(data)
-        stream.flush()
-        os.fsync(stream.fileno())
+    path = Path(path)
+    temporary = path.with_name(".michael-write-" + secrets.token_hex(12))
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, mode)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary, path, follow_symlinks=False)
+    finally:
+        temporary.unlink()
+    directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
 
 
 class Store:
@@ -247,6 +258,8 @@ class Store:
         raise Refused("run_not_found")
 
     def export(self, run, destination):
+        if resolve_repository(destination).is_relative_to(resolve_repository(self.root)):
+            raise Refused("export_inside_state")
         blob = self.seal(run, b"michael-export-v1", b"MICHAEL1")
         create_file(Path(destination), blob)
 
@@ -386,6 +399,8 @@ def scan_repo(target, scope, report_path=None):
               {"check": "external-source-lint", "status": "skipped", "reason": "no_external_linter_executed"}]
     external, scanner_check = gitleaks("".join(source_chunks).encode(), source_map, asset, root)
     findings.extend(external)
+    if len(findings) > MAX_FINDINGS:
+        raise Refused("finding_limit")
     checks.append(scanner_check)
     if report_path:
         imported, origin = trivy_report(report_path, asset)
@@ -511,7 +526,12 @@ def assess_service(target, scope, store, scope_id):
         if scheme == "https":
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             context.verify_flags |= ssl.VERIFY_X509_STRICT
-            context.load_default_certs(ssl.Purpose.SERVER_AUTH)
+            defaults = ssl.get_default_verify_paths()
+            cafile = defaults.openssl_cafile if defaults.openssl_cafile and Path(defaults.openssl_cafile).is_file() else None
+            capath = defaults.openssl_capath if defaults.openssl_capath and Path(defaults.openssl_capath).is_dir() else None
+            if not cafile and not capath:
+                raise Refused("system_trust_unavailable")
+            context.load_verify_locations(cafile=cafile, capath=capath)
             options["context"] = context
         connection = conn_type(ip, port, **options)
         connection.request("HEAD", path, headers={"User-Agent": "Michael/" + VERSION, "Connection": "close"})
@@ -556,6 +576,10 @@ def markdown(run):
              "No finding does not establish security. Skipped and imported checks retain their limits.", ""]
     for check in run["checks"]:
         lines.append(f"- {check['check']}: {check['status']}")
+    lines.extend(["", "## Remediation history", "", "Previous run: " + (run["history"]["previous_run"] or "none")])
+    for key, label in [("new", "New"), ("still_observed", "Still observed"), ("no_longer_observed", "No longer observed")]:
+        lines.append(label + ": " + (", ".join(run["history"][key]) or "none"))
+    lines.append("No longer observed does not prove a fix.")
     lines.append("")
     for item in run["findings"]:
         lines.extend([f"## {item['rule']} ({item['severity']})", "", "Finding: " + item["id"],
