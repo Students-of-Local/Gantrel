@@ -6,6 +6,8 @@ Instructions for AI coding agents (Claude Code, Codex, Cursor and others) workin
 
 A local-AI 3D design studio for hobbyists up to professionals, starting with 3D printing, then product design. It combines precise CAD, rendering and an agent workspace in one easy app, built on existing CAD libraries rather than a new kernel. It uses autoresearch (SearXNG, browser automation) and reference photos, including a ruler in the shot for real dimensions.
 
+**Owner's direction:** read [docs/DIRECTION.md](docs/DIRECTION.md) before planning work. It sets where Gantrel is going and the bar a change must meet.
+
 ## Ground rules
 
 - **Local first, compute via Fonsviva.** Features must work with local models on the user's own hardware. All compute, including RunPod and other cloud providers, comes via [Fonsviva](https://github.com/baney75/Fonsviva). This app never adds providers, stores provider keys or calls a cloud provider itself. It connects to Fonsviva and shows where each job ran. Cloud providers are personal use only and are set up in Fonsviva.
