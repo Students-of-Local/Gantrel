@@ -398,6 +398,8 @@ def cmd_plan(args):
                      f"{alt['reason']}")
     if p["orientation_scoring"].get("note"):
         lines.append(f"  Note: {p['orientation_scoring']['note']}")
+    if p.get("thin_wall_note"):
+        lines.append(f"  Note: {p['thin_wall_note']}")
     lines.append(f"Supports: {s['supports']}" + (f" (about {best['support_volume_mm3']:.0f} mm3 to hold up "
                                                    f"{best['overhang_mm2']:.0f} mm2)" if s["supports"] != "off" else ""))
     lines.append(f"Time: about {fmt_duration(e['seconds'])} (between {fmt_duration(e['low_seconds'])} and "

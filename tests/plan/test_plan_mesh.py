@@ -103,7 +103,7 @@ def test_inward_winding_is_turned_right_way_out():
     normal points in, so an upright mushroom's cap would read as facing up and need no supports."""
     m = mesh.read_stl(mesh.stl_bytes(shapes.mushroom().tris[:, [0, 2, 1]]))
     assert m.volume == pytest.approx(MUSHROOM_MM3)
-    assert any("faced inward" in w for w in m.warnings)
+    assert any("volume came out negative" in w for w in m.warnings)
     fresh = mesh.Mesh(m.tris.copy())    # the welding and edges carried over match ones worked out again
     assert np.array_equal(m.faces, fresh.faces)
     assert all(np.array_equal(a, b) for a, b in zip(m.edges, fresh.edges))
@@ -111,9 +111,9 @@ def test_inward_winding_is_turned_right_way_out():
     assert c.needs_support
     assert c.support_volume_mm3 == pytest.approx(shapes.MUSHROOM_UPRIGHT_SUPPORT_MM3, rel=0.15)
     # A mesh already facing out is left alone, and an open one is not judged by its volume.
-    assert not any("faced inward" in w for w in mesh.read_stl(mesh.stl_bytes(shapes.mushroom().tris)).warnings)
+    assert not any("volume came out negative" in w for w in mesh.read_stl(mesh.stl_bytes(shapes.mushroom().tris)).warnings)
     opened = mesh.read_stl(mesh.stl_bytes(shapes.mushroom().tris[:-1, [0, 2, 1]]))
-    assert not any("faced inward" in w for w in opened.warnings)
+    assert not any("volume came out negative" in w for w in opened.warnings)
 
 
 def test_unit_warnings():
@@ -313,5 +313,5 @@ def test_3mf_mirrored_parts_keep_their_facets_facing_out(tmp_path):
                      {"3D/Objects/object_1.model": _mesh_object(1, shapes.mushroom())})
     m = mesh.load(one)
     assert m.volume == pytest.approx(MUSHROOM_MM3)
-    assert not any("faced inward" in w for w in m.warnings)
+    assert not any("volume came out negative" in w for w in m.warnings)
     assert _upright_support(m).support_volume_mm3 == pytest.approx(shapes.MUSHROOM_UPRIGHT_SUPPORT_MM3, rel=0.15)

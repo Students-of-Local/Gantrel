@@ -64,6 +64,8 @@ Planning only reads files. It never talks to a printer, and it never starts a pr
    too big, give its size and the printer's, and suggest scaling it down, splitting it, or a
    printer with a bigger build volume; another filament will not help. Otherwise suggest the fix
    the line gives (another filament, or a printer with an enclosure or a hardened nozzle).
+   When the line gives both reasons (the part does not fit, and the filament cannot pass on this
+   printer), tell the person both. Then follow the `NEXT:` line.
    Do not use `--force` or any other way around it.
 
 ## Checking settings the person already has

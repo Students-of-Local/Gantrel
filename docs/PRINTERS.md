@@ -282,9 +282,10 @@ plan is refused. A refusal says why: the part fits the printer in no orientation
 part is W x D x H mm and does not fit ...`, `refused_for: ["part_too_big"]`), or the printer and
 filament cannot go together (`printer_filament`), or both.
 
-A mesh that is not watertight is planned with a warning. A watertight mesh whose facets all face
-inward (some exporters write them so, and its volume comes out negative) is turned right way out,
-with a warning, because every overhang and support figure depends on which way the facets face.
+A mesh that is not watertight is planned with a warning. A watertight mesh whose total volume
+comes out negative (some exporters write facets facing inward) is turned right way out as a whole,
+with a warning, because every overhang and support figure depends on which way the facets face. A
+part made of separate bodies is judged as one, so check in the exporter that each body faces out.
 
 A 3MF is read as its first build object. Bambu Studio and OrcaSlicer save each mesh in its own part
 (`3D/Objects/object_N.model`) and give the root model only components that point at it; those are

@@ -1,8 +1,8 @@
 """Triangle meshes: read binary or ASCII STL and the first build object of a 3MF, check them, write binary STL.
 
 Every reader refuses oversized input before parsing it, drops degenerate facets, and reports (never
-fixes) a mesh that is not watertight. A watertight mesh whose facets all face inward is turned right way
-out, with a warning, and a mirrored 3MF transform keeps its facets facing out. Units are millimeters
+fixes) a mesh that is not watertight. A watertight mesh whose total volume comes out negative is turned
+right way out as a whole, with a warning, and a mirrored 3MF transform keeps its facets facing out. Units are millimeters
 throughout.
 """
 
@@ -536,8 +536,9 @@ def _finish(tris: np.ndarray, kind: str) -> Mesh:
     wt = m.watertight()
     if wt["watertight"] and m.volume < 0:
         m = inside_out(m)
-        m.warnings.append("the mesh's facets faced inward (its volume came out negative), so Gantrel turned every "
-                          "facet around; if other programs show this part inside out, check the exporter")
+        m.warnings.append("the mesh's total volume came out negative (its facets face inward, or most of them do), "
+                          "so Gantrel turned every facet around; if the part is several separate bodies, check in the "
+                          "exporter that each one faces out")
     if not wt["watertight"]:
         m.warnings.append(f"the mesh is not watertight ({wt['open_edges']} open and {wt['nonmanifold_edges']} "
                           "non-manifold edges): volume, weight and supports are less reliable. Repair it in the "

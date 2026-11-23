@@ -222,3 +222,11 @@ def test_plan_and_check_refuse_a_part_over_the_planner_limit(capsys, stl, tmp_pa
     settings.write_text(json.dumps(json.loads(out)["settings"]))
     rc, _, err = run(capsys, "check", str(settings), "--printer", "creality-k2", "--material", "PLA", "--model", path)
     assert rc == 1 and f"up to {mesh.PLAN_MAX_TRIANGLES}" in err
+
+
+def test_plan_text_says_when_the_thin_wall_check_was_skipped(capsys, stl, monkeypatch):
+    # Review of #20, second-S1: a part over THIN_MAX_TRIANGLES gets no wall figure, and the text must say so.
+    from gantrel_printer.plan import orient
+    monkeypatch.setattr(orient, "THIN_MAX_TRIANGLES", 10)
+    rc, out, _ = run(capsys, "plan", stl(shapes.mushroom(), "m.stl"), "--printer", "creality-k2", "--material", "PLA")
+    assert rc == 0 and "thin wall check skipped" in out
