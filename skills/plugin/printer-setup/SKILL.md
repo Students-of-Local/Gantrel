@@ -72,10 +72,21 @@ Do the steps in order. Stop at any step that fails and tell the person what it s
 
    Ask the person how they want to be named. Never use an email address. Add `--id` only if they
    want a different id.
-2. Gantrel does not record calibration results, so every `calibrated` list in the file is empty.
-   If the person wants their results in the pack, add each one to the material's `calibrated` list
-   as `{"test": "temp-tower", "date": "2026-11-22", "result": "220 C band was cleanest"}`, with
-   their words. Add nothing else by hand.
+2. The file holds Gantrel's defaults. Put in what the calibration prints measured, in the entry for
+   the material they were printed with, and only those numbers:
+   - temp-tower: set `nozzle_c` to the best band's temperature, and move `first_layer_nozzle_c` up
+     or down by the same number of degrees.
+   - retraction: set `retraction_mm` to the best band's length.
+   - flow: set `flow_ratio` to the old value (1.00 if the entry has none) times the best patch's
+     percent. For example 1.00 at 105% is `"flow_ratio": 1.05`.
+   - first-layer: it changes the Z offset on the printer, so nothing goes in the file.
+
+   Gantrel does not record calibration results, so every `calibrated` list is empty. Add each
+   result to the material's `calibrated` list as
+   `{"test": "temp-tower", "date": "2026-11-22", "result": "220 C band was cleanest"}`, with the
+   person's words. Change nothing else by hand. Run `gantrel-printer pack check <file>` after each
+   change. If it refuses a number you put in, tell the person what it said and ask them for the
+   value; never change a number just to pass the check.
 3. Check it: `gantrel-printer pack check <file>`. If it says REFUSED, fix each REFUSED line or
    remove what it names, then check again.
 4. Show it: `gantrel-printer pack show <file>`. Show the person all of it: the printer, every

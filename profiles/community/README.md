@@ -18,8 +18,11 @@ The format, the G-code policy and every check are described in
 
        gantrel-printer pack export <printer> --id <maker-model-material> --author "<how you want to be named>"
 
-   Edit the file only to add what you measured (the `calibrated` lists, `proof`, `notes`). Gantrel
-   does not record calibration results yet, so it leaves `calibrated` empty.
+   The file holds Gantrel's defaults. Edit it only to put in what you measured: the numbers your
+   calibration prints set for that material (`nozzle_c`, and `first_layer_nozzle_c` by the same
+   step, from a temp tower; `retraction_mm` from a retraction tower; `flow_ratio` from the flow
+   patches), the `calibrated` lists, `proof` and `notes`. Gantrel does not record calibration
+   results yet, so it leaves `calibrated` empty. Run `pack check` after each change.
 3. Check it and read it all:
 
        gantrel-printer pack check <file>

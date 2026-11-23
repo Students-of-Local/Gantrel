@@ -62,3 +62,20 @@ def test_plugin_command():
     m = tomllib.loads((ROOT / "plugin.toml").read_text())
     cmds = {c["name"]: c for c in m["commands"]}
     assert cmds["setup-printer"]["skill"] == "printer-setup"
+
+
+def section(text, head):
+    return text.split(head, 1)[1].split("\n## ", 1)[0]
+
+
+def test_save_steps_put_in_the_numbers_calibration_measured():
+    # temp-tower sets the nozzle temperature, retraction the retraction length, flow the flow ratio (calibrate.py);
+    # a pack that can hold only the defaults plus a note is not a tuned setup.
+    save = section(SKILL.read_text(), "## Save the setup as a pack")
+    for field in ("`nozzle_c`", "`first_layer_nozzle_c`", "`retraction_mm`", "`flow_ratio`", "`calibrated`"):
+        assert field in save, field
+    assert "Add nothing else by hand" not in save
+    assert "never change a number just to pass the check" in save
+    readme = (ROOT / "profiles" / "community" / "README.md").read_text()
+    for field in ("`nozzle_c`", "`retraction_mm`", "`flow_ratio`"):
+        assert field in readme, field
