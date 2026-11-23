@@ -114,3 +114,42 @@ def test_check_passes_vendor_travel_speeds(capsys, tmp_path, printer, speeds):
     rc, out, _ = run(capsys, "check", str(f), "--printer", printer, "--material", "PLA", "--json")
     d = json.loads(out)
     assert rc == 0 and d["ok"], d["fails"]
+
+
+@pytest.mark.parametrize("make", [shapes.cube, shapes.l_bracket, shapes.mushroom, shapes.arch, shapes.pin,
+                                  shapes.long_bar, shapes.cylinder], ids=lambda f: f.__name__)
+@pytest.mark.parametrize("goal", ["quality", "speed"])
+def test_plan_json_round_trips_through_check(capsys, stl, tmp_path, make, goal):
+    """What plan passed, check passes, with the original file (turned the plan's way) or the turned file."""
+    model = stl(make(), "part.stl")
+    turned = tmp_path / "turned.stl"
+    rc, out, _ = run(capsys, "plan", model, "--printer", "creality-k2", "--material", "PLA", "--goal", goal, "--json",
+                     "--write-oriented", str(turned))
+    assert rc == 0
+    plan_json = tmp_path / "plan.json"
+    plan_json.write_text(out)
+    for path, how in ((model, "turned the plan's way"), (str(turned), "already turned")):
+        rc, out, _ = run(capsys, "check", str(plan_json), "--printer", "creality-k2", "--material", "PLA",
+                         "--model", path, "--json")
+        d = json.loads(out)
+        assert rc == 0 and d["ok"], (make.__name__, path, d["fails"])
+        assert how in d["part_orientation"]
+
+
+def test_check_settings_without_a_plan_read_the_model_as_drawn(capsys, stl, tmp_path):
+    """Settings with no plan orientation: the part is checked as drawn, so the upright mushroom needs supports."""
+    model = stl(shapes.mushroom(), "m.stl")
+    rc, out, _ = run(capsys, "plan", model, "--printer", "creality-k2", "--material", "PLA", "--json")
+    s = json.loads(out)["settings"]
+    assert s["supports"] == "off"
+    bare = tmp_path / "s.json"
+    bare.write_text(json.dumps(s))
+    rc, out, _ = run(capsys, "check", str(bare), "--printer", "creality-k2", "--material", "PLA", "--model", model)
+    assert rc == 1 and "supports for overhangs" in out and "as drawn" in out
+    bad = json.loads((tmp_path / "s.json").read_text())
+    (tmp_path / "bad.json").write_text(json.dumps({"settings": bad, "orientations": [{"rotation_matrix": [[2, 0, 0],
+                                                                                                        [0, 1, 0],
+                                                                                                        [0, 0, 1]]}]}))
+    rc, _, err = run(capsys, "check", str(tmp_path / "bad.json"), "--printer", "creality-k2", "--material", "PLA",
+                     "--model", model)
+    assert rc == 1 and "not a rotation" in err

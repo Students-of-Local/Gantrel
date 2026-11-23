@@ -272,7 +272,10 @@ in the material field, and the agent asks the person.
 orientation, supports, settings, a time and filament estimate and a check of every setting.
 `gantrel-printer check <settings.json> --printer <key> --material <family> [--model <file>]` runs
 the same check on settings the person already has (the JSON from `slice --json` or `plan --json`
-works). Both only read files: they never contact a printer, and `plan` is not wired into `upload`
+works). With `plan --json` output, `--model` takes the original file, which the check turns by the
+plan's `orientations[0].rotation_matrix`, or the `--write-oriented` file, which it recognizes by its
+STL header and reads as it is. Any other settings file has no orientation, so the part is checked as
+drawn, z up. The output says which of the three it did. Both only read files: they never contact a printer, and `plan` is not wired into `upload`
 or `slice`. The code is in `src/gantrel_printer/plan/` (Python and numpy only); the skill is
 `skills/plugin/print-plan/`. Exit codes: 0 when every rule passes, 1 when a rule fails or the
 printer and filament cannot go together.

@@ -70,7 +70,10 @@ JSON file and run:
 
     gantrel-printer check <settings.json> --printer <name> --material <filament> --model <file>
 
-Leave out `--model` if there is no part file. Exit 0 means every rule passed. Exit 1 means at
+Leave out `--model` if there is no part file. With the JSON from `plan --json`, give the
+original part file (the check turns it the plan's way) or the `--write-oriented` file. With
+settings from anywhere else, the part is checked as the file has it, z up, so give a file turned
+the way it will sit on the bed. Exit 0 means every rule passed. Exit 1 means at
 least one `FAIL:` line: tell the person each one and its fix. Say the warnings too. A speed or
 acceleration warning never means the print fails: the printer runs the move at its own top speed,
 or the limit was Gantrel's default and the person should check their printer's.

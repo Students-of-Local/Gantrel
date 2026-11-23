@@ -376,7 +376,8 @@ def cmd_plan(args):
     if args.write_oriented:
         dest = Path(args.write_oriented).expanduser()
         rot = np.array(best["rotation_matrix"])
-        pmesh.write_stl(dest, m.transformed(rot, center_on=(printer.bed[0] / 2, printer.bed[1] / 2)))
+        pmesh.write_stl(dest, m.transformed(rot, center_on=(printer.bed[0] / 2, printer.bed[1] / 2)),
+                        header=pmesh.ORIENTED_HEADER)
         p["oriented_stl"] = str(dest.resolve())
     lines = [f"Plan for {m.name or args.model} on {printer.label}, {p['material']}, goal {args.goal}:"]
     lines += [f"  part warning: {w}" for w in p["part"]["warnings"]]
@@ -430,24 +431,54 @@ def cmd_check(args):
         raise ConfigError(f"{path} does not hold a settings object", "Use the JSON from slice --json or plan --json")
     goal = args.goal or s.get("goal") or "balanced"
     part = None
+    turned = None
     if args.model:
         m = pmesh.load(args.model)
-        cand = orient.evaluate(m, np.array([0.0, 0.0, -1.0]), printer, fil)   # as the file has it, z up
+        rot = _plan_rotation(raw)
+        if rot is None:
+            turned = "as drawn (z up): the settings hold no plan orientation"
+        elif pmesh.is_oriented_output(args.model):
+            turned = "as the file has it: it is a plan --write-oriented file, already turned"
+        else:
+            m = m.transformed(rot)
+            turned = "turned the plan's way (its orientations[0].rotation_matrix)"
+        cand = orient.evaluate(m, np.array([0.0, 0.0, -1.0]), printer, fil)
         e = pest.estimate(cand.mesh, s, printer, fil, cand.support_volume_mm3, cand.support_contact_mm2)
         part = {"fits": cand.fits, "size_mm": [round(v, 2) for v in (*cand.footprint_mm, cand.height_mm)],
                 "bed_mm": list(printer.bed), "max_height_mm": printer.height, "overhang_mm2": cand.overhang_mm2,
                 "bridges": cand.bridges, "thinnest_wall_mm": orient.thinnest_wall(cand.mesh),
                 "smallest_layer_seconds": e["smallest_layer_seconds"],
                 "layers_below_min_layer_time": e["layers_below_min_layer_time"]}
+        part["orientation"] = turned
     c = pcheck.check(s, printer, fil, part, goal)
     lines = [f"Check of {path.name} for {printer.label}, {fil.name}, goal {goal}: "
              f"{'pass' if c['ok'] else 'FAIL'} ({len(c['fails'])} failed, {len(c['warns'])} warning(s), "
              f"{sum(r['status'] == 'pass' for r in c['rules'])} passed)"]
+    if turned:
+        lines.append(f"Part checked {turned}.")
     lines += _rule_lines(c)
     nxt = ("Fix every FAIL line as its advice says, then check again" if not c["ok"] else
            "The settings pass; tell the person about any warnings")
-    out(args, {"printer": printer.key, "material": fil.name, **c}, "\n".join(lines), nxt)
+    out(args, {"printer": printer.key, "material": fil.name, "part_orientation": turned, **c}, "\n".join(lines), nxt)
     return 0 if c["ok"] else EXIT_ERROR
+
+
+def _plan_rotation(raw):
+    """The rotation a plan --json chose (orientations[0].rotation_matrix), checked to be a real rotation."""
+    import numpy as np
+    try:
+        rot = raw["orientations"][0]["rotation_matrix"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    try:
+        r = np.array(rot, dtype=np.float64)
+    except (TypeError, ValueError):
+        r = None
+    if r is None or r.shape != (3, 3) or not np.isfinite(r).all() or not np.allclose(r @ r.T, np.eye(3), atol=1e-4) \
+            or not np.isclose(np.linalg.det(r), 1.0, atol=1e-4):
+        raise ConfigError("the plan's orientations[0].rotation_matrix is not a rotation",
+                          "Use the JSON from gantrel-printer plan --json as it was written")
+    return r
 
 
 def cmd_jobs(args):

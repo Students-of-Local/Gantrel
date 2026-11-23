@@ -436,8 +436,20 @@ def ascii_stl(tris: np.ndarray, name: str = "part") -> str:
     return "\n".join(out) + "\n"
 
 
-def write_stl(path: str | Path, mesh: Mesh) -> Path:
+ORIENTED_HEADER = "gantrel-printer plan: oriented"   # the header of a plan --write-oriented file
+
+
+def write_stl(path: str | Path, mesh: Mesh, header: str = "gantrel-printer plan") -> Path:
     p = Path(path).expanduser()
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_bytes(stl_bytes(mesh.tris))
+    p.write_bytes(stl_bytes(mesh.tris, header))
     return p
+
+
+def is_oriented_output(path: str | Path) -> bool:
+    """True for a binary STL that plan --write-oriented wrote: it is already turned the plan's way."""
+    p = Path(path).expanduser()
+    if p.suffix.lower() != ".stl" or not p.is_file():
+        return False
+    with p.open("rb") as f:
+        return f.read(80).startswith(ORIENTED_HEADER.encode())
