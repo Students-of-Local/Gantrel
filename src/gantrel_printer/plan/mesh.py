@@ -1,4 +1,4 @@
-"""Triangle meshes: read binary or ASCII STL and the first object of a 3MF, check them, write binary STL.
+"""Triangle meshes: read binary or ASCII STL and the first build object of a 3MF, check them, write binary STL.
 
 Every reader refuses oversized input before parsing it, drops degenerate facets, and reports (never
 fixes) a mesh that is not watertight. Units are millimeters throughout.
@@ -6,6 +6,7 @@ fixes) a mesh that is not watertight. Units are millimeters throughout.
 
 from __future__ import annotations
 
+import posixpath
 import re
 import struct
 import zipfile
@@ -181,33 +182,171 @@ def _read_ascii(data: bytes) -> Mesh:
 
 
 def read_3mf(path: Path) -> Mesh:
+    """The first build item of a 3MF, with every component it is made of, in millimeters.
+
+    Bambu Studio and OrcaSlicer keep each mesh in its own part (3D/Objects/object_N.model) and give the
+    root model's objects only <components> that point at it (3MF Production extension, p:path). Components
+    are followed with their transforms, inside the archive only, with cycles, depth, total triangles and
+    total uncompressed size capped. The build item's own transform is applied too, so a part scaled in the
+    slicer keeps its size; Gantrel then chooses the orientation itself.
+    """
     try:
         zf = zipfile.ZipFile(path)
     except zipfile.BadZipFile:
         raise MeshError(f"{path.name} is not a valid 3MF (not a zip archive)", "Export the part again as 3MF") from None
     with zf:
-        name = _model_part(zf)
-        info = zf.getinfo(name)
-        if info.file_size > MAX_BYTES:
-            raise MeshError(f"the 3MF model is {info.file_size / 1e6:.0f} MB uncompressed, over Gantrel's limit",
-                            "Simplify the mesh and export it again")
-        raw = zf.read(name)
+        reader = _ThreeMF(zf)
+        root_name = _model_part(zf)
+        root = reader.model(root_name)
+        scale = THREEMF_UNITS.get(root.get("unit", "millimeter"))
+        if scale is None:
+            raise MeshError(f"the 3MF uses an unknown unit {root.get('unit')!r}")
+        warnings = []
+        build = root.find(f"{CORE_NS}build")
+        items = [] if build is None else build.findall(f"{CORE_NS}item")
+        if items:
+            item = items[0]
+            if len(items) > 1:
+                warnings.append(f"the 3MF build has {len(items)} objects; only the first ({_label(reader, root_name, item)}) "
+                                "is planned")
+            ref = (reader.resolve(item.get(PATH_ATTR), root_name), item.get("objectid"))
+            top = _transform(item.get("transform"))
+        else:   # no build: the first object that has a mesh or components
+            objs = [o for o in root.iter(f"{CORE_NS}object")
+                    if o.find(f"{CORE_NS}mesh") is not None or o.find(f"{CORE_NS}components") is not None]
+            if not objs:
+                raise MeshError("the 3MF has no object with a mesh", "Export the part again as 3MF")
+            if len(objs) > 1:
+                warnings.append(f"the 3MF has {len(objs)} objects and no build; only the first "
+                                f"({objs[0].get('name') or objs[0].get('id')}) is planned")
+            ref, top = (root_name, objs[0].get("id")), IDENTITY
+        tris = reader.triangles(ref, top)
+    if not tris:
+        raise MeshError("the 3MF has no object with a mesh", "Export the part again as 3MF")
+    m = _finish(np.concatenate(tris) * scale, "3mf")
+    m.warnings[:0] = warnings
+    return m
+
+
+PROD_NS = "{http://schemas.microsoft.com/3dmanufacturing/production/2015/06}"
+PATH_ATTR = f"{PROD_NS}path"
+MAX_COMPONENT_DEPTH = 16            # components inside components, deeper than any slicer writes
+MAX_COMPONENTS = 100_000            # component references followed in one file
+IDENTITY = (np.eye(3), np.zeros(3))
+
+
+def _transform(text: str | None) -> tuple[np.ndarray, np.ndarray]:
+    """A 3MF transform "m00 m01 m02 m10 m11 m12 m20 m21 m22 m30 m31 m32": a point p maps to p @ A + t."""
+    if not text:
+        return IDENTITY
     try:
-        root = ElementTree.fromstring(raw)
-    except ElementTree.ParseError as err:
-        raise MeshError(f"the 3MF model XML is malformed ({err})", "Export the part again as 3MF") from None
-    scale = THREEMF_UNITS.get(root.get("unit", "millimeter"))
-    if scale is None:
-        raise MeshError(f"the 3MF uses an unknown unit {root.get('unit')!r}")
-    warnings = []
-    for obj in root.iter(f"{CORE_NS}object"):
+        v = np.array([float(x) for x in text.split()], dtype=np.float64)
+    except ValueError:
+        raise MeshError(f"the 3MF has a transform that is not numbers ({text[:60]!r})") from None
+    if v.shape != (12,) or not np.isfinite(v).all():
+        raise MeshError("the 3MF has a transform without 12 finite numbers", "Export the part again as 3MF")
+    return v[:9].reshape(3, 3), v[9:]
+
+
+def _label(reader: _ThreeMF, part: str, item) -> str:
+    try:
+        obj = reader.objects(reader.resolve(item.get(PATH_ATTR), part)).get(item.get("objectid"))
+    except MeshError:
+        obj = None
+    return (obj.get("name") if obj is not None else None) or str(item.get("objectid"))
+
+
+class _ThreeMF:
+    """Model parts of one archive, read once each, with the caps every part shares."""
+
+    def __init__(self, zf: zipfile.ZipFile):
+        self.zf = zf
+        self.names = set(zf.namelist())
+        self.parts: dict[str, ElementTree.Element] = {}
+        self.index: dict[str, dict[str, ElementTree.Element]] = {}
+        self.meshes: dict[tuple[str, str], np.ndarray] = {}
+        self.bytes_read = 0
+        self.triangle_count = 0
+        self.components = 0
+
+    def resolve(self, ref: str | None, current: str) -> str:
+        """A p:path inside the archive. Anything that leaves it, or names a part that is not there, is refused."""
+        if not ref:
+            return current
+        if "\\" in ref or ":" in ref:
+            raise MeshError(f"the 3MF points at a part outside the archive ({ref!r})", "Export the part again as 3MF")
+        name = posixpath.normpath(ref.lstrip("/"))
+        if name.startswith("../") or name == ".." or name.startswith("/") or name not in self.names:
+            raise MeshError(f"the 3MF points at a model part that is not in it ({ref!r})",
+                            "Export the part again as 3MF")
+        return name
+
+    def model(self, name: str) -> ElementTree.Element:
+        if name in self.parts:
+            return self.parts[name]
+        info = self.zf.getinfo(name)
+        if self.bytes_read + info.file_size > MAX_BYTES:
+            raise MeshError(f"the 3MF model is {(self.bytes_read + info.file_size) / 1e6:.0f} MB uncompressed, over "
+                            "Gantrel's limit", "Simplify the mesh and export it again")
+        with self.zf.open(info) as f:
+            raw = f.read(MAX_BYTES - self.bytes_read + 1)
+        self.bytes_read += len(raw)
+        if self.bytes_read > MAX_BYTES:
+            raise MeshError("the 3MF model is over Gantrel's limit uncompressed", "Simplify the mesh and export it again")
+        try:
+            root = ElementTree.fromstring(raw)
+        except ElementTree.ParseError as err:
+            raise MeshError(f"the 3MF model XML is malformed ({err})", "Export the part again as 3MF") from None
+        self.parts[name] = root
+        return root
+
+    def objects(self, part: str) -> dict[str, ElementTree.Element]:
+        if part not in self.index:
+            self.index[part] = {o.get("id"): o for o in self.model(part).iter(f"{CORE_NS}object")}
+        return self.index[part]
+
+    def triangles(self, ref: tuple[str, str], tf, stack: tuple = ()) -> list[np.ndarray]:
+        part, oid = ref
+        if ref in stack:
+            raise MeshError("the 3MF has an object that contains itself through its components",
+                            "Export the part again as 3MF")
+        if len(stack) >= MAX_COMPONENT_DEPTH:
+            raise MeshError(f"the 3MF nests components more than {MAX_COMPONENT_DEPTH} deep",
+                            "Export the part again as 3MF")
+        obj = self.objects(part).get(oid)
+        if obj is None:
+            raise MeshError(f"the 3MF refers to object {oid!r}, which is not in {part}", "Export the part again as 3MF")
+        a, t = tf
+        out = []
+        local = self._mesh(part, oid, obj)
+        if local is not None and len(local):
+            self.triangle_count += len(local)
+            if self.triangle_count > MAX_TRIANGLES:
+                raise MeshError(f"the 3MF has more than {MAX_TRIANGLES} triangles, over Gantrel's limit",
+                                "Simplify the mesh and export it again")
+            out.append(local @ a + t)
+        comps = obj.find(f"{CORE_NS}components")
+        if comps is not None:
+            for c in comps.findall(f"{CORE_NS}component"):
+                self.components += 1
+                if self.components > MAX_COMPONENTS:
+                    raise MeshError(f"the 3MF has more than {MAX_COMPONENTS} components",
+                                    "Simplify the model and export it again")
+                ca, ct = _transform(c.get("transform"))
+                child = (self.resolve(c.get(PATH_ATTR), part), c.get("objectid"))
+                out += self.triangles(child, (ca @ a, ct @ a + t), stack + (ref,))
+        return out
+
+    def _mesh(self, part: str, oid: str, obj) -> np.ndarray | None:
+        key = (part, oid)
+        if key in self.meshes:
+            return self.meshes[key]
         mesh = obj.find(f"{CORE_NS}mesh")
-        if mesh is None:
-            continue
-        verts = mesh.find(f"{CORE_NS}vertices")
-        tris = mesh.find(f"{CORE_NS}triangles")
+        verts = None if mesh is None else mesh.find(f"{CORE_NS}vertices")
+        tris = None if mesh is None else mesh.find(f"{CORE_NS}triangles")
         if verts is None or tris is None:
-            continue
+            self.meshes[key] = None
+            return None
         try:
             v = np.array([[float(e.get("x")), float(e.get("y")), float(e.get("z"))]
                           for e in verts.iter(f"{CORE_NS}vertex")], dtype=np.float64)
@@ -218,20 +357,12 @@ def read_3mf(path: Path) -> Mesh:
         if len(idx) > MAX_TRIANGLES:
             raise MeshError(f"the 3MF object has {len(idx)} triangles, over Gantrel's limit of {MAX_TRIANGLES}")
         if len(idx) == 0 or len(v) == 0:
-            continue
+            self.meshes[key] = None
+            return None
         if idx.min() < 0 or idx.max() >= len(v):
             raise MeshError("the 3MF has a triangle that points at a vertex that does not exist")
-        n_obj = sum(1 for o in root.iter(f"{CORE_NS}object") if o.find(f"{CORE_NS}mesh") is not None)
-        if n_obj > 1:
-            warnings.append(f"the 3MF has {n_obj} mesh objects; only the first ({obj.get('name') or obj.get('id')}) "
-                            "is planned")
-        if any(item.get("transform") for item in root.iter(f"{CORE_NS}item")):
-            warnings.append("the 3MF build has a placement transform; Gantrel reads the object as drawn and "
-                            "chooses its own orientation")
-        m = _finish(v[idx] * scale, "3mf")
-        m.warnings[:0] = warnings
-        return m
-    raise MeshError("the 3MF has no object with a mesh", "Export the part again as 3MF")
+        self.meshes[key] = v[idx]
+        return self.meshes[key]
 
 
 def _model_part(zf: zipfile.ZipFile) -> str:

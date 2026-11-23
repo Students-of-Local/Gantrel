@@ -103,11 +103,13 @@ def _3mf(path, verts, tris, unit="millimeter", extra_object=False, rels=True):
            + "</vertices><triangles>"
            + "".join(f'<triangle v1="{a}" v2="{b}" v3="{c}"/>' for a, b, c in tris)
            + "</triangles></mesh></object>")
+    items = '<item objectid="1"/>'
     if extra_object:
         obj += obj.replace('id="1"', 'id="2"')
+        items += '<item objectid="2"/>'
     xml = ('<?xml version="1.0" encoding="UTF-8"?><model unit="' + unit
            + '" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources>' + obj
-           + '</resources><build><item objectid="1"/></build></model>')
+           + '</resources><build>' + items + '</build></model>')
     with zipfile.ZipFile(path, "w") as z:
         if rels:
             z.writestr("_rels/.rels", '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/'
@@ -127,7 +129,7 @@ def test_3mf_reads_the_first_object_with_units(tmp_path):
     m = mesh.load(_3mf(tmp_path / "c.3mf", verts, tris, unit="inch"))
     assert m.kind == "3mf" and m.volume == pytest.approx(25.4 ** 3, rel=1e-9)
     two = mesh.load(_3mf(tmp_path / "two.3mf", verts, tris, extra_object=True, rels=False))
-    assert any("2 mesh objects" in w for w in two.warnings)
+    assert any("build has 2 objects" in w for w in two.warnings)
 
 
 def test_bad_3mf_is_refused(tmp_path, monkeypatch):
@@ -163,3 +165,101 @@ def test_golden_meshes_are_small_and_watertight():
         assert m.watertight()["watertight"], m.name
         assert m.volume > 0, m.name
         assert len(mesh.stl_bytes(m.tris)) < 100 * 1024, m.name
+
+
+CORE = "http://schemas.microsoft.com/3dmanufacturing/core/2015/02"
+PROD = "http://schemas.microsoft.com/3dmanufacturing/production/2015/06"
+RELS = ('<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Target="/3D/3dmodel.model" Id="rel0" '
+        'Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>')
+
+
+def _mesh_object(oid, m):
+    verts, tris = _indexed(m)
+    return (f'<object id="{oid}" type="model"><mesh><vertices>'
+            + "".join(f'<vertex x="{x}" y="{y}" z="{z}"/>' for x, y, z in verts) + "</vertices><triangles>"
+            + "".join(f'<triangle v1="{a}" v2="{b}" v3="{c}"/>' for a, b, c in tris) + "</triangles></mesh></object>")
+
+
+def _model(resources, build=""):
+    return (f'<?xml version="1.0" encoding="UTF-8"?><model unit="millimeter" xmlns="{CORE}" xmlns:p="{PROD}" '
+            f'requiredextensions="p"><resources>{resources}</resources><build>{build}</build></model>')
+
+
+def _bambu_3mf(path, root_resources, build, parts):
+    """The layout Bambu Studio and OrcaSlicer save: meshes in 3D/Objects/*.model, components in the root."""
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("_rels/.rels", RELS)
+        z.writestr("3D/3dmodel.model", _model(root_resources, build))
+        for name, resources in parts.items():
+            z.writestr(name, _model(resources))
+    return path
+
+
+def test_3mf_components_in_other_parts_with_their_transforms(tmp_path):
+    cube = shapes.cube(10.0)
+    # Two parts of one object: the cube scaled 2x, and the cube moved 30 mm along x.
+    root = ('<object id="3" type="model"><components>'
+            '<component p:path="/3D/Objects/object_1.model" objectid="1" transform="2 0 0 0 2 0 0 0 2 0 0 0"/>'
+            '<component p:path="/3D/Objects/object_1.model" objectid="1" transform="1 0 0 0 1 0 0 0 1 30 0 0"/>'
+            '</components></object>')
+    f = _bambu_3mf(tmp_path / "bambu.3mf", root, '<item objectid="3" transform="1 0 0 0 1 0 0 0 1 128 128 0"/>',
+                   {"3D/Objects/object_1.model": _mesh_object(1, cube)})
+    m = mesh.load(f)
+    assert len(m.tris) == 24 and m.volume == pytest.approx(8000 + 1000, rel=1e-9)
+    lo, hi = m.bbox
+    assert np.allclose(lo, [128, 128, 0]) and np.allclose(hi, [128 + 40, 128 + 20, 20])
+
+
+def test_3mf_nested_components_compose_inner_first(tmp_path):
+    # Object 3 holds object 2 scaled 2x; object 2 holds the 1 mm cube moved 5 mm along x. Inner first: x 10..12.
+    res = (_mesh_object(1, shapes.cube(1.0))
+           + '<object id="2" type="model"><components><component objectid="1" transform="1 0 0 0 1 0 0 0 1 5 0 0"/>'
+             '</components></object>'
+           + '<object id="3" type="model"><components><component objectid="2" transform="2 0 0 0 2 0 0 0 2 0 0 0"/>'
+             '</components></object>')
+    f = _bambu_3mf(tmp_path / "nested.3mf", res, '<item objectid="3"/>', {})
+    lo, hi = mesh.load(f).bbox
+    assert lo[0] == pytest.approx(10) and hi[0] == pytest.approx(12) and hi[2] == pytest.approx(2)
+
+
+def test_3mf_component_cycles_escapes_and_missing_parts_are_refused(tmp_path):
+    cyc = ('<object id="1" type="model"><components><component objectid="2"/></components></object>'
+           '<object id="2" type="model"><components><component objectid="1"/></components></object>')
+    with pytest.raises(MeshError, match="contains itself"):
+        mesh.load(_bambu_3mf(tmp_path / "cycle.3mf", cyc, '<item objectid="1"/>', {}))
+    for ref in ("/../../etc/passwd", "../3D/3dmodel.model/../../x.model", "C:/x.model", "/3D/Objects/missing.model"):
+        comp = f'<object id="1" type="model"><components><component p:path="{ref}" objectid="1"/></components></object>'
+        with pytest.raises(MeshError, match="(outside the archive|not in it)"):
+            mesh.load(_bambu_3mf(tmp_path / "escape.3mf", comp, '<item objectid="1"/>', {}))
+    gone = '<object id="1" type="model"><components><component objectid="9"/></components></object>'
+    with pytest.raises(MeshError, match="object '9'"):
+        mesh.load(_bambu_3mf(tmp_path / "gone.3mf", gone, '<item objectid="1"/>', {}))
+
+
+def test_3mf_component_totals_are_capped(tmp_path, monkeypatch):
+    many = ('<object id="2" type="model"><components>'
+            + '<component p:path="/3D/Objects/object_1.model" objectid="1"/>' * 3 + '</components></object>')
+    f = _bambu_3mf(tmp_path / "many.3mf", many, '<item objectid="2"/>',
+                   {"3D/Objects/object_1.model": _mesh_object(1, shapes.cube())})
+    assert len(mesh.load(f).tris) == 36
+    monkeypatch.setattr(mesh, "MAX_TRIANGLES", 30)       # each copy alone is under the limit; the total is not
+    with pytest.raises(MeshError, match="more than 30 triangles"):
+        mesh.load(f)
+    monkeypatch.undo()
+    with zipfile.ZipFile(f) as z:
+        root = z.getinfo("3D/3dmodel.model").file_size
+    monkeypatch.setattr(mesh, "MAX_BYTES", root + 100)   # the root part fits; root plus the object part does not
+    with pytest.raises(MeshError, match="uncompressed"):
+        mesh.read_3mf(f)
+
+
+def test_plan_reads_a_bambu_style_3mf(tmp_path):
+    from gantrel_printer import slicing
+    from gantrel_printer.plan import optimize
+    root = ('<object id="2" type="model"><components><component p:path="/3D/Objects/object_1.model" objectid="1" '
+            'transform="1 0 0 0 1 0 0 0 1 0 0 0"/></components></object>')
+    f = _bambu_3mf(tmp_path / "part.3mf", root, '<item objectid="2" transform="1 0 0 0 1 0 0 0 1 128 128 0"/>',
+                   {"3D/Objects/object_1.model": _mesh_object(1, shapes.mushroom())})
+    p = optimize.plan(mesh.load(f), slicing.PRINTERS["bambu-x1c"], "PLA")
+    assert p["check"]["ok"] and p["part"]["volume_mm3"] == pytest.approx(abs(shapes.mushroom().volume), rel=1e-6)

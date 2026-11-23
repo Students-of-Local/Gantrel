@@ -277,6 +277,14 @@ or `slice`. The code is in `src/gantrel_printer/plan/` (Python and numpy only); 
 `skills/plugin/print-plan/`. Exit codes: 0 when every rule passes, 1 when a rule fails or the
 printer and filament cannot go together.
 
+A 3MF is read as its first build object. Bambu Studio and OrcaSlicer save each mesh in its own
+part (`3D/Objects/object_N.model`) and give the root model only components that point at it; those
+are followed with their transforms, and the build item's transform is applied, so a part scaled
+in the slicer keeps its size. A component may only point at a part inside the same archive. Cycles,
+nesting deeper than 16, more than 100000 components, more than 5000000 triangles in total and more
+than 200 MB of model XML uncompressed are refused. Modifier and negative volumes are not told
+apart from solid parts (Bambu Studio keeps that in its own config), so export such a part as STL.
+
 ### Where the numbers come from
 
 - Filament: `src/gantrel_printer/data/materials.json`, one entry per family (PLA, PLA-CF, PETG,

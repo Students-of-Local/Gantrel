@@ -57,7 +57,7 @@ Calibration prints (`gantrel-printer calibrate <printer> first-layer|temp-tower|
 | Time and filament estimate | Unit tests on a 20 mm cube against the formulas worked by hand. Never compared with a slicer's estimate or a real print time; treat it as a rough guide. The slicer G-code reader is tested on PrusaSlicer and OrcaSlicer comment formats only. |
 | Settings check | Unit tests: every rule has a passing and a failing case. The material numbers are cited (materials.json); printer limits are cited for the Creality K2 and K2 Plus and are Gantrel's marked defaults elsewhere. The flow cap is the printer vendor's own Generic filament preset in OrcaSlicer where one exists (12 printers, `printer_material_flow.json`), else Gantrel's rule (90 percent of the lower of hotend and filament); each result names its source. These are slicer presets, not measured on our printers. |
 | Optimizer | Unit tests: for every printer, filament and goal it either passes its own check or refuses with the reason. Not tuned against real prints. |
-| Mesh files | Unit tests: binary and ASCII STL round trip, the first object of a 3MF, malformed files refused, size limits enforced. |
+| Mesh files | Unit tests: binary and ASCII STL round trip, the first build object of a 3MF, including Bambu Studio and OrcaSlicer's layout with components in `3D/Objects/*.model` and their transforms (built in code, not a file saved by either slicer), malformed files, component cycles and paths outside the archive refused, size and triangle limits enforced. |
 
 ### Watching a print
 
