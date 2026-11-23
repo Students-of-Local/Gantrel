@@ -27,6 +27,10 @@ from ..model import Camera, Status
 from .base import Adapter
 
 DEFAULT_BAUD = 115200
+# An SD upload sends one numbered line, then waits for Marlin's ok while the board writes it to the
+# card, so it runs well under the line rate. Gantrel assumes a quarter of it (about 2.9 KB a second
+# at 115200 baud) when it decides whether an upload fits a time limit.
+UPLOAD_SHARE = 0.25
 TEMP_RE = re.compile(r"\bT0?:\s*(-?[\d.]+)\s*/\s*(-?[\d.]+)")
 BED_RE = re.compile(r"\bB:\s*(-?[\d.]+)\s*/\s*(-?[\d.]+)")
 CHAMBER_RE = re.compile(r"\bC:\s*(-?[\d.]+)\s*/\s*(-?[\d.]+)")
@@ -318,6 +322,22 @@ class SerialAdapter(Adapter):
                 raise Refused(f"{self.cfg.name} could not create {name} on its SD card", "Check the card")
             self._send_numbered(link, lines + ["M29"])
         return name
+
+    def upload_seconds(self, local_path: Path, limit: float) -> float | None:
+        """The upload's G-code lines (as card_lines keeps them) with their line number, checksum and
+        newline, at UPLOAD_SHARE of the baud rate. Reads the file a line at a time and stops once past
+        limit."""
+        rate = self.port / 10 * UPLOAD_SHARE  # bytes a second: 10 bits a byte on the wire
+        sent = n = 0
+        with open(local_path, "rb") as fh:
+            for raw in fh:
+                line = raw.decode("utf-8", "replace").split(";", 1)[0].strip()
+                if line:
+                    n += 1
+                    sent += len(line) + len(f"N{n} *000\n")
+                    if sent / rate > limit:
+                        break
+        return sent / rate
 
     def _send_numbered(self, link: _Link, lines: list[str]) -> None:
         """Send N-numbered, checksummed lines; go back when Marlin asks for a resend."""

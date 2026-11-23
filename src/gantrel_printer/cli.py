@@ -20,10 +20,10 @@ import sys
 import time
 from pathlib import Path
 
-from . import __version__, calibrate, config, discover as disc, guard as vguard, monitor, notify, printlog, safety, slicing
+from . import __version__, calibrate, config, discover as disc, guard as vguard, materials, monitor, notify, printlog, safety, slicing
 from .adapters import ADAPTERS, adapter_class, build
-from .errors import ConfigError, PrinterError, SafetyError
-from .model import fmt_duration, material_family
+from .errors import ConfigError, PrinterError, Refused, SafetyError
+from .model import clip, fmt_duration, material_family
 
 EXIT_ERROR, EXIT_USAGE, EXIT_SAFETY = 1, 2, 3
 REMOTE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(gcode|bgcode|3mf|ctb|goo)$")
@@ -252,12 +252,25 @@ def cmd_slice(args):
         f"gantrel-printer upload {gcode} --printer {cfg.name} --material {mat.name}")
 
 
+def material_word_family(word: str) -> str | None:
+    """The filament family a material word names: materials.json's family (with its aliases), or the
+    family printers use the word for (model.material_family); None if it names no known family."""
+    try:
+        return materials.get(word).name
+    except ConfigError:
+        pass
+    fam = material_family(word)
+    return fam if fam in materials.FAMILIES else None
+
+
 def upload_file(printer: str, path: Path, name: str | None = None, material_name: str | None = None,
-                plan: dict | None = None, record_slot: bool = False):
+                plan: dict | None = None, record_slot: bool = False, max_transfer_s: float | None = None):
     """Send a file to a paired printer and record the job. Never starts it. Returns (job, adapter).
 
     plan: a summary from safety.load_plan, kept on the job for the Local Studio card. record_slot: also
     ask the printer which slot holds the material, and record it when exactly one loaded slot matches.
+    max_transfer_s: refuse, before contacting the printer, a file the adapter can't send in that long
+    (a slow link such as USB serial; the MCP tool's time budget).
     """
     if not path.is_file():
         raise ConfigError(f"no file at {path}")
@@ -267,7 +280,9 @@ def upload_file(printer: str, path: Path, name: str | None = None, material_name
                           "Use letters, digits, . _ - only, ending in .gcode, .bgcode, .3mf, .ctb or .goo")
     material = ""
     if material_name:
-        material = slicing.material(material_name).name  # only known materials are stored
+        material = material_word_family(material_name) or ""  # only known families are stored
+        if not material:
+            raise ConfigError(f"no data for filament {material_name!r}", f"Use one of: {', '.join(materials.FAMILIES)}")
     sha = safety.file_sha256(path)
     stem, ext = requested.rsplit(".", 1)
     # The name on the printer carries the content hash, so a different file never shares a job's name.
@@ -276,15 +291,26 @@ def upload_file(printer: str, path: Path, name: str | None = None, material_name
     if ext.lower() in RESIN_EXT and not getattr(adapter, "accepts_resin", False):
         raise ConfigError(f"{printer} is not a resin printer Gantrel can send .{ext} files to",
                           "Send .ctb or .goo files only to an Elegoo resin printer paired with a resin --model")
+    if max_transfer_s is not None:
+        need = adapter.upload_seconds(path, max_transfer_s)
+        if need is not None and need > max_transfer_s:
+            raise Refused(f"{path.name} takes about {need:.0f} s or more to send to {printer} ({adapter.label}), "
+                          f"longer than the {max_transfer_s:.0f} s one tool call allows, so nothing was sent",
+                          "Ask the person to copy it to the printer's SD card, or to run gantrel-printer upload "
+                          "in a terminal, which has no time limit")
     before = snapshot_cfg(adapter)
     facts = slicing.gcode_facts(path)
-    # The file's own filament_type wins: it is what the G-code heats for. A material argument that
-    # disagrees is refused, and the argument is used only when the file names no known material.
-    sliced_for = slicing.MATERIALS.get(str(facts.get("material", "")).upper())
-    if sliced_for and material and material != sliced_for.name:
-        raise ConfigError(f"{path.name} was sliced for {sliced_for.name}, not {material}",
-                          f"Upload it without a material, or slice it again for {material}")
-    material = sliced_for.name if sliced_for else material
+    # The file's own filament_type wins: it is what the G-code heats for. Compared by family, so PLA-CF
+    # is not PLA and PA6-CF is PA-CF. A material argument that disagrees is refused, and the argument is
+    # used only when the file names no material. A word that names no known family (PrusaSlicer writes FLEX for
+    # TPU) is neither compared nor recorded: the argument stands, as before.
+    said = clip(str(facts.get("material", "")), 32).upper()
+    sliced_for = material_word_family(said) if said else None
+    if sliced_for:
+        if material and material != sliced_for:
+            raise ConfigError(f"{path.name} was sliced for {sliced_for}, not {material}",
+                              f"Upload it without a material, or slice it again for {material}")
+        material = sliced_for
     if plan:
         profile = slicing.profile_for(adapter.cfg.model, adapter.cfg.type).key
         if plan.get("printer") != profile:
@@ -321,6 +347,14 @@ def loaded_slot(adapter, material: str) -> str:
     return match[0].slot if len(match) == 1 else ""
 
 
+def start_next(job_id: str, remote_name: str) -> str:
+    """How an uploaded job starts. The model's shell can't tell whether it runs in Local Studio (Local
+    Studio gives the ask variables only to the plugin's MCP server), so the line names both routes."""
+    return (f"It has NOT started. In Local Studio (Gantrel's tools are in your tool list), call print_start "
+            f"{job_id}: the person sees a card and starts it there. Anywhere else, tell the person the file name "
+            f"({remote_name}) and where to start it, then wait for them to say it started")
+
+
 def cmd_upload(args):
     path = Path(args.file).expanduser().resolve()
     job, adapter = upload_file(args.printer, path, args.name, args.material)
@@ -328,8 +362,7 @@ def cmd_upload(args):
     out(args, {"job": job.id, "printer": args.printer, "remote_name": remote_name, "sha256": job.sha256},
         f"Uploaded {path.name} to {args.printer} as {remote_name}. It has NOT started.\n"
         f"Only a person starts a print. {adapter.start_by_hand(remote_name)}",
-        f"Tell the person the file name ({remote_name}) and where to start it, then wait for them to say it "
-        f"started. Then watch it: gantrel-printer camera {args.printer} --out cam.jpg")
+        f"{start_next(job.id, remote_name)}. Then watch it: gantrel-printer camera {args.printer} --out cam.jpg")
 
 
 def cmd_calibrate(args):
@@ -357,7 +390,7 @@ def cmd_calibrate(args):
         data.update(job=job.id, remote_name=job.remote_name)
         lines.append(f"Uploaded to {name} as {job.remote_name}. It has NOT started. Only a person starts a print. "
                      + adapter.start_by_hand(job.remote_name))
-        nxt = f"Tell the person to start {job.remote_name} on the printer. {judge}"
+        nxt = f"{start_next(job.id, job.remote_name)}. {judge}"
     else:
         lines.append("Nothing was sent to the printer.")
         send = (f"gantrel-printer upload {path} --printer {name}" if name

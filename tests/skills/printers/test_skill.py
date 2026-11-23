@@ -73,3 +73,20 @@ def test_watch_section_uses_real_flags_and_keeps_the_guard_honest():
         assert set(group.split()) <= flags, set(group.split()) - flags
     assert "It never resumes, starts or cancels" in text
     assert "## Watching a print" in text
+
+
+def test_inside_local_studio_every_start_route_leads_to_print_start():
+    """first-F2: step 8 starts a print through print_start inside Local Studio, so the upload step and
+    the calibration and guard lines must not send the model another way."""
+    text = SKILL.read_text()
+    step7 = text[text.index("7. Upload"):text.index("8. Start it")]
+    assert "Inside Local Studio" in step7 and "call the `upload` tool" in step7
+    calibration = text[text.index("## Calibration prints"):text.index("## Watching a print")]
+    assert "`print_start`" in calibration
+    guard = text[text.index("`paused_by_guard`"):text.index("If watch says the printer is already")]
+    assert "`print_resume`" in guard
+    rules = text[text.index("## Rules and checks"):text.index("## Sources")]
+    assert "A calibration print is still a print: it starts the same way as step 8" in rules
+    for old in ("the person starts it on the printer", "Only they can resume it, on the printer",
+                "tell the person the file name and where to start it, and watch"):
+        assert old not in text, old

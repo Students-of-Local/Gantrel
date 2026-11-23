@@ -23,8 +23,8 @@ anything else.
 | `camera_snapshot` | `printer` | One camera frame, as an image (8 MB cap). Read-only. |
 | `plan` | `path`, `printer`, `material`, `goal`, `load_axis` | Orientation, supports, settings, time, filament and check for an STL or 3MF. Returns a `plan_id`. Contacts no printer. |
 | `check` | `settings`, `printer`, `material`, `model_path`, `goal` | Checks a settings object against the printer, filament and part. Pass the whole `plan` result to check the part turned the plan's way. Contacts no printer. |
-| `slice` | `path`, `printer`, `material`, `quality` | Slices with the printer's profile; writes the G-code next to the model. |
-| `upload` | `path`, `printer`, `material`, `plan_id` | Sends a sliced file and records the job. Never starts it. The file's own `; filament_type` is the job's material; a `material` that disagrees with it is refused, and `material` is used only when the file names none. With `plan_id`, the job keeps that plan's summary. |
+| `slice` | `path`, `printer`, `material`, `quality` | Slices with the printer's profile; writes the G-code next to the model. A slice still running after 45 s is stopped (the slicer and every process it started) and refused: the person slices it in their slicer app. |
+| `upload` | `path`, `printer`, `material`, `plan_id` | Sends a sliced file and records the job. Never starts it. The file's own `; filament_type` is the job's material; a `material` of another family (PLA-CF is not PLA) is refused, and `material` is used only when the file names none. With `plan_id`, the job keeps that plan's summary. It holds the printer's lock (step 6 below) for the whole upload, so a second upload, start or resume on that printer is refused meanwhile. Over USB serial, a file whose G-code lines can't be sent in 35 s, at a quarter of the baud rate, is refused before the port opens. |
 | `pause` | `printer` | Pauses now. Needs no permission. |
 | `cancel` | `printer` | Cancels the current print. |
 | `emergency_stop` | `printer` | The strongest stop the printer offers over the network. |
@@ -60,11 +60,16 @@ A link inside home that points outside it is refused. Models are capped at 200 M
    closes, which takes the card away.
 5. Only the exact answer Start print goes on. Typed text, Don't start, Stop (cancelled), a refusal, a
    different process on the socket, or no answer: nothing starts.
-6. Check step 1 again, because the printer may have changed while the card was open. The start
-   repeats those checks, so if the re-check took longer than what is left of the budget, nothing
-   starts and the outcome is `timeout`. Then mint a single-use token in this process, bound to this
-   job, its file's SHA-256 and the printer's identity, and spend it at once on the start. The token
-   is never returned, printed or logged.
+6. Take the printer's lock: a file per printer, `locks/<printer>.lock` in Gantrel's state folder
+   (`~/.local/state/gantrel-printer/`, or `state/` under `$GANTREL_PRINTER_HOME`), held with `flock`
+   from here to the printer's reply to the start. Local Studio runs one server per thread, so the
+   lock is shared by every Gantrel server on the computer, and two cards answered together can't both
+   find the printer idle. If another start, resume or upload holds it past the budget, nothing starts
+   and the outcome is `timeout`. Check step 1 again, because the printer may have changed while the
+   card was open. The start repeats those checks, so if the re-check took longer than what is left of
+   the budget, nothing starts and the outcome is `timeout`. Then mint a single-use token in this
+   process, bound to this job, its file's SHA-256 and the printer's identity, and spend it at once on
+   the start. The token is never returned, printed or logged.
 7. Append one line to `prints.log`.
 
 While a card is open, the server still answers other calls: mcp 2.3 runs each sync tool on a worker
@@ -118,7 +123,10 @@ it writes nothing in the checkout.
 
 - **Local Studio:** nothing to do. The plugin's `plugin.toml` asks for `mcp-server` and `ask-user`;
   grant both on the consent sheet, and Local Studio starts the server for each thread with the ask
-  variables. This is the only place `print_start` can start a print.
+  variables. This is the only place `print_start` can start a print. The plugin's printers skill
+  uploads with the `upload` tool there, whose `next` names `print_start`. The model's shell gets none
+  of the ask variables, so the CLI's `upload` NEXT line names both routes: `print_start <job id>` in
+  Local Studio, the printer anywhere else.
 - **Claude Code:** `claude mcp add --scope user gantrel -- /path/to/Gantrel/bin/gantrel-mcp`
 - **Codex:** `codex mcp add gantrel -- /path/to/Gantrel/bin/gantrel-mcp`
 - **Grok Bot (grok CLI):** `grok mcp add --scope user gantrel /path/to/Gantrel/bin/gantrel-mcp`
