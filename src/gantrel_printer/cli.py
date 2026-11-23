@@ -404,9 +404,16 @@ def cmd_plan(args):
     if p.get("oriented_stl"):
         lines.append(f"Wrote the turned part to {p['oriented_stl']}")
     quality = {"quality": "fine", "balanced": "standard", "speed": "draft"}[args.goal]
-    nxt = (f"Tell the person the orientation, supports, time and filament. To slice, turn the part as shown"
-           f" (or use the --write-oriented file), then gantrel-printer slice <file> --printer <name> --material "
-           f"{p['material']} --quality {quality}; slice uses its own profile, not every number above")
+    if p["material"] in slicing.MATERIALS:
+        nxt = (f"Tell the person the orientation, supports, time and filament. To slice, turn the part as shown"
+               f" (or use the --write-oriented file), then gantrel-printer slice <file> --printer <name> --material "
+               f"{p['material']} --quality {quality}; slice uses its own profile, not every number above"
+               + (", and its speeds are over the flow cap: for these speeds, slice in OrcaSlicer or Bambu Studio "
+                  "with the settings above" if b.get("note") else ""))
+    else:
+        nxt = (f"Tell the person the orientation, supports, time and filament. gantrel-printer slice has no "
+               f"{p['material']} profile: slice in OrcaSlicer, Bambu Studio or the printer's own slicer with the "
+               f"settings above, the part turned as shown (or the --write-oriented file)")
     out(args, p, "\n".join(lines), nxt)
     return 0
 

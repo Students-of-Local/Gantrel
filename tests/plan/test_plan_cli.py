@@ -166,3 +166,17 @@ def test_check_with_a_model_names_missing_keys_instead_of_crashing(capsys, stl, 
     rc, _, err = run(capsys, "check", str(only), "--printer", "bambu-a1", "--material", "PLA", "--model", model)
     assert rc == 1 and "ERROR (config)" in err and "Traceback" not in err
     assert "top_layers, bottom_layers, infill_percent" in err
+
+
+@pytest.mark.parametrize("fam", ["PLA", "PLA-CF", "PETG", "PA-CF", "PC", "TPU", "PVA", "HIPS"])
+def test_plan_next_line_only_sends_slice_what_slice_can_do(capsys, stl, fam):
+    from gantrel_printer import slicing
+    rc, out, _ = run(capsys, "plan", stl(shapes.cube(), "c.stl"), "--printer", "creality-k2-plus", "--material", fam,
+                     "--json")
+    assert rc == 0
+    nxt = json.loads(out)["next"]
+    if fam in slicing.MATERIALS:
+        assert f"gantrel-printer slice <file> --printer <name> --material {fam}" in nxt
+        slicing.material(fam)                                   # the command it names works
+    else:
+        assert "gantrel-printer slice <file>" not in nxt and "OrcaSlicer" in nxt and fam in nxt
