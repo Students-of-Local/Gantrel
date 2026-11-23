@@ -8,10 +8,12 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The suite takes about 10 minutes and apt has taken up to 9 for ffmpeg; 15 cancelled #21 and #25 mid-suite.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       # The watch tests check the timelapse MP4 with ffmpeg and ffprobe; without them that test is skipped.
       - run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg
+        timeout-minutes: 12
       - run: uv run --python 3.12 pytest -v --durations=10 -o faulthandler_timeout=120
