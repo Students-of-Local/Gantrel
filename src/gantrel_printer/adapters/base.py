@@ -1,8 +1,8 @@
 """The adapter contract (docs/PRINTERS.md, Adapter contract).
 
-Every printer type subclasses Adapter. start() and resume() are final here and need a confirm token;
-they exist for the app's confirm sheet and are not reachable from the CLI, which never starts or
-resumes a print (see safety.py for what that does and does not protect against).
+Every printer type subclasses Adapter. start() and resume() are final here and need a confirm token.
+Only the MCP server's Local Studio card (gantrel_mcp.start) mints one, after the person answers it.
+The CLI never starts or resumes a print (see safety.py for what this does and does not protect against).
 """
 
 from __future__ import annotations
@@ -86,6 +86,9 @@ class Adapter(ABC):
     # Can this adapter read back a file's size and time on the printer? If not, start relies on the
     # content-hash file name alone (Creality stock firmware has no file info call we know of).
     verifies_remote: bool = True
+    # Can the printer's API start a file already stored on it? If not (Snapmaker, UltiMaker), print_start
+    # refuses before any card, and the person starts it on the printer.
+    network_start: bool = True
 
     def identity(self) -> str:
         """Which physical printer this is: type, host, port, serial, TLS pin. Tokens bind to this."""

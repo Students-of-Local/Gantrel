@@ -29,6 +29,8 @@ Most of this is planned. three.js is in use now, in Gantrel Studio. This is the 
 
 Gantrel links only to MIT, Apache, BSD and LGPL libraries. GPL and AGPL programs run as separate processes or services that Gantrel talks to over a command line or network API, unmodified. Before any of that changes, check the license again and record the decision here.
 
+Decision, 2026-11-23 (Claude, for the MCP server): `mcp` (MIT) pulls in `typing-extensions`, which is PSF-2.0, and a few MIT-0 packages. Both are permissive licenses like BSD, with no copyleft, so they are allowed as linked dependencies. The full list is in `pyproject.toml`.
+
 ## After v0
 
 These wants are kept, and come after the first Dev release (planned for Feb 1, 2027): RunPod offload through Fonsviva once Fonsviva has cloud providers, a phone companion (t3code already has mobile apps to start from), agent-made themes, product-design tools beyond printing, and architecture views.

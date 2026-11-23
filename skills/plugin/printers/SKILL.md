@@ -11,9 +11,10 @@ The model is sliced with the right profile for this printer and material, the fi
 printer, and the person knows its name and where to start it. Or: the person sees their printer's
 status and a camera image. Or: a print that looks wrong is paused or stopped.
 
-You never start or resume a print. gantrel-printer has no command for it on purpose. The person
-starts and resumes prints on the printer's screen or its own web page. Never try to start one
-another way, such as calling the printer's API with curl.
+You never start or resume a print yourself. Only the person does: in Local Studio, by choosing
+Start print (or Resume print) on the card Gantrel's `print_start` (or `print_resume`) tool shows
+them; anywhere else, on the printer's screen or its own web page. gantrel-printer has no start
+command on purpose. Never try to start one another way, such as calling the printer's API with curl.
 
 ## Inputs
 
@@ -87,16 +88,25 @@ surfaces), follow "Calibration prints" below.
    are not sliced here: upload the .ctb or .goo file the person sliced in their resin slicer.
    If upload is refused (UltiMaker, or a USB printer with no SD card), tell the person what it
    said and how to get the file to the printer.
-8. Tell the person the file name the upload printed and where to start it (the upload message
-   says: the printer's screen, its web page, or the maker's app). Ask them to check the bed is
-   empty first. Then wait until they say it started.
-9. Watch: after the person says the print started, run
+8. Start it, the person's way:
+   - Inside Local Studio (the Gantrel tools, such as `print_start`, are in your tool list): call
+     `print_start` with the job id from the upload, and tell the person a card will appear in the
+     thread; they check the bed and choose Start print or Don't start. Never say the print started
+     unless the tool's reply says `started`. Any other reply (not confirmed, declined, timeout,
+     refused) means it did not start: tell the person what it said. A paused print works the same
+     way with `print_resume`.
+   - Outside Local Studio (no Gantrel tools, or `print_start` answers "not confirmed" because it is
+     not in Local Studio): tell the person the file name the upload printed and where to start it
+     (the upload message says: the printer's screen, its web page, or the maker's app). Ask them to
+     check the bed is empty first. Then wait until they say it started.
+9. Watch: after `print_start` says `started`, or the person says the print started, run
 
        gantrel-printer watch <name> --timelapse --background
 
    See "Watching a print" below. Then tell the person Gantrel is watching.
 10. Trouble you see on the camera: follow "First: is this a stop request?" above. Tell the person
-    what you did and what you saw. Only they can resume it, on the printer.
+    what you did and what you saw. Only they can resume it: on the printer, or on the card
+    `print_resume` shows them in Local Studio.
 
 ## Loaded filament
 
@@ -160,8 +170,10 @@ the ones the problem needs:
 
 - Every gantrel-printer reply ends with `NEXT: <what to do>`. Follow it. If you lose track,
   run `gantrel-printer status <name>` and read its NEXT line.
-- Never start or resume a print, by any route. Never try to get around a REFUSED message. Tell
-  the person what it said.
+- Never start or resume a print by any route but `print_start` and `print_resume`, and only the
+  person's click on their card starts one. Never try to get around a REFUSED message or a "not
+  confirmed" reply; never call `print_start` again to wear the person down. Tell the person what it
+  said.
 - Never print, log or repeat an API key, access code or token you were not handed for a command.
 - Check status and the camera before every print, and the camera again after the first layer.
 - ABS and ASA need an enclosed printer; TPU needs direct drive. If slice refuses, say why. Use

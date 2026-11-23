@@ -220,7 +220,10 @@ def test_material_must_be_a_known_material(printer, tmp_path, capsys):
     bad = "PLA\x1b[2A\x1b[2KFile:     calibration-cube.gcode"
     assert cli.main(["upload", str(f), "--printer", "moon", "--material", bad]) == cli.EXIT_ERROR
     assert printer.files == {}
-    assert cli.main(["upload", str(f), "--printer", "moon", "--material", "petg"]) == 0
+    # A file that names no material takes the argument, stored as the known name.
+    plain = tmp_path / "plain.gcode"
+    plain.write_bytes(b"G28\nG1 X10\n")
+    assert cli.main(["upload", str(plain), "--printer", "moon", "--material", "petg"]) == 0
     assert safety.list_jobs()[0].material == "PETG"
 
 

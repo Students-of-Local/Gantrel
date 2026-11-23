@@ -1,15 +1,26 @@
-"""Job records and confirm tokens, kept for the app's confirm sheet. Not wired to anything yet.
+"""Job records, plan records and confirm tokens.
 
-Gantrel's tools never start or resume a print: the CLI has no start, resume or confirm command, and
-a person starts every print on the printer's screen or its own web UI. Nothing in the CLI mints a
-token, so Adapter.start and Adapter.resume are unreachable from it today.
+Gantrel's MCP server starts or resumes a print only through a question card in Local Studio that the
+person clicks (src/gantrel_mcp/start.py, docs/MCP.md). That card is the only caller of mint_token().
+The CLI has no start, resume or confirm command and mints no token, so a person using the CLI
+starts every print on the printer's screen or its own web UI.
 
-This is not a security boundary. An agent with shell access can reach a printer's API directly
-(curl to Moonraker, for example), and a terminal prompt can be faked with a pseudo-terminal. The
-real boundary comes later, with Local Studio capability grants and the in-app confirm sheet, which
-will be the only caller of mint_token().
+What the card flow guarantees (docs/MCP.md, and Local Studio's docs/plugins.md, "Questions from
+plugins"): the model has no way to answer the card. Local Studio's ask socket takes only questions,
+and only the person's click or typed text, in the app or on a paired phone, settles one. Gantrel
+checks that the process serving the socket is the Local Studio named in LOCAL_STUDIO_ASK_PID before
+it sends anything, builds the card only from records it holds (never from a tool's arguments), mints
+the token in its own process after the answer "Start print", never returns or logs the token, and
+logs every attempt to prints.log. Outside Local Studio (no LOCAL_STUDIO_ASK variables) nothing starts.
 
-What is here for that sheet:
+What it does not guarantee: until Local Studio's per-session sandboxing (local-studio#33) lands, the
+model's bash runs as the same user as Local Studio and this server. A model that attacks the system
+itself is outside the guarantee: one that drives the desktop app, pairs a device, kills or traces
+processes, reads the server's environment (ps eww) to take its ask token, or writes Gantrel's state
+files directly. Bash can also reach a printer's own API (curl to Moonraker, for example). The card
+protects the honest path; it is not a sandbox.
+
+The rules the tokens keep:
 
 - tokens: single use, short lived (TOKEN_TTL_S), bound to one action, one job record, the SHA-256 of
   that job's file, and the printer's identity (type, host, port, serial, TLS pin). Adapter.start and
@@ -29,6 +40,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import time
 from dataclasses import asdict, dataclass
@@ -65,6 +77,11 @@ class Job:
     identity: str = ""                # printer identity at upload (Adapter.identity())
     remote_size: int | None = None    # the printer's copy, recorded right after upload
     remote_mtime: float | None = None
+    slot: str = ""                    # the loaded slot that matched the material at upload, from the printer
+    plan: dict | None = None          # a Gantrel plan summary (save_plan), when the upload named one
+
+
+JOB_ID_RE = re.compile(r"^[A-Za-z0-9]{1,32}$")
 
 
 def _jobs_dir() -> Path:
@@ -83,18 +100,19 @@ def _write_private(path: Path, data: dict) -> None:
 
 def new_job(printer: str, local_path: str | Path, remote_name: str, material: str = "",
             est_seconds: float | None = None, identity: str = "", sha256: str | None = None,
-            remote_size: int | None = None, remote_mtime: float | None = None) -> Job:
+            remote_size: int | None = None, remote_mtime: float | None = None, slot: str = "",
+            plan: dict | None = None) -> Job:
     local = Path(local_path).resolve()
     job = Job(id=secrets.token_hex(4), printer=printer, local_path=str(local), sha256=sha256 or file_sha256(local),
               remote_name=remote_name, material=material, est_seconds=est_seconds, created=time.time(),
-              identity=identity, remote_size=remote_size, remote_mtime=remote_mtime)
+              identity=identity, remote_size=remote_size, remote_mtime=remote_mtime, slot=slot, plan=plan)
     _write_private(_jobs_dir() / f"{job.id}.json", asdict(job))
     return job
 
 
 def load_job(job_id: str) -> Job:
-    if not job_id.isalnum():
-        raise SafetyError(f"{job_id!r} is not a job id", "Job ids are the short codes upload prints")
+    if not isinstance(job_id, str) or not JOB_ID_RE.match(job_id):
+        raise SafetyError("that is not a job id", "Job ids are the short codes upload prints")
     path = _jobs_dir() / f"{job_id}.json"
     if not path.exists():
         raise SafetyError(f"no job {job_id!r}", "Run gantrel-printer jobs to see uploaded jobs")
@@ -131,6 +149,33 @@ def verify_job_file(job: Job) -> None:
         raise SafetyError("the job's file changed after upload", "Upload it again and confirm the new file")
 
 
+# ---------------------------------------------------------------- plans
+
+PLAN_FIELDS = ("printer", "material", "low_s", "high_s", "grams", "pass", "warn", "fail")
+
+
+def _plans_dir() -> Path:
+    d = config.state_dir() / "plans"
+    d.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return d
+
+
+def save_plan(summary: dict) -> str:
+    """Keep a plan's summary so an upload can name it. Returns the plan id."""
+    pid = secrets.token_hex(4)
+    _write_private(_plans_dir() / f"{pid}.json", {"id": pid, **{k: summary.get(k) for k in PLAN_FIELDS}})
+    return pid
+
+
+def load_plan(plan_id: str) -> dict:
+    if not isinstance(plan_id, str) or not JOB_ID_RE.match(plan_id):
+        raise SafetyError("that is not a plan id", "Plan ids are the short codes the plan tool returns")
+    path = _plans_dir() / f"{plan_id}.json"
+    if not path.exists():
+        raise SafetyError(f"no plan {plan_id}", "Run the plan tool again and use the plan_id it returns")
+    return json.loads(path.read_text())
+
+
 # ---------------------------------------------------------------- tokens
 
 
@@ -145,7 +190,7 @@ def _token_key(token: str) -> str:
 
 
 def mint_token(action: str, printer: str, job_id: str, file_hash: str, identity: str) -> str:
-    """For the app's confirm sheet, after a person confirms there. Nothing calls this yet."""
+    """Only the MCP server's Local Studio card calls this, after the person answers it (gantrel_mcp.start)."""
     if action not in ACTIONS:
         raise ValueError(action)
     if not identity:
@@ -177,7 +222,7 @@ def consume_token(token: str | None, action: str, printer: str, job_id: str, fil
     """
     if not token:
         raise SafetyError(f"{action} needs a confirm token",
-                          "Only the app's confirm sheet makes tokens, and it doesn't exist yet")
+                          "Only the person's answer on Gantrel's Local Studio card makes tokens")
     key = _token_key(token)
     path = _tokens_dir() / f"{key}.json"
     if not path.exists():

@@ -7,7 +7,9 @@ license = "MIT"
 requires-python = ">=3.11"
 # Licenses (docs/STACK.md rule: link only MIT, Apache, BSD, LGPL):
 #   HTTP is the Python standard library (no certifi, which is MPL-2.0). websockets BSD-3-Clause, paho-mqtt EPL-2.0 OR EDL-1.0 (used under EDL-1.0,
-#   which is BSD-3-Clause), zeroconf LGPL-2.1, keyring MIT, numpy BSD-3-Clause (the print planner's mesh math).
+#   which is BSD-3-Clause), zeroconf LGPL-2.1, keyring MIT, numpy BSD-3-Clause (the print planner's mesh math),
+#   mcp MIT (the official MCP Python SDK, for gantrel-mcp; its own dependencies are MIT, BSD, Apache-2.0,
+#   MIT-0 and PSF-2.0 for typing-extensions, checked 2026-11-23).
 dependencies = [
     "websockets>=13",
     "paho-mqtt>=2.1",
@@ -15,11 +17,13 @@ dependencies = [
     "keyring>=25",
     "pyserial>=3.5",
     "numpy>=2",
+    "mcp>=2.3,<3",
 ]
 
 [project.scripts]
 gantrel-printer = "gantrel_printer.cli:main"
 gantrel-studio = "gantrel_studio.cli:main"
+gantrel-mcp = "gantrel_mcp.server:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]
@@ -29,7 +33,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/gantrel_printer", "src/gantrel_studio"]
+packages = ["src/gantrel_printer", "src/gantrel_studio", "src/gantrel_mcp"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests/printers", "tests/skills/printers", "tests/studio", "tests/plan"]
+testpaths = ["tests/printers", "tests/skills/printers", "tests/studio", "tests/plan", "tests/mcp"]
