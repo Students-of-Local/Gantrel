@@ -211,6 +211,43 @@ def test_temperature_parameter_that_is_not_a_plain_number_or_one_placeholder_is_
 
 
 @pytest.mark.parametrize("line", [
+    # One whole known placeholder, but not this heater's temperature: travel_speed can be 2000, a nozzle 220.
+    "M104 S{travel_speed}", "M109 S{first_layer_bed_temperature[0]}", "M109 R[bed_temperature]",
+    "M104 S{chamber_temperature[0]}", "M140 S{temperature[0]}", "M190 S{first_layer_temperature[0]}",
+    "M190 S{layer_height}", "M140 S[nozzle_temperature]", "M141 S{temperature[0]}", "M191 S{bed_temperature[0]}",
+    "M104 B{travel_speed}", "M109 B+400", "M104 S200 B{bed_temperature[0]}",
+    "START_PRINT EXTRUDER_TEMP={travel_speed}", "START_PRINT BED_TEMP={temperature[0]}",
+    "PRINT_START EXTRUDER_TEMP={first_layer_bed_temperature[0]}", "START_PRINT CHAMBER_TEMP={bed_temperature[0]}",
+    "START_PRINT TEMP={layer_height}", "SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={temperature[0]}",
+    "SET_HEATER_TEMPERATURE HEATER=extruder TARGET={bed_temperature[0]}",
+])
+def test_a_heater_takes_only_its_own_temperature_placeholders(good, line):
+    good["printer"]["start_gcode"] = f"G28\n{line}"
+    item = refused_at(check(good), "printer.start_gcode", 2, "placeholder")
+    assert item.text == line
+
+
+@pytest.mark.parametrize("line", ["M104 B320", "M109 S200 B301", "M104 B 400"])
+def test_autotemp_max_above_the_hotend_limit_is_refused(good, line):
+    good["printer"]["start_gcode"] = f"G28\n{line}"
+    refused_at(check(good), "printer.start_gcode", 2, "sets the hotend")
+
+
+@pytest.mark.parametrize("line", [
+    "M104 S{nozzle_temperature_initial_layer[0]}", "M109 S[first_layer_temperature]", "M109 R{nozzle_temperature}",
+    "M140 S{hot_plate_temp_initial_layer[0]}", "M190 S{textured_plate_temp[0]}",
+    "M190 S{bed_temperature_initial_layer_single}", "M140 S{bed_temperature_initial_layer[0]}",
+    "M141 S{overall_chamber_temperature}", "M191 S[chamber_temperature]", "M104 B300", "M109 S200 B{temperature[0]}",
+    "START_PRINT EXTRUDER_TEMP={nozzle_temperature_initial_layer[0]} BED_TEMP={hot_plate_temp_initial_layer[0]}",
+    "START_PRINT TEMP={temperature[0]}", "SET_HEATER_TEMPERATURE HEATER=extruder TARGET={temperature[0]}",
+])
+def test_a_heaters_own_placeholders_and_autotemp_within_limits_pass(good, line):
+    good["printer"]["start_gcode"] = line
+    rep = check(good)
+    assert not [i for i in rep.refusals if i.path == "printer.start_gcode"], rep.items
+
+
+@pytest.mark.parametrize("line", [
     "G1 Z{layer_height}0", "G1 X1{print_bed_max[0]}", "G1 Z-{layer_height}", "G1 Z{layer_z}{layer_height}",
     "G1 Z+{layer_height}", "START_PRINT EXTRUDER_TEMP={first_layer_temperature[0]}0",
     "START_PRINT EXTRUDER_TEMP=1{temperature[0]}", "PRINT_START BED_TEMP={bed_temperature[0]}{bed_temperature[0]}",

@@ -514,16 +514,33 @@ PLACEHOLDER_RE = re.compile(r"^\s*([a-z_]+)\s*(?:\[\s*(\d+|initial_extruder|curr
 HOTEND_KEYS = {"EXTRUDER_TEMP", "EXTRUDER_TEMPERATURE", "EXTRUDER", "HOTEND_TEMP", "HOTEND", "NOZZLE_TEMP",
                "NOZZLE", "TOOL_TEMP"}
 BED_KEYS = {"BED_TEMP", "BED_TEMPERATURE", "BED", "HEATER_BED"}
-# Macro parameters that hold a temperature. Their value must read as a number or be one known placeholder alone.
-TEMP_KEYS = HOTEND_KEYS | BED_KEYS | {"TEMP", "TARGET", "CHAMBER_TEMP", "CHAMBER_TEMPERATURE", "CHAMBER"}
+CHAMBER_KEYS = {"CHAMBER_TEMP", "CHAMBER_TEMPERATURE", "CHAMBER"}
+# Macro parameters that hold a temperature. Their value must read as a number or be one temperature placeholder alone:
+# of their own heater, or of any heater for TEMP and TARGET, which do not name one.
+TEMP_KEYS = HOTEND_KEYS | BED_KEYS | CHAMBER_KEYS | {"TEMP", "TARGET"}
 # Of those, the ones Klipper commands also use to name a heater or extruder (SET_PRESSURE_ADVANCE EXTRUDER=extruder),
 # so a plain object name there is not a temperature.
 OBJECT_KEYS = {"EXTRUDER", "NOZZLE", "BED", "HEATER_BED", "CHAMBER"}
-MARK = "\x00"   # stands in for a known slicer placeholder: never a literal
+MARK = "\x00"   # stands in for a known slicer placeholder that is not a temperature: never a literal
 UNKNOWN = "\x01"   # stands in for slicer text that is not on the known list
+# The temperature placeholders of each heater (PrusaSlicer's and OrcaSlicer's names, Orca's per plate type bed names
+# among them). The slicer fills them from the pack's own material, which the pack's checks hold to its limits; a
+# heater parameter takes only its own heater's, so M104 S{travel_speed} or M140 S{temperature[0]} is refused.
+TEMP_PLACEHOLDERS = {
+    "hotend": ("first_layer_temperature", "temperature", "nozzle_temperature", "nozzle_temperature_initial_layer"),
+    "bed": ("first_layer_bed_temperature", "bed_temperature", "bed_temperature_initial_layer",
+            "bed_temperature_initial_layer_single", "hot_plate_temp", "hot_plate_temp_initial_layer",
+            "textured_plate_temp", "textured_plate_temp_initial_layer"),
+    "chamber": ("chamber_temperature", "overall_chamber_temperature"),
+}
+HEATER_MARK = {"hotend": "\x02", "bed": "\x03", "chamber": "\x04"}   # a known placeholder of that heater
+PLACEHOLDER_HEATER = {name: h for h, names in TEMP_PLACEHOLDERS.items() for name in names}
+MARKS = (MARK, UNKNOWN, *HEATER_MARK.values())
 # Heaters whose S or R parameter sets a temperature. A chamber has no limit in a pack, but its value must still be
 # one Gantrel can read.
 HEATERS = {104: "hotend", 109: "hotend", 140: "bed", 190: "bed", 141: "chamber", 191: "chamber"}
+# The parameters of each that set a temperature. B on M104 and M109 is Marlin's autotemp maximum.
+HEATER_LETTERS = {"hotend": "SRB", "bed": "SR", "chamber": "SR"}
 PLAIN_TEMP_RE = re.compile(r"\d+(?:\.\d+)?")
 GCODE_LINE_RE = re.compile(r"^\s*(?:N\d+\s*)?([GMTgmt])\s*(\d+)(?:\.\d+)?(.*?)(?:\*\d+)?\s*$")
 
@@ -533,8 +550,14 @@ def _strip_comment(line: str) -> str:
     return line[:min(cut)] if cut else line
 
 
+def _mark(name: str) -> str:
+    h = PLACEHOLDER_HEATER.get(name)
+    return HEATER_MARK[h] if h else MARK
+
+
 def _placeholders(body: str) -> tuple[str, list[str]]:
-    """Replace known slicer placeholders with MARK. Return the line and the unknown ones."""
+    """Replace known slicer placeholders with a mark (HEATER_MARK for a heater's temperature, else MARK) and unknown
+    ones with UNKNOWN. Return the line and the unknown ones."""
     unknown = []
 
     def sub(m):
@@ -543,13 +566,13 @@ def _placeholders(body: str) -> tuple[str, list[str]]:
         if not pm or pm.group(1) not in PLACEHOLDERS:
             unknown.append(m.group(0))
             return UNKNOWN
-        return MARK
+        return _mark(pm.group(1))
 
     body = re.sub(r"\{([^{}]*)\}", sub, body)
 
     def legacy(m):
         if m.group(1) in PLACEHOLDERS:
-            return MARK
+            return _mark(m.group(1))
         unknown.append(m.group(0))
         return UNKNOWN
 
@@ -570,12 +593,27 @@ def _num(v: str) -> float | None:
 def _glued(value: str) -> bool:
     """A parameter value where slicer text touches a digit, a sign or more slicer text. The slicer pastes them
     together, so the value it makes ({temperature[0]}0 becomes 2200) is not one anyone reviewed."""
-    n = value.count(MARK) + value.count(UNKNOWN)
-    return n > 0 and value.strip() not in (MARK, UNKNOWN) and (n > 1 or bool(re.search(r"[\d+-]", value)))
+    n = sum(value.count(c) for c in MARKS)
+    return n > 0 and value.strip() not in MARKS and (n > 1 or bool(re.search(r"[\d+-]", value)))
 
 
 GLUED_WHY = ("mixes a slicer placeholder with digits, a sign or another placeholder in one value; the slicer pastes "
              "them together into a number no one reviewed")
+
+
+def _own_marks(key: str, heater_name: str = "") -> tuple[str, ...]:
+    """The placeholder marks a temperature-named macro key may hold: its own heater's."""
+    if key in HOTEND_KEYS:
+        return (HEATER_MARK["hotend"],)
+    if key in BED_KEYS:
+        return (HEATER_MARK["bed"],)
+    if key in CHAMBER_KEYS:
+        return (HEATER_MARK["chamber"],)
+    if key == "TARGET" and heater_name.startswith("extruder"):
+        return (HEATER_MARK["hotend"],)
+    if key == "TARGET" and heater_name == "heater_bed":
+        return (HEATER_MARK["bed"],)
+    return tuple(HEATER_MARK.values())   # TEMP, or TARGET on a heater the check does not know
 
 
 def _float_word(v: str) -> bool:
@@ -643,10 +681,10 @@ def gcode_policy(text: str, path: str, hotend_max: float | None, bed_max: float 
                 # S or R must be a plain number Gantrel checks, or one known placeholder alone (the pack's own
                 # material temperature). Marlin reads a value as far as strtod goes (S1E3 is 1000), so the whole
                 # run of text after the letter is what must be plain.
-                bad = [f"{k}{v}" for k, v in re.findall(r"([SR])\s*(\S*)", rest)
-                       if v != MARK and not PLAIN_TEMP_RE.fullmatch(v)]
+                bad = [f"{k}{v}" for k, v in re.findall(rf"([{HEATER_LETTERS[heater]}])\s*(\S*)", rest)
+                       if v != HEATER_MARK[heater] and not PLAIN_TEMP_RE.fullmatch(v)]
                 if bad:
-                    rep.add("refusal", path, f"{cmd} {bad[0][0]} must be a plain number or one known slicer "
+                    rep.add("refusal", path, f"{cmd} {bad[0][0]} must be a plain number or one {heater} temperature "
                                              f"placeholder alone; anything else sets a {heater} temperature this "
                                              "check cannot hold to the pack's limits", n, raw)
                     continue
@@ -671,11 +709,12 @@ def gcode_policy(text: str, path: str, hotend_max: float | None, bed_max: float 
                 finding = ("G92 other than G92 E tells the printer the head is somewhere it may not be, so a later move "
                            "can drive the nozzle into the bed or the frame")
             if heater:
-                temps += [(heater, float(v)) for k, v in re.findall(r"([SR])\s*(\S*)", rest) if v != MARK]
+                temps += [(heater, float(v)) for k, v in re.findall(rf"([{HEATER_LETTERS[heater]}])\s*(\S*)", rest)
+                          if PLAIN_TEMP_RE.fullmatch(v)]
         else:
             tokens = body.split()
             word = tokens[0].upper()
-            if MARK in word or UNKNOWN in word or not re.match(r"^[A-Z_][A-Z0-9_]*$", word):
+            if any(c in word for c in MARKS) or not re.match(r"^[A-Z_][A-Z0-9_]*$", word):
                 finding = "is not a G-code command Gantrel recognizes"
             elif word in REFUSED_WORDS:
                 rep.add("refusal", path, f"{word} {REFUSED_WORDS[word]}", n, raw)
@@ -696,11 +735,13 @@ def gcode_policy(text: str, path: str, hotend_max: float | None, bed_max: float 
             if glued:
                 rep.add("refusal", path, f"{word} {glued[0]} {GLUED_WHY}", n, raw)
                 continue
-            unread = [k for k, v in pairs if k in TEMP_KEYS and v != MARK and _num(v) is None
+            target = kv.get("HEATER", "").lower() if word == "SET_HEATER_TEMPERATURE" else ""
+            unread = [k for k, v in pairs if k in TEMP_KEYS and v not in _own_marks(k, target) and _num(v) is None
                       and not (k in OBJECT_KEYS and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", v) and not _float_word(v))]
             if unread:
-                rep.add("refusal", path, f"{word} {unread[0]} must read as a number or be one known slicer placeholder "
-                                         "alone; this value cannot be checked against the pack's limits", n, raw)
+                rep.add("refusal", path, f"{word} {unread[0]} must read as a number or be one temperature placeholder "
+                                         "of its own heater alone; this value cannot be checked against the pack's "
+                                         "limits", n, raw)
                 continue
             for k, v in pairs:
                 x = _num(v)
