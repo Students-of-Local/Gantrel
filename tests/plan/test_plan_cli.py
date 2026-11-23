@@ -206,9 +206,10 @@ def test_plan_next_line_only_sends_slice_what_slice_can_do(capsys, stl, fam):
         assert "gantrel-printer slice <file>" not in nxt and "OrcaSlicer" in nxt and fam in nxt
 
 
-def test_plan_and_check_refuse_a_part_over_the_planner_limit(capsys, stl, tmp_path):
-    # Review r2 first-F1: a 1M-triangle part ran for minutes and ran out of memory. Until the planner is faster it
-    # refuses a part over PLAN_MAX_TRIANGLES at once, with what to do, and slicing the original still works.
+def test_plan_and_check_refuse_a_part_over_the_planner_limit(capsys, stl, tmp_path, monkeypatch):
+    # A part over PLAN_MAX_TRIANGLES is refused at once, with what to do; slicing the original still works. The limit
+    # is lowered here so the test needs no 2M-triangle file.
+    monkeypatch.setattr(mesh, "PLAN_MAX_TRIANGLES", 1000)
     cube = shapes.cube()
     reps = mesh.PLAN_MAX_TRIANGLES // len(cube.tris) + 1
     big = mesh.Mesh(np.tile(cube.tris, (reps, 1, 1)))
