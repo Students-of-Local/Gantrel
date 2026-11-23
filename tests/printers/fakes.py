@@ -574,7 +574,7 @@ class FakeBambu:
                         if self.partial_first:
                             part = {"print": {"gcode_state": self.report()["print"]["gcode_state"], "command": "push_status"}}
                             s.sendall(_mqtt_packet(0x30, struct.pack(">H", len(t)) + t + json.dumps(part).encode()))
-                            time.sleep(0.3)
+                            time.sleep(1.5)  # past paho's loop_stop, so a reader that stops early misses the rest
                         s.sendall(_mqtt_packet(0x30, struct.pack(">H", len(t)) + t + json.dumps(self.report()).encode()))
                     continue
                 cmd = payload.get("print", {})
