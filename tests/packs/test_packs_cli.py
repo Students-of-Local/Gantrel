@@ -433,3 +433,15 @@ def test_a_file_that_is_not_one_json_object_is_refused(capsys, write, body):
     assert rc == 1 and "REFUSED" in text and "one JSON object" in text
     rc, _, err = run(capsys, "pack", "import", f, "--accept", sha[:12])
     assert rc == 3 and "one JSON object" in err
+
+
+def test_gcode_lines_over_200_characters_are_refused_and_shown_whole(capsys, good, write):
+    long = "G1" + " " * 220 + "X1000"
+    good["printer"]["end_gcode"] = f"M107\n{long}\nM84"
+    f = write(good)
+    rc, text, _ = run(capsys, "pack", "check", f)
+    assert rc == 1 and "REFUSAL printer.end_gcode line 2: is 227 characters" in text, text
+    rc, text, _ = run(capsys, "pack", "show", f)
+    assert rc == 1 and long in text   # every character the person reviews, never cut
+    good["printer"]["end_gcode"] = "M107\nG1" + " " * 193 + "X1000\nM84"   # exactly 200: fine
+    assert packs.check_bytes(json.dumps(good).encode())[1].result == "pass"

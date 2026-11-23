@@ -36,6 +36,7 @@ FORMAT = "gantrel-pack/1"
 MAX_FILE = 256 * 1024       # bytes
 MAX_STRING = 4096           # characters, any string except the G-code blocks
 MAX_GCODE = 8 * 1024        # characters, start_gcode and end_gcode each
+MAX_GCODE_LINE = 200        # characters, any one line of them
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$")
 SEMVER_RE = re.compile(r"^(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})(?:-[0-9A-Za-z.-]{1,32})?$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -109,14 +110,15 @@ class Report:
                 "notes": [i.to_dict() for i in self.notes]}
 
 
-def shown(s: str, limit: int = 160) -> str:
-    """Text safe to print on a terminal: control, format and line separator characters escaped, long text cut."""
+def shown(s: str, limit: int | None = 160) -> str:
+    """Text safe to print on a terminal: control, format and line separator characters escaped, long text cut
+    (never with limit None)."""
     out = []
     for ch in s:
         cat = unicodedata.category(ch)
         out.append(ch.encode("unicode_escape").decode("ascii") if cat[0] == "C" or cat in ("Zl", "Zp") else ch)
     t = "".join(out)
-    return t if len(t) <= limit else t[:limit - 3] + "..."
+    return t if limit is None or len(t) <= limit else t[:limit - 3] + "..."
 
 
 def sha256(data: bytes) -> str:
@@ -532,6 +534,11 @@ def gcode_policy(text: str, path: str, hotend_max: float | None, bed_max: float 
     for n, raw in enumerate(text.split("\n"), 1):
         if any(ord(c) > 126 or (ord(c) < 32 and c != "\t") for c in raw):
             rep.add("refusal", path, "G-code must be plain printable ASCII", n, raw)
+            continue
+        if len(raw) > MAX_GCODE_LINE:
+            # pack show prints every line whole; a short limit keeps each one readable in a review.
+            rep.add("refusal", path, f"is {len(raw)} characters; a G-code line may be at most {MAX_GCODE_LINE}", n,
+                    raw)
             continue
         if "\\" in raw:
             # Gantrel hands G-code to the slicer with \n escapes, so a backslash here could start a line the
@@ -1132,7 +1139,7 @@ def show_lines(pack: dict | None, rep: Report, data: bytes) -> list[str]:
             path = f"printer.{key}"
             lines.append(f"{'Start' if key == 'start_gcode' else 'End'} G-code ({path}), every line:")
             for n, gl in enumerate(p[key].split("\n"), 1):
-                lines.append(f"  {n:4}  {shown(gl, 200)}")
+                lines.append(f"  {n:4}  {shown(gl, None)}")   # whole: the person accepts every character
                 for it in marks.get((path, n), []) + (marks.get((path, None), []) if n == 1 else []):
                     lines.append(f"        <- {it.level.upper()}: {it.reason}")
         lines.append("Proof (what the author says was tested; shown, not checked):")
