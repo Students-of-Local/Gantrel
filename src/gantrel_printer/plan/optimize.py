@@ -97,7 +97,7 @@ def settings_for(goal: str, printer: PrinterProfile, fil: materials.Filament, m:
     widths = {key: round(f * n, 3) for key, f in LINE.items()}
     walls = WALLS[goal] + (LOADED_EXTRA_WALLS if load_axis else 0)
     infill = LOADED_INFILL if load_axis else INFILL[goal]
-    base = slicing.MATERIALS.get(fil.name)
+    base = slicing.pack_material(printer, fil.name) or slicing.MATERIALS.get(fil.name)
     hot_hi = min(fil.nozzle_max_c, printer.hotend_max_c)
     bed_hi = min(fil.bed_max_c, printer.bed_max_c)
     mid_n = 5 * round((fil.nozzle_min_c + fil.nozzle_max_c) / 10)
@@ -190,9 +190,9 @@ def baseline(cand: orient.Candidate, printer: PrinterProfile, fil: materials.Fil
     if over:
         worst = max(over, key=lambda r: r["values"]["flow_mm3s"])["values"]
         out["note"] = (f"slicing.py's standard speeds ask for up to {worst['flow_mm3s']} mm3/s, over the "
-                       f"{worst['cap_mm3s']} mm3/s cap ({worst['cap_source']}). OrcaSlicer slows those moves to its filament "
-                       "preset's limit; PrusaSlicer, as slicing.py calls it, sets no volumetric limit, so those moves "
-                       "would under-extrude. The time above assumes the capped flow")
+                       f"{worst['cap_mm3s']} mm3/s cap ({worst['cap_source']}). slice passes that cap to "
+                       "PrusaSlicer and OrcaSlicer as their volumetric limit, so both slow those moves to it. The time "
+                       "above assumes the capped flow")
     return out
 
 

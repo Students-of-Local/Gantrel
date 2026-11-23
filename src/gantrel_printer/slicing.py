@@ -77,6 +77,10 @@ class PrinterProfile:
     chamber_heater: bool = False
     cited: tuple[str, ...] = ()          # which of the limits above come from limits_source
     limits_source: str = ""
+    # Set only on a profile built from a printer pack (packs.py): the pack's own material settings,
+    # and where they came from ("pack <id> <first 12 hex of its sha256>").
+    pack_materials: tuple[Material, ...] = ()
+    source: str = ""
 
     def __post_init__(self):
         if not self.max_accel:
@@ -270,6 +274,12 @@ class Material:
     # The nozzle temperatures worth trying for this material, low to high (calibrate temp-tower).
     # Always inside the family's cited range in materials.json (tests/plan/test_materials.py checks it).
     nozzle_range: tuple[int, int] = (190, 230)
+    # Set only for a material from a printer pack (packs.py); Gantrel's own defaults leave them empty.
+    label: str = ""                       # brand and name, like "Generic PLA"
+    max_flow: float = 0.0                 # mm3/s this filament ran at on this printer
+    retract_speed: float = 0.0            # mm/s
+    pressure_advance: float | None = None
+    flow_ratio: float | None = None
 
     @property
     def family(self) -> materials.Filament:
@@ -319,6 +329,16 @@ def profile_for(model: str, type_name: str) -> PrinterProfile:
     return PRINTERS[key]
 
 
+def pack_material(printer: PrinterProfile, family: str) -> Material | None:
+    """The pack's own settings for this filament family, when the profile came from a pack."""
+    return next((m for m in printer.pack_materials if m.name == family), None)
+
+
+def pack_materials_family(printer: PrinterProfile) -> str | None:
+    """The filament family a pack profile was resolved for (its first material), or None for other profiles."""
+    return printer.pack_materials[0].name if printer.pack_materials else None
+
+
 def material(name: str) -> Material:
     m = MATERIALS.get(name.upper())
     if not m:
@@ -344,6 +364,10 @@ def settings(printer: PrinterProfile, mat: Material, quality: str = "standard", 
                                        "accepts the risk, they can ask for --force")
     q = QUALITY[quality]
     speed = min(printer.max_speed, mat.max_speed)
+    from .plan import estimate   # plan imports this module, so not at the top
+    # The volumetric flow cap the planner uses for this filament on this printer: a pack's own max_flow when the
+    # profile came from a pack, else the vendor preset or Gantrel's default. Both slicers are held to it.
+    flow = round(estimate.flow_cap(printer, mat.family), 2)
     return {
         "printer": printer.label, "material": mat.name, "quality": quality, "nozzle_mm": printer.nozzle,
         "layer_height_mm": q["layer_height"], "first_layer_height_mm": 0.2 if q["layer_height"] <= 0.2 else 0.25,
@@ -355,12 +379,32 @@ def settings(printer: PrinterProfile, mat: Material, quality: str = "standard", 
         "fan_percent": [mat.fan_min, mat.fan_max],
         "outer_wall_speed_mms": min(speed, 150) if mat.name != "TPU" else speed,
         "inner_wall_speed_mms": min(speed, 250), "infill_speed_mms": speed, "first_layer_speed_mms": min(speed, 30),
-        "travel_speed_mms": printer.max_speed, "accel_mms2": printer.accel, "retract_mm": mat.retract_mm,
+        "travel_speed_mms": printer.max_speed, "accel_mms2": printer.accel, "max_flow_mm3s": flow,
+        "retract_mm": mat.retract_mm,
         "supports": "auto, for overhangs flatter than 50 degrees from horizontal", "brim": "auto for small footprints",
         "bed_mm": list(printer.bed), "max_height_mm": printer.height,
         "note": " ".join(n for n in (mat.note, printer.note) if n), "filament_mm": printer.filament_mm,
         **({"warning": "; ".join(warnings)} if warnings else {}),
+        **pack_settings(printer, mat),
     }
+
+
+def pack_settings(printer: PrinterProfile, mat: Material) -> dict:
+    """The extra numbers a pack material carries, and the pack named as their source. Empty otherwise."""
+    s: dict = {}
+    if printer.source:
+        s["source"] = printer.source
+    if mat.label:
+        s["material_label"] = mat.label
+    if mat.retract_speed:
+        s["retract_speed_mms"] = mat.retract_speed
+    if mat.flow_ratio is not None:
+        s["flow_ratio"] = mat.flow_ratio
+    if mat.pressure_advance is not None:
+        # PrusaSlicer has no pressure advance setting; OrcaSlicer gets it below. On Klipper it can also be set
+        # in printer.cfg ([extruder] pressure_advance), which the person does on the printer.
+        s["pressure_advance"] = mat.pressure_advance
+    return s
 
 
 def prusa_args(s: dict, printer: PrinterProfile) -> list[str]:
@@ -378,21 +422,28 @@ def prusa_args(s: dict, printer: PrinterProfile) -> list[str]:
         "--external-perimeter-speed", str(s["outer_wall_speed_mms"]),
         "--perimeter-speed", str(s["inner_wall_speed_mms"]), "--infill-speed", str(s["infill_speed_mms"]),
         "--solid-infill-speed", str(s["infill_speed_mms"]), "--first-layer-speed", str(s["first_layer_speed_mms"]),
-        "--travel-speed", str(s["travel_speed_mms"]), "--retract-length", str(s["retract_mm"]),
+        "--travel-speed", str(s["travel_speed_mms"]), "--max-volumetric-speed", str(s["max_flow_mm3s"]),
+        "--retract-length", str(s["retract_mm"]),
         "--filament-type", s["material"], "--support-material", "--support-material-auto",
         "--support-material-threshold", "50", "--brim-width", "0", "--skirts", "1",
         "--center", f"{w // 2},{d // 2}", "--ensure-on-bed",
     ]
     if printer.filament_mm != 1.75:
         a += ["--filament-diameter", str(printer.filament_mm)]
+    if "retract_speed_mms" in s:
+        a += ["--retract-speed", str(s["retract_speed_mms"])]
+    if "flow_ratio" in s:
+        a += ["--extrusion-multiplier", str(s["flow_ratio"])]
     if printer.flavor == "klipper":
         # Plain G1 E retracts, never G10/G11 firmware retraction: the retract_mm printed above is then
         # what the printer does, and a printer.cfg without [firmware_retraction] still retracts.
         a += ["--use-relative-e-distances", "--max-print-speed",
               str(s["infill_speed_mms"]), "--machine-max-acceleration-extruding", str(s["accel_mms2"])]
-    if printer.start_gcode:
+    # A pack profile always passes both, an empty block too: left out, PrusaSlicer writes its own default start
+    # G-code, which no one reviewed.
+    if printer.start_gcode or printer.source:
         a += ["--start-gcode", printer.start_gcode.replace("{chamber_temperature[0]}", str(s["chamber_c"]))]
-    if printer.end_gcode:
+    if printer.end_gcode or printer.source:
         a += ["--end-gcode", printer.end_gcode]
     return a
 
@@ -415,7 +466,29 @@ def orca_overrides(s: dict, printer: PrinterProfile) -> tuple[dict, dict, dict]:
                 "nozzle_temperature": [str(s["nozzle_c"])], "nozzle_temperature_initial_layer": [str(s["nozzle_first_layer_c"])],
                 "hot_plate_temp": [str(s["bed_c"])], "hot_plate_temp_initial_layer": [str(s["bed_first_layer_c"])],
                 "textured_plate_temp": [str(s["bed_c"])], "textured_plate_temp_initial_layer": [str(s["bed_first_layer_c"])],
-                "fan_min_speed": [str(s["fan_percent"][0])], "fan_max_speed": [str(s["fan_percent"][1])]}
+                "fan_min_speed": [str(s["fan_percent"][0])], "fan_max_speed": [str(s["fan_percent"][1])],
+                "filament_max_volumetric_speed": [str(s["max_flow_mm3s"])]}
+    if printer.source:
+        # A pack profile: Orca writes the pack's reviewed start and end G-code, not the bundled machine's.
+        # Orca's machine profiles hold real line breaks; the profile carries \n escapes (packs.to_profile), and a
+        # pack's G-code may hold no backslash of its own, so turning them back gives exactly the reviewed text.
+        # Both are always set, an empty block too: left out, Orca would run the inherited machine's G-code, which
+        # no one reviewed.
+        for key, text in (("machine_start_gcode", printer.start_gcode), ("machine_end_gcode", printer.end_gcode)):
+            machine[key] = text.replace("\\n", "\n")
+        # The pack's own printer, not the inherited machine's: a pack may keep a K2's orca_machine for a smaller
+        # bed, another nozzle or another firmware. Key names and forms as Orca's machine profiles hold them.
+        w, d = printer.bed
+        machine.update(printable_area=["0x0", f"{w}x0", f"{w}x{d}", f"0x{d}"], printable_height=str(printer.height),
+                       nozzle_diameter=[str(printer.nozzle)], gcode_flavor=printer.flavor)
+        filament["filament_diameter"] = [str(printer.filament_mm)]
+    if "retract_speed_mms" in s:
+        machine["retraction_speed"] = [str(s["retract_speed_mms"])]
+    if "flow_ratio" in s:
+        filament["filament_flow_ratio"] = [str(s["flow_ratio"])]
+    if "pressure_advance" in s:
+        filament["enable_pressure_advance"] = ["1"]
+        filament["pressure_advance"] = [str(s["pressure_advance"])]
     return machine, process, filament
 
 
@@ -506,9 +579,11 @@ def slice_model(model_path: Path, out_dir: Path, printer: PrinterProfile, s: dic
     if kind is None:
         raise Unsupported(f"{prefer} is not installed", f"Installed: {', '.join(found)}")
     out_dir.mkdir(parents=True, exist_ok=True)
-    stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", model_path.stem)
+    # Every part of the name gets the same cleaning, so it is a safe file and printer name (a pack's key is
+    # pack:<id>, and upload refuses a colon).
+    stem, key, mat = (re.sub(r"[^A-Za-z0-9_.-]+", "_", t) for t in (model_path.stem, printer.key, s["material"]))
     ext = ".bgcode" if kind == "prusaslicer" and printer.upload_ext == ".bgcode" else ".gcode"
-    final = out_dir / f"{stem}_{printer.key}_{s['material']}{ext}"
+    final = out_dir / f"{stem}_{key}_{mat}{ext}"
     if kind == "orcaslicer" and not printer.orca_machine:
         raise Unsupported(f"OrcaSlicer has no system profile mapped for {printer.label}",
                           "Install PrusaSlicer, or pair with a model that has an Orca profile")
