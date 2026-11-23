@@ -336,6 +336,160 @@ def cmd_calibrate(args):
     out(args, data, "\n".join(lines), nxt)
 
 
+def _plan_printer(key: str):
+    """A paired printer's profile, or a profile key from gantrel-printer profiles."""
+    try:
+        cfg = config.get(key)
+        return slicing.profile_for(cfg.model, cfg.type)
+    except ConfigError:
+        if key not in slicing.PRINTERS:
+            raise
+        return slicing.PRINTERS[key]
+
+
+def _rule_lines(result: dict) -> list[str]:
+    lines = []
+    for r in result["rules"]:
+        if r["status"] in ("fail", "warn"):
+            vals = ", ".join(f"{k}={v}" for k, v in r["values"].items())
+            lines.append(f"  {r['status'].upper()}: {r['rule']} ({r['formula']}; {vals}). {r['fix']}")
+    return lines
+
+
+def cmd_plan(args):
+    """Orientation, supports, settings, time and filament for a part. Reads a file; contacts no printer."""
+    import numpy as np
+
+    from .plan import mesh as pmesh, optimize
+    printer = _plan_printer(args.printer)
+    m = pmesh.load(args.model)
+    try:
+        p = optimize.plan(m, printer, args.material, args.goal, args.load_axis)
+    except optimize.PlanRefused as err:
+        data = {"refused": True, "reason": err.message, "fix": err.hint, **err.result}
+        lines = [f"REFUSED: {err.message}."] + _rule_lines(err.result["check"])
+        out(args, data, "\n".join(lines), "Tell the person this printer and filament do not go together, and why; "
+                                           "offer a filament or printer that does")
+        return EXIT_ERROR
+    best = p["orientations"][0]
+    e, s, c = p["estimate"], p["settings"], p["check"]
+    if args.write_oriented:
+        dest = Path(args.write_oriented).expanduser()
+        rot = np.array(best["rotation_matrix"])
+        pmesh.write_stl(dest, m.transformed(rot, center_on=(printer.bed[0] / 2, printer.bed[1] / 2)),
+                        header=pmesh.ORIENTED_HEADER)
+        p["oriented_stl"] = str(dest.resolve())
+    lines = [f"Plan for {m.name or args.model} on {printer.label}, {p['material']}, goal {args.goal}:"]
+    lines += [f"  part warning: {w}" for w in p["part"]["warnings"]]
+    lines.append(f"Orientation: rotate X {best['rotate_xyz_deg'][0]}, Y {best['rotate_xyz_deg'][1]}, "
+                 f"Z {best['rotate_xyz_deg'][2]} degrees ({best['reason']})")
+    for alt in p["orientations"][1:]:
+        lines.append(f"  also: X {alt['rotate_xyz_deg'][0]}, Y {alt['rotate_xyz_deg'][1]}, Z {alt['rotate_xyz_deg'][2]}: "
+                     f"{alt['reason']}")
+    lines.append(f"Supports: {s['supports']}" + (f" (about {best['support_volume_mm3']:.0f} mm3 to hold up "
+                                                   f"{best['overhang_mm2']:.0f} mm2)" if s["supports"] != "off" else ""))
+    lines.append(f"Time: about {fmt_duration(e['seconds'])} (between {fmt_duration(e['low_seconds'])} and "
+                 f"{fmt_duration(e['high_seconds'])}; {e['source']})")
+    lines.append(f"Filament: about {e['filament_g']} g ({e['filament_m']} m)")
+    lines.append(f"Settings: layer {s['layer_height_mm']} mm, {s['perimeters']} walls, {s['infill_percent']}% infill, "
+                 f"nozzle {s['nozzle_c']} C, bed {s['bed_c']} C, outer wall {s['outer_wall_speed_mms']} mm/s, "
+                 f"inner wall and infill {s['infill_speed_mms']} mm/s (flow cap {e['flow_cap_mm3s']} mm3/s)")
+    b = p["baseline"]
+    if b.get("available"):
+        lines.append(f"Against slicing.py standard settings ({fmt_duration(b['seconds'])}): "
+                     f"{'saves' if b['seconds_saved'] >= 0 else 'adds'} {fmt_duration(abs(b['seconds_saved']))}"
+                     + (f". {b['note']}" if b.get("note") else ""))
+    lines.append(f"Check: {'pass' if c['ok'] else 'FAIL'}, {len(c['warns'])} warning(s)")
+    lines += _rule_lines(c)
+    if p.get("oriented_stl"):
+        lines.append(f"Wrote the turned part to {p['oriented_stl']}")
+    quality = {"quality": "fine", "balanced": "standard", "speed": "draft"}[args.goal]
+    if p["material"] in slicing.MATERIALS:
+        nxt = (f"Tell the person the orientation, supports, time and filament. To slice, turn the part as shown"
+               f" (or use the --write-oriented file), then gantrel-printer slice <file> --printer <name> --material "
+               f"{p['material']} --quality {quality}; slice uses its own profile, not every number above"
+               + (", and its speeds are over the flow cap: for these speeds, slice in OrcaSlicer or Bambu Studio "
+                  "with the settings above" if b.get("note") else ""))
+    else:
+        nxt = (f"Tell the person the orientation, supports, time and filament. gantrel-printer slice has no "
+               f"{p['material']} profile: slice in OrcaSlicer, Bambu Studio or the printer's own slicer with the "
+               f"settings above, the part turned as shown (or the --write-oriented file)")
+    out(args, p, "\n".join(lines), nxt)
+    return 0
+
+
+def cmd_check(args):
+    """Check a settings file against the printer, the filament and (with --model) the part."""
+    import numpy as np
+
+    from . import materials
+    from .plan import check as pcheck, estimate as pest, mesh as pmesh, orient
+    printer = _plan_printer(args.printer)
+    fil = materials.get(args.material)
+    path = Path(args.settings).expanduser()
+    try:
+        raw = json.loads(path.read_text())
+    except FileNotFoundError:
+        raise ConfigError(f"no file at {path}") from None
+    except json.JSONDecodeError as err:
+        raise ConfigError(f"{path} is not valid JSON ({err.msg} at line {err.lineno})") from None
+    s = raw.get("settings", raw) if isinstance(raw, dict) else None
+    if not isinstance(s, dict):
+        raise ConfigError(f"{path} does not hold a settings object", "Use the JSON from slice --json or plan --json")
+    goal = args.goal or s.get("goal") or "balanced"
+    part = None
+    turned = None
+    pcheck.require(s, pcheck.MODEL_REQUIRED if args.model else pcheck.REQUIRED)
+    if args.model:
+        m = pmesh.load(args.model)
+        pmesh.fits_planner(m)
+        rot = _plan_rotation(raw)
+        if rot is None:
+            turned = "as drawn (z up): the settings hold no plan orientation"
+        elif pmesh.is_oriented_output(args.model):
+            turned = "as the file has it: it is a plan --write-oriented file, already turned"
+        else:
+            m = m.transformed(rot)
+            turned = "turned the plan's way (its orientations[0].rotation_matrix)"
+        cand = orient.evaluate(m, np.array([0.0, 0.0, -1.0]), printer, fil)
+        e = pest.estimate(cand.mesh, s, printer, fil, cand.support_volume_mm3, cand.support_contact_mm2)
+        part = {"fits": cand.fits, "size_mm": [round(v, 2) for v in (*cand.footprint_mm, cand.height_mm)],
+                "bed_mm": list(printer.bed), "max_height_mm": printer.height, "overhang_mm2": cand.overhang_mm2,
+                "bridges": cand.bridges, "thinnest_wall_mm": orient.thinnest_wall(cand.mesh),
+                "smallest_layer_seconds": e["smallest_layer_seconds"],
+                "layers_below_min_layer_time": e["layers_below_min_layer_time"]}
+        part["orientation"] = turned
+    c = pcheck.check(s, printer, fil, part, goal)
+    lines = [f"Check of {path.name} for {printer.label}, {fil.name}, goal {goal}: "
+             f"{'pass' if c['ok'] else 'FAIL'} ({len(c['fails'])} failed, {len(c['warns'])} warning(s), "
+             f"{sum(r['status'] == 'pass' for r in c['rules'])} passed)"]
+    if turned:
+        lines.append(f"Part checked {turned}.")
+    lines += _rule_lines(c)
+    nxt = ("Fix every FAIL line as its advice says, then check again" if not c["ok"] else
+           "The settings pass; tell the person about any warnings")
+    out(args, {"printer": printer.key, "material": fil.name, "part_orientation": turned, **c}, "\n".join(lines), nxt)
+    return 0 if c["ok"] else EXIT_ERROR
+
+
+def _plan_rotation(raw):
+    """The rotation a plan --json chose (orientations[0].rotation_matrix), checked to be a real rotation."""
+    import numpy as np
+    try:
+        rot = raw["orientations"][0]["rotation_matrix"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    try:
+        r = np.array(rot, dtype=np.float64)
+    except (TypeError, ValueError):
+        r = None
+    if r is None or r.shape != (3, 3) or not np.isfinite(r).all() or not np.allclose(r @ r.T, np.eye(3), atol=1e-4) \
+            or not np.isclose(np.linalg.det(r), 1.0, atol=1e-4):
+        raise ConfigError("the plan's orientations[0].rotation_matrix is not a rotation",
+                          "Use the JSON from gantrel-printer plan --json as it was written")
+    return r
+
+
 def cmd_jobs(args):
     jobs = safety.list_jobs()
     text = "\n".join(f"{j.id}  {j.printer:10} {j.remote_name}  {j.material or '?'}  {fmt_duration(j.est_seconds)}"
@@ -603,6 +757,20 @@ def parser() -> argparse.ArgumentParser:
     sp.add_argument("--upload", action="store_true", help="also send it to the printer (never starts it)")
     sp.add_argument("--force", action="store_true",
                     help="make it for a material the printer can't print well; prints a warning")
+    sp = add("plan", cmd_plan, "plan a print: orientation, supports, settings, time and filament (no printer contact)")
+    sp.add_argument("model", help="an STL or 3MF file")
+    sp.add_argument("--printer", required=True, help="a paired printer, or a profile key from: gantrel-printer profiles")
+    sp.add_argument("--material", required=True, help="PLA, PLA-CF, PETG, PETG-CF, ABS, ASA, TPU, PA, PA-CF, PC, PVA or HIPS")
+    sp.add_argument("--goal", default="quality", choices=["quality", "balanced", "speed"],
+                    help="quality is held first; speed is taken only where it does not cost quality")
+    sp.add_argument("--load-axis", choices=["x", "y", "z"], help="the axis (in the file) the part is loaded along")
+    sp.add_argument("--write-oriented", metavar="OUT.STL", help="also write the part, turned and placed, to this file")
+    sp = add("check", cmd_check, "check print settings against the printer, filament and part (no printer contact)")
+    sp.add_argument("settings", help="a settings JSON (slice --json or plan --json output works)")
+    sp.add_argument("--printer", required=True, help="a paired printer, or a profile key from: gantrel-printer profiles")
+    sp.add_argument("--material", required=True)
+    sp.add_argument("--model", help="the STL or 3MF, as it will sit on the bed, for fit, overhang and layer checks")
+    sp.add_argument("--goal", choices=["quality", "balanced", "speed"], help="default: the file's goal, else balanced")
     add("jobs", cmd_jobs, "files uploaded with this tool")
     for name, fn, h in (("pause", cmd_pause, "pause now (safe)"),
                         ("cancel", cmd_cancel, "cancel the current print"),
@@ -650,7 +818,7 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
-        args.fn(args)
+        rc = args.fn(args)
     except SafetyError as err:
         print(f"REFUSED: {err}", file=sys.stderr)
         print("NEXT: do not retry around this; tell the person what was refused", file=sys.stderr)
@@ -664,7 +832,7 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_USAGE
     except KeyboardInterrupt:
         return 130
-    return 0
+    return rc if isinstance(rc, int) else 0
 
 
 if __name__ == "__main__":

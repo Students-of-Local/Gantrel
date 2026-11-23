@@ -1,0 +1,278 @@
+{
+  "_about": "Filament property table by family, read by gantrel_printer/materials.py. Checked 2026-11-22.",
+  "_method": [
+    "Nozzle range: the intersection of the family-level ranges in the Bambu Lab wiki material table and OrcaSlicer's generic system profile (nozzle_temperature_range_low/high). Brand data sheets (Prusament, Polymaker) describe one product, so they are listed as cross-checks in basis, not used to narrow the family range.",
+    "Bed range: the Bambu Lab wiki's family table (PEI and engineering plates; where its two bed tables differ, their intersection). Slicer profile bed values are single set points and are listed as cross-checks.",
+    "Max volumetric flow: OrcaSlicer's generic profile, 'Direct Drive Standard' and 'Direct Drive High Flow' variants. Bambu Studio's generic profiles carry only the 'Direct Drive Standard' variant, so where Bambu's number is lower it replaces the standard value only.",
+    "Fan range: the intersection of OrcaSlicer's and Bambu Studio's generic fan_min_speed..fan_max_speed.",
+    "max_chamber_c: the lower of the 'temperature_vitrification' (softening temperature) values in OrcaSlicer and Bambu Studio. Bambu's wiki tells people to open the door of an enclosed printer for these materials.",
+    "min_layer_time_s: the longer of the two slicers' slow_down_layer_time.",
+    "density: the highest cited value, so grams are not underestimated when checking that a spool is enough.",
+    "glass_transition_c: the lowest DSC value on the cited data sheets; null where no fetched data sheet lists one.",
+    "dry_c and dry_hours: the lowest cited oven temperature (kinder to the spool) and the longest cited time.",
+    "max_overhang_deg: degrees from vertical. Polymaker's generic guidance is the 45 degree rule; OrcaSlicer's default support threshold (30 degrees slope from horizontal, so 60 from vertical) is less strict, so 45 is used for every family. No family-specific number was found, including for TPU."
+  ],
+  "sources": {
+    "bambu_wiki_table": "https://wiki.bambulab.com/en/general/filament-guide-material-table",
+    "bambu_wiki_dry": "https://wiki.bambulab.com/en/filament-acc/filament/dry-filament",
+    "orca_base": "https://github.com/OrcaSlicer/OrcaSlicer/tree/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/OrcaFilamentLibrary/filament/base",
+    "orca_generic": "https://github.com/OrcaSlicer/OrcaSlicer/tree/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/OrcaFilamentLibrary/filament",
+    "bambu_studio": "https://github.com/bambulab/BambuStudio/tree/8e524a39d4c4cd0541801c1c46d2f77debb0bf1d/resources/profiles/BBL/filament",
+    "orca_support_threshold": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/src/libslic3r/PrintConfig.cpp",
+    "polymaker_by_type": "https://wiki.polymaker.com/printing-tips/by-material-type",
+    "polymaker_polylite_pla": "https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/pla/polylite-tm-pla",
+    "polymaker_pla_pro": "https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/pla/polylite-tm-pla-pro",
+    "polymaker_pla_cf": "https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/pla/pla-cf",
+    "polymaker_polymax_petg": "https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/petg-pet/polymax-tm-petg",
+    "polymaker_polylite_petg": "https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/petg-pet/polylite-tm-petg",
+    "polymaker_petg_rcf08": "https://fiberon.polymaker.com/wp-content/uploads/TDS_FIBERON-PETG-rCF08_V1.0_EN.pdf",
+    "polymaker_polylite_abs": "https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/abs-asa/polylite-tm-abs",
+    "polymaker_asa": "https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/abs-asa/polymaker-tm-asa",
+    "polymaker_tpu95": "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/PolyFlex_TPU95_TDS_EN_V5.4.pdf",
+    "polymaker_tpu_family": "https://wiki.polymaker.com/the-basics/3d-printing-materials/tpu",
+    "polymaker_pa_family": "https://wiki.polymaker.com/the-basics/3d-printing-materials/pa",
+    "polymaker_copa": "https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/nylon/polymide-tm-copa",
+    "polymaker_pa6_cf20": "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/TDS_FIBERON_PA6-CF20_V1.1_EN.pdf",
+    "polymaker_polylite_pc": "https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/polycarbonate/polylite-tm-pc",
+    "polymaker_polydissolve_s1": "https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/specialty-and-support-materials/polydissolve-tm-s1",
+    "prusament_pla": "https://prusament.com/materials/pla/",
+    "prusament_petg_tds": "https://storage.googleapis.com/prusa3d-content-prod-14e8-wordpress-prusament-prod/2023/10/9f8d2165-tds_prusament-petg_n_en.pdf",
+    "prusament_asa_tds": "https://storage.googleapis.com/prusa3d-content-prod-14e8-wordpress-prusament-prod/2024/05/bc8551ef-tds_prusament-asa_2024_en.pdf",
+    "prusament_pc_blend_tds": "https://prusament.com/wp-content/uploads/2022/10/PCBlend_Prusament_TDS_2022_16_EN.pdf",
+    "prusament_pa11cf_tds": "https://prusament.com/wp-content/uploads/2022/08/TDS_PA11CFB.pdf",
+    "prusament_tpu95a_tds": "https://storage.googleapis.com/prusa3d-content-prod-14e8-wordpress-prusament-prod/2025/05/80316f6d-tds-prusament_tpu_95a_en-1.pdf",
+    "creality_k2_tpu_preset": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/CR-TPU%20%40K2-all.json"
+  },
+  "families": {
+    "PLA": {
+      "nozzle_min_c": 190, "nozzle_max_c": 240, "bed_min_c": 35, "bed_max_c": 65, "density_g_cm3": 1.24,
+      "max_flow_standard_mm3s": 12, "max_flow_high_flow_mm3s": 21, "fan_min_pct": 100, "fan_max_pct": 100,
+      "needs_enclosure": false, "max_chamber_c": 45, "abrasive": false, "flexible": false,
+      "glass_transition_c": 61, "dry_c": 50, "dry_hours": 8, "max_overhang_deg": 45, "min_layer_time_s": 8,
+      "sources": ["bambu_wiki_table", "bambu_wiki_dry", "orca_base", "orca_generic", "bambu_studio", "polymaker_by_type", "polymaker_polylite_pla", "polymaker_pla_pro", "prusament_pla"],
+      "basis": {
+        "nozzle": "Bambu wiki 190-240; Orca fdm_filament_pla 190-240. Brand cross-checks: Polymaker PolyLite PLA 190-230, Prusament PLA 210 +/- 10.",
+        "bed": "Bambu wiki 35-45 (cool plate) and 45-65 (PEI). Orca and Bambu Studio set 55. Prusament 40-60.",
+        "density": "Orca and Bambu Studio 1.24. Polymaker PolyLite PLA 1.17, PLA Pro 1.22 (lower, not used).",
+        "flow": "Orca Generic PLA: 12 standard, 21 high flow. Bambu Studio fdm_filament_pla 12.",
+        "fan": "Orca and Bambu Studio 100 to 100. Prusament: 100 percent.",
+        "chamber": "Softening temperature 45 in Orca and Bambu Studio; Bambu wiki: open the door above a 45 C bed.",
+        "glass_transition": "Polymaker PolyLite PLA DSC 61 C (PLA Pro 62 C).",
+        "dry": "Bambu wiki oven 50 C 8 h; Polymaker PolyLite PLA 55 C 6 h.",
+        "min_layer_time": "Bambu Studio Generic PLA 8 s; Orca 4 s."
+      }
+    },
+    "PLA-CF": {
+      "nozzle_min_c": 210, "nozzle_max_c": 240, "bed_min_c": 45, "bed_max_c": 65, "density_g_cm3": 1.29,
+      "max_flow_standard_mm3s": 12, "max_flow_high_flow_mm3s": 18, "fan_min_pct": 100, "fan_max_pct": 100,
+      "needs_enclosure": false, "max_chamber_c": 45, "abrasive": true, "flexible": false,
+      "glass_transition_c": 62, "dry_c": 50, "dry_hours": 8, "max_overhang_deg": 45, "min_layer_time_s": 7,
+      "sources": ["bambu_wiki_table", "bambu_wiki_dry", "orca_base", "orca_generic", "bambu_studio", "polymaker_by_type", "polymaker_pla_cf"],
+      "basis": {
+        "nozzle": "Bambu wiki PLA-CF/GF 210-240; Orca Generic PLA-CF inherits PLA 190-240. Polymaker PLA-CF 190-230.",
+        "bed": "Bambu wiki PLA-CF 45-65.",
+        "density": "Polymaker PLA-CF 1.29; Orca inherits PLA's 1.24.",
+        "flow": "Orca Generic PLA-CF: 12 standard, 18 high flow.",
+        "fan": "Inherits PLA in Orca and Bambu Studio: 100 to 100.",
+        "abrasive": "Bambu wiki: hardened steel nozzle required; Bambu Studio Generic PLA-CF required_nozzle_HRC 40; Polymaker: hardened steel.",
+        "chamber": "Softening temperature 45 (inherits PLA).",
+        "glass_transition": "Polymaker PLA-CF DSC 62 C.",
+        "dry": "Bambu wiki oven 50-60 C 8 h; Polymaker PLA-CF 55 C 6 h.",
+        "min_layer_time": "Bambu Studio Generic PLA-CF 7 s; Orca 4 s."
+      }
+    },
+    "PETG": {
+      "nozzle_min_c": 240, "nozzle_max_c": 260, "bed_min_c": 60, "bed_max_c": 80, "density_g_cm3": 1.27,
+      "max_flow_standard_mm3s": 10, "max_flow_high_flow_mm3s": 18, "fan_min_pct": 40, "fan_max_pct": 90,
+      "needs_enclosure": false, "max_chamber_c": 60, "abrasive": false, "flexible": false,
+      "glass_transition_c": 79, "dry_c": 60, "dry_hours": 8, "max_overhang_deg": 45, "min_layer_time_s": 12,
+      "sources": ["bambu_wiki_table", "bambu_wiki_dry", "orca_base", "orca_generic", "bambu_studio", "polymaker_polymax_petg", "polymaker_polylite_petg", "prusament_petg_tds"],
+      "basis": {
+        "nozzle": "Bambu wiki 240-270; Orca fdm_filament_pet 220-260; intersection 240-260. Prusament PETG 250 +/- 10, Polymaker PolyLite PETG 230-260.",
+        "bed": "Bambu wiki 60-80. Orca 80, Bambu Studio Generic PETG 70, Prusament 80 +/- 10.",
+        "density": "Orca, Bambu Studio and Prusament PETG 1.27; Polymaker 1.24 to 1.25.",
+        "flow": "Orca Generic PETG: 10 standard, 18 high flow. Bambu Studio Generic PETG 12.",
+        "fan": "Orca 20 to 100; Bambu Studio Generic PETG 40 to 90; intersection 40 to 90. Prusament 50 percent.",
+        "chamber": "Softening temperature: Bambu Studio 60, Orca 70; the lower is used.",
+        "glass_transition": "Polymaker PolyMax PETG DSC 79 C, PolyLite PETG 81 C.",
+        "dry": "Bambu wiki oven 60-65 C 8 h; Polymaker PolyLite PETG 65 C 6 h.",
+        "min_layer_time": "Bambu Studio Generic PETG 12 s; Orca 8 s."
+      }
+    },
+    "PETG-CF": {
+      "nozzle_min_c": 240, "nozzle_max_c": 260, "bed_min_c": 60, "bed_max_c": 80, "density_g_cm3": 1.30,
+      "max_flow_standard_mm3s": 11.5, "max_flow_high_flow_mm3s": 11.5, "fan_min_pct": 5, "fan_max_pct": 40,
+      "needs_enclosure": false, "max_chamber_c": 60, "abrasive": true, "flexible": false,
+      "glass_transition_c": 69, "dry_c": 60, "dry_hours": 8, "max_overhang_deg": 45, "min_layer_time_s": 8,
+      "sources": ["bambu_wiki_table", "bambu_wiki_dry", "orca_base", "orca_generic", "bambu_studio", "polymaker_petg_rcf08"],
+      "basis": {
+        "nozzle": "Bambu wiki PETG-CF 240-270; Orca Generic PETG-CF inherits PETG 220-260; intersection 240-260. Polymaker PETG-rCF08 240-270.",
+        "bed": "Bambu wiki PETG-CF 60-80. Polymaker PETG-rCF08 60-70.",
+        "density": "Polymaker PETG-rCF08 1.30; Orca inherits PETG's 1.27.",
+        "flow": "Orca Generic PETG-CF 11.5 for every hotend variant.",
+        "fan": "Orca Generic PETG-CF 5 to 40. Polymaker PETG-rCF08 0-50 percent.",
+        "abrasive": "Bambu wiki: hardened steel nozzle required for PETG-CF.",
+        "chamber": "Inherits PETG: 60.",
+        "glass_transition": "Polymaker PETG-rCF08 DSC 69.7 C.",
+        "dry": "Bambu wiki oven (PETG, PETG-CF) 60-65 C 8 h; Polymaker PETG-rCF08 65 C 3 h.",
+        "min_layer_time": "Orca inherits PETG's common 8 s."
+      }
+    },
+    "ABS": {
+      "nozzle_min_c": 240, "nozzle_max_c": 280, "bed_min_c": 90, "bed_max_c": 100, "density_g_cm3": 1.12,
+      "max_flow_standard_mm3s": 12, "max_flow_high_flow_mm3s": 20, "fan_min_pct": 10, "fan_max_pct": 80,
+      "needs_enclosure": true, "max_chamber_c": 100, "abrasive": false, "flexible": false,
+      "glass_transition_c": 101, "dry_c": 70, "dry_hours": 8, "max_overhang_deg": 45, "min_layer_time_s": 3,
+      "sources": ["bambu_wiki_table", "bambu_wiki_dry", "orca_base", "orca_generic", "bambu_studio", "polymaker_polylite_abs", "polymaker_by_type"],
+      "basis": {
+        "nozzle": "Bambu wiki 240-280; Orca fdm_filament_abs 240-280. Polymaker PolyLite ABS 245-265.",
+        "bed": "Bambu wiki 90-100. Orca 100, Bambu Studio 90, Polymaker 90.",
+        "density": "Polymaker PolyLite ABS 1.12; Orca and Bambu Studio 1.04.",
+        "flow": "Orca Generic ABS: 12 standard, 20 high flow. Bambu Studio Generic ABS 15 to 16.",
+        "fan": "Orca and Bambu Studio 10 to 80.",
+        "enclosure": "Bambu wiki: ABS not recommended on open-frame printers, enclosed recommended; Polymaker: enclosure mandatory.",
+        "chamber": "Softening temperature: Orca 110, Bambu Studio common 100; the lower is used.",
+        "glass_transition": "Polymaker PolyLite ABS DSC 101 C.",
+        "dry": "Bambu wiki oven 75-85 C 8 h; Polymaker PolyLite ABS 70 C 6 h.",
+        "min_layer_time": "Orca and Bambu Studio 3 s."
+      }
+    },
+    "ASA": {
+      "nozzle_min_c": 240, "nozzle_max_c": 280, "bed_min_c": 90, "bed_max_c": 100, "density_g_cm3": 1.13,
+      "max_flow_standard_mm3s": 12, "max_flow_high_flow_mm3s": 20, "fan_min_pct": 10, "fan_max_pct": 80,
+      "needs_enclosure": true, "max_chamber_c": 100, "abrasive": false, "flexible": false,
+      "glass_transition_c": 98, "dry_c": 70, "dry_hours": 8, "max_overhang_deg": 45, "min_layer_time_s": 3,
+      "sources": ["bambu_wiki_table", "bambu_wiki_dry", "orca_base", "orca_generic", "bambu_studio", "polymaker_asa", "prusament_asa_tds"],
+      "basis": {
+        "nozzle": "Bambu wiki 240-280; Orca fdm_filament_asa 240-280. Polymaker ASA 230-260, Prusament ASA 260 +/- 10.",
+        "bed": "Bambu wiki 90-100. Orca and Bambu Studio Generic ASA 100, Polymaker 90. Prusament ASA asks 110 +/- 5, above this family range.",
+        "density": "Polymaker ASA 1.13; Prusament ASA 1.07; Orca 1.04.",
+        "flow": "Orca Generic ASA: 12 standard, 20 high flow. Bambu Studio Generic ASA 12.",
+        "fan": "Orca and Bambu Studio 10 to 80.",
+        "enclosure": "Bambu wiki: ASA not recommended on open-frame printers; Polymaker: enclosure required.",
+        "chamber": "Softening temperature: Orca 110, Bambu Studio common 100; the lower is used.",
+        "glass_transition": "Polymaker ASA DSC 98 C.",
+        "dry": "Bambu wiki oven 75-85 C 8 h; Polymaker ASA 70 C 7 h.",
+        "min_layer_time": "Orca and Bambu Studio 3 s."
+      }
+    },
+    "TPU": {
+      "nozzle_min_c": 200, "nozzle_max_c": 250, "bed_min_c": 30, "bed_max_c": 45, "density_g_cm3": 1.25,
+      "max_flow_standard_mm3s": 3.2, "max_flow_high_flow_mm3s": 3.2, "fan_min_pct": 100, "fan_max_pct": 100,
+      "needs_enclosure": false, "max_chamber_c": 30, "abrasive": false, "flexible": true,
+      "glass_transition_c": null, "dry_c": 70, "dry_hours": 8, "max_overhang_deg": 45, "min_layer_time_s": 8,
+      "sources": ["bambu_wiki_table", "bambu_wiki_dry", "orca_base", "orca_generic", "bambu_studio", "polymaker_tpu95", "polymaker_tpu_family", "prusament_tpu95a_tds", "creality_k2_tpu_preset"],
+      "basis": {
+        "family": "TPU 95A (Shore hardness). Softer TPU (85A, 90A) is not covered.",
+        "nozzle": "Bambu wiki TPU 95A 200-250; Orca fdm_filament_tpu 200-250. Polymaker TPU95 210-230, Prusament TPU 95A 230 +/- 10.",
+        "bed": "Bambu wiki 30-45. Brand sheets ask more: Polymaker TPU95 50, Prusament TPU 95A 65 +/- 10.",
+        "density": "Prusament TPU 95A 1.25; Orca and Bambu Studio 1.24; Polymaker 1.20-1.24.",
+        "flow": "Orca and Bambu Studio Generic TPU 3.2. Creality's own CR-TPU preset for the K2 uses 2.0.",
+        "fan": "Orca and Bambu Studio 100 to 100.",
+        "flexible": "Polymaker TPU page: soft TPU needs a direct extruder.",
+        "chamber": "Softening temperature 30 in Orca and Bambu Studio.",
+        "glass_transition": "Not listed on the Polymaker TPU95 or Prusament TPU 95A data sheets; left empty.",
+        "dry": "Bambu wiki oven (TPU 95A HF) 70 C 8 h; Polymaker TPU95 70 C 8 h. Polymaker's generic TPU page says 50 C for 24 h.",
+        "overhang": "No TPU-specific number found; uses the generic 45 degree rule.",
+        "min_layer_time": "Orca and Bambu Studio common 8 s."
+      }
+    },
+    "PA": {
+      "nozzle_min_c": 260, "nozzle_max_c": 280, "bed_min_c": 100, "bed_max_c": 110, "density_g_cm3": 1.12,
+      "max_flow_standard_mm3s": 8, "max_flow_high_flow_mm3s": 12, "fan_min_pct": 40, "fan_max_pct": 60,
+      "needs_enclosure": true, "max_chamber_c": 65, "abrasive": false, "flexible": false,
+      "glass_transition_c": 66, "dry_c": 50, "dry_hours": 8, "max_overhang_deg": 45, "min_layer_time_s": 8,
+      "sources": ["bambu_wiki_table", "orca_base", "orca_generic", "bambu_studio", "polymaker_pa_family", "polymaker_copa"],
+      "basis": {
+        "family": "Unfilled nylon (PA6, PA12, copolymers).",
+        "nozzle": "Orca fdm_filament_pa 260-300; Bambu Studio Generic PA 240-280; intersection 260-280. Polymaker CoPA 250-270.",
+        "bed": "Bambu wiki PA 100-120 (plates) and 90-110 (glue table); intersection 100-110. Polymaker's Warp Free nylons print near 50 C, a brand exception.",
+        "density": "Polymaker CoPA 1.12; Orca 1.04.",
+        "flow": "Orca Generic PA: 8 standard, 12 high flow. Bambu Studio Generic PA 12.",
+        "fan": "Orca 0 to 60; Bambu Studio Generic PA 40 to 85; intersection 40 to 60. Polymaker CoPA: fan off.",
+        "enclosure": "Bambu wiki: PA not recommended on open-frame printers; Polymaker: required for open-frame printers except its Warp Free nylons.",
+        "chamber": "Softening temperature: Bambu Studio 65, Orca 108; the lower is used.",
+        "glass_transition": "Polymaker CoPA DSC 66 C.",
+        "dry": "Polymaker nylon page 50-70 C for 6-8 h. Polymaker CoPA's own sheet asks 100 C 8 h, which needs a heat-safe spool.",
+        "min_layer_time": "Bambu Studio Generic PA 8 s; Orca 2 s."
+      }
+    },
+    "PA-CF": {
+      "nozzle_min_c": 260, "nozzle_max_c": 300, "bed_min_c": 100, "bed_max_c": 110, "density_g_cm3": 1.17,
+      "max_flow_standard_mm3s": 8, "max_flow_high_flow_mm3s": 8, "fan_min_pct": 10, "fan_max_pct": 30,
+      "needs_enclosure": true, "max_chamber_c": 108, "abrasive": true, "flexible": false,
+      "glass_transition_c": 74, "dry_c": 75, "dry_hours": 12, "max_overhang_deg": 45, "min_layer_time_s": 2,
+      "sources": ["bambu_wiki_table", "bambu_wiki_dry", "orca_base", "orca_generic", "bambu_studio", "polymaker_pa6_cf20", "prusament_pa11cf_tds"],
+      "basis": {
+        "nozzle": "Bambu wiki PA-CF/GF 260-300; Orca Generic PA-CF inherits PA 260-300. Polymaker PA6-CF20 280-300, Prusament PA11CF 285 +/- 5.",
+        "bed": "Bambu wiki PA-CF 100-120 (plates) and 90-110 (glue table); intersection 100-110. Prusament PA11CF 110 +/- 10.",
+        "density": "Polymaker PA6-CF20 1.17; Prusament PA11CF 1.11; Orca inherits 1.04.",
+        "flow": "Orca Generic PA-CF and Bambu Studio Generic PA-CF inherit PA's base 8.",
+        "fan": "Bambu Studio Generic PA-CF 10 to 30; Orca 0 to 60; intersection 10 to 30.",
+        "enclosure": "Bambu wiki: PA-CF not recommended on open-frame printers.",
+        "abrasive": "Bambu wiki: hardened steel required; Orca and Bambu Studio required_nozzle_HRC 40; Prusament PA11CF: a hardened nozzle is necessary.",
+        "chamber": "Softening temperature: Orca 108, Bambu Studio Generic PA-CF 130; the lower is used.",
+        "glass_transition": "Polymaker PA6-CF20 DSC 74.2 C.",
+        "dry": "Bambu wiki oven (PA6-CF/GF) 75-85 C 8-12 h; Polymaker PA6-CF20 100 C 10 h.",
+        "min_layer_time": "Orca and Bambu Studio PA base 2 s."
+      }
+    },
+    "PC": {
+      "nozzle_min_c": 260, "nozzle_max_c": 290, "bed_min_c": 100, "bed_max_c": 120, "density_g_cm3": 1.22,
+      "max_flow_standard_mm3s": 12, "max_flow_high_flow_mm3s": 20, "fan_min_pct": 10, "fan_max_pct": 60,
+      "needs_enclosure": true, "max_chamber_c": 120, "abrasive": false, "flexible": false,
+      "glass_transition_c": 113, "dry_c": 75, "dry_hours": 8, "max_overhang_deg": 45, "min_layer_time_s": 2,
+      "sources": ["bambu_wiki_table", "bambu_wiki_dry", "orca_base", "orca_generic", "bambu_studio", "polymaker_polylite_pc", "prusament_pc_blend_tds"],
+      "basis": {
+        "nozzle": "Bambu wiki 260-290; Orca fdm_filament_pc 260-290. Polymaker PolyLite PC 250-270, Prusament PC Blend 275 +/- 10.",
+        "bed": "Bambu wiki 100-120. Prusament PC Blend 110 +/- 10, Polymaker 100.",
+        "density": "Prusament PC Blend 1.22; Polymaker PolyLite PC 1.19; Orca 1.04.",
+        "flow": "Orca Generic PC: 12 standard, 20 high flow. Bambu Studio Generic PC 16 (standard hotend).",
+        "fan": "Orca and Bambu Studio 10 to 60.",
+        "enclosure": "Bambu wiki: PC not recommended on open-frame printers.",
+        "chamber": "Softening temperature 120 in Orca and Bambu Studio.",
+        "glass_transition": "Polymaker PolyLite PC DSC 113 C.",
+        "dry": "Bambu wiki oven 75-85 C 8 h; Polymaker PolyLite PC 75 C 6 h.",
+        "min_layer_time": "Orca and Bambu Studio 2 s."
+      }
+    },
+    "PVA": {
+      "nozzle_min_c": 190, "nozzle_max_c": 240, "bed_min_c": 35, "bed_max_c": 65, "density_g_cm3": 1.24,
+      "max_flow_standard_mm3s": 4, "max_flow_high_flow_mm3s": 4, "fan_min_pct": 100, "fan_max_pct": 100,
+      "needs_enclosure": false, "max_chamber_c": 45, "abrasive": false, "flexible": false,
+      "glass_transition_c": null, "dry_c": 75, "dry_hours": 12, "max_overhang_deg": 45, "min_layer_time_s": 7,
+      "sources": ["bambu_wiki_table", "bambu_wiki_dry", "orca_base", "orca_generic", "bambu_studio", "polymaker_polydissolve_s1"],
+      "basis": {
+        "family": "Water-soluble support material.",
+        "nozzle": "Bambu wiki PVA 190-240; Orca fdm_filament_pva 190-240. Polymaker PolyDissolve S1 215-225.",
+        "bed": "Bambu wiki PVA 35-65.",
+        "density": "Orca and Bambu Studio 1.24; Polymaker PolyDissolve S1 1.13.",
+        "flow": "Orca Generic PVA 4 for every hotend; Bambu Studio Generic PVA 15 to 16. The lower is used.",
+        "fan": "Orca and Bambu Studio 100 to 100.",
+        "chamber": "Softening temperature 45 in Orca and Bambu Studio.",
+        "glass_transition": "Not listed on the fetched data sheets; left empty.",
+        "dry": "Bambu wiki oven 75-85 C 8-12 h; Polymaker PolyDissolve S1 80 C 12 h.",
+        "min_layer_time": "Bambu Studio Generic PVA 7 s; Orca 4 s."
+      }
+    },
+    "HIPS": {
+      "nozzle_min_c": 220, "nozzle_max_c": 270, "bed_min_c": 90, "bed_max_c": 90, "density_g_cm3": 1.06,
+      "max_flow_standard_mm3s": 8, "max_flow_high_flow_mm3s": 13, "fan_min_pct": 0, "fan_max_pct": 60,
+      "needs_enclosure": true, "max_chamber_c": 75, "abrasive": false, "flexible": false,
+      "glass_transition_c": null, "dry_c": null, "dry_hours": null, "max_overhang_deg": 45, "min_layer_time_s": 6,
+      "sources": ["orca_base", "orca_generic", "bambu_studio"],
+      "basis": {
+        "nozzle": "Orca and Bambu Studio fdm_filament_hips 220-270. The Bambu wiki table does not list HIPS.",
+        "bed": "Orca and Bambu Studio set 90; no source fetched gives a range, so the range is the single value 90.",
+        "density": "Orca and Bambu Studio 1.06.",
+        "flow": "Orca Generic HIPS: 8 standard, 13 high flow. Bambu Studio 8.",
+        "fan": "Orca and Bambu Studio 0 to 60.",
+        "enclosure": "No source fetched says. Set true as the conservative choice: HIPS prints at a 90 C bed like ABS.",
+        "chamber": "Softening temperature: Bambu Studio 75, Orca common 100; the lower is used.",
+        "glass_transition": "No data sheet fetched; left empty.",
+        "dry": "No data sheet fetched; left empty.",
+        "min_layer_time": "Orca and Bambu Studio 6 s."
+      }
+    }
+  }
+}

@@ -46,6 +46,19 @@ Not checked yet: the page inside Local Studio's own browser panel (WebKitGTK on 
 
 Calibration prints (`gantrel-printer calibrate <printer> first-layer|temp-tower|retraction|flow`) are checked by tests for every filament printer profile: moves inside the bed, nozzle temperatures inside the material's range, tower bands as stated. None has been printed on a real printer yet.
 
+### Planning a print
+
+`gantrel-printer plan` and `gantrel-printer check`. Details and formulas in [docs/PRINTERS.md](docs/PRINTERS.md#planning-a-print). Everything below is proven by unit tests on synthetic meshes built in code (`tests/plan/`); no planned part has been sliced or printed for real yet.
+
+| Part | Proven |
+|---|---|
+| Orientation | Unit tests on synthetic meshes: the mushroom flips onto its cap, the arch lies on its side, the L bracket lies on its plate, the pin lies down when a load axis is given, a 230 mm bar is turned 90 degrees to fit a 250 x 210 bed. No real print. |
+| Supports | Unit tests on synthetic meshes: support volume within 15 percent of the exact value (mushroom 16000 mm3, arch 6000 mm3). Overhang angle 45 degrees from vertical for every filament. No slicer comparison, no real print. |
+| Time and filament estimate | Unit tests on a 20 mm cube against the formulas worked by hand. Never compared with a slicer's estimate or a real print time; treat it as a rough guide. The slicer G-code reader is tested on PrusaSlicer and OrcaSlicer comment formats only. |
+| Settings check | Unit tests: every rule has a passing and a failing case. The material numbers are cited (materials.json); printer limits are cited for the Creality K2 and K2 Plus and are Gantrel's marked defaults elsewhere. The flow cap is the printer vendor's own Generic filament preset in OrcaSlicer where one exists (12 printers, `printer_material_flow.json`), else Gantrel's rule (90 percent of the lower of hotend and filament); each result names its source. These are slicer presets, not measured on our printers. |
+| Optimizer | Unit tests: for every printer, filament and goal it either passes its own check or refuses with the reason. Not tuned against real prints. |
+| Mesh files | Unit tests: binary and ASCII STL round trip, the first build object of a 3MF, including Bambu Studio and OrcaSlicer's layout with components in `3D/Objects/*.model` and their transforms (built in code, not a file saved by either slicer), malformed files, component cycles and paths outside the archive refused, size and triangle limits enforced. |
+
 ### Watching a print
 
 `gantrel-printer watch` (frames, status lines, timelapse, notices) and its failure guard. Details in [docs/PRINTERS.md](docs/PRINTERS.md#watching-a-print).

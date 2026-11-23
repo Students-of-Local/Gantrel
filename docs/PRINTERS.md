@@ -30,6 +30,7 @@ mistake in those notes is a mistake in both the adapter and its fake.
 | Cameras | Snapshot from the printer's API, or from `--camera-url` for cameras the API doesn't list. Real: K2 chamber camera through the fleet's go2rtc relay (the K2 serves only WebRTC on port 8000). |
 | Discovery | Known-port scan and probes checked against every fake (`gantrel-printer discover --host 127.0.0.1` finds each one in the tests) and the real K2. mDNS, Bambu SSDP listening and the Elegoo UDP broadcast are built but not tested on a real network. USB serial printers are listed from `/dev/serial/by-id` without opening the port. |
 | Slicing | Profiles for 24 printer models and 5 materials (the new ones cite their spec pages in `slicing.py`; resin profiles exist only so pre-sliced .ctb and .goo uploads know the printer is resin, and slicing them is refused), with rules (ABS and ASA need an enclosure, TPU needs direct drive; `--force` overrides with a printed warning). Slicing needs the printer's --model; it is never guessed from the printer type. Klipper profiles retract with plain G1 E moves of the printed `retract_mm`, never G10/G11 firmware retraction, so a printer.cfg without `[firmware_retraction]` still retracts. PrusaSlicer arguments are checked against a fake slicer. No real slicer has run yet; the OrcaSlicer path is untested. |
+| Print planner | `gantrel-printer plan` and `check` (see Planning a print). Unit tests only, on meshes built in code (a 20 mm cube, an L bracket, a mushroom, an arch, a tall pin, a bar that fits only turned): support volume within 15 percent of the exact value, the cube's estimate math, every check rule passing and failing, and the optimizer passing its own check for every printer, filament and goal or refusing with the reason. No plan has been compared with a slicer's result or a real print yet. |
 | Calibration prints | `gantrel-printer calibrate <printer> <kind>` makes first-layer, temp-tower, retraction or flow G-code for a paired printer (or a profile key) and saves it locally. The G-code is written by `calibrate.py` from the printer's slicing profile (bed, nozzle, filament diameter, start and end G-code) and the material, so no slicer is needed; Klipper profiles use their START_PRINT macro. It never starts a print and uploads only with `--upload`, through the same path as `gantrel-printer upload`. Tests check every filament profile and material: every move inside the bed, every nozzle temperature inside the material's range, temp-tower bands 5 C apart and 5 mm tall, retraction bands retracting their stated distance. No calibration print has run on a real printer yet. |
 | Watch, guard, timelapse, notices | Fake: `tests/printers/test_watch.py` takes frames and status from every adapter's fake, pauses a fake printer after K failed verdicts from a fake vision server, never pauses on suspect or malformed answers, builds an MP4 that ffprobe reads, and posts to a fake ntfy topic and webhook. Real: a read-only 62 s watch of the K2 at 10 s intervals (5 frames and a timelapse, 2026-11-17); the guard has never paused a real printer. No local vision model passed the guard gate, so the guard is off unless asked for (see Which model). See Watching a print. |
 | Starting and resuming | Not in the tools. `gantrel-printer` has no start, resume or confirm command; after an upload it prints the file name on the printer and where a person starts it (the printer's screen, Mainsail or Fluidd, OctoPrint, PrusaLink, Bambu Studio, Creality Print, Duet Web Control, Repetier-Server). Snapmaker and UltiMaker prints are always started on the printer's touchscreen, because their APIs either can't start a stored file or start every file they receive. Files on the printer are named with their content hash and uploads never replace a file. The adapters' start and resume calls and the confirm-token code stay for the app's confirm sheet; nothing calls them yet, and only the fake-printer tests exercise them. Start and resume spend the token before any other check, so a refused or mismatched use voids it. Start tokens bind to the job record and its file's SHA-256; resume tokens bind to the job record of the print the printer is paused on, so a print Gantrel didn't upload can't be resumed with a token, and a file deleted and uploaded again gets a new record that an old token doesn't match. |
@@ -263,6 +264,219 @@ Mapping 008001 to 08001 by dropping the first character would be a guess, so
 `src/gantrel_printer/data/creality_materials.json` lists only 008001 as PLA, seen on the owner's K2,
 with no brand, product name or temperatures. Every other code shows as family unknown with the code
 in the material field, and the agent asks the person.
+
+## Planning a print
+
+`gantrel-printer plan <model> --printer <key> --material <family> [--goal quality|balanced|speed]
+[--load-axis x|y|z] [--json] [--write-oriented out.stl]` reads an STL or 3MF and prints the
+orientation, supports, settings, a time and filament estimate and a check of every setting.
+`gantrel-printer check <settings.json> --printer <key> --material <family> [--model <file>]` runs
+the same check on settings the person already has (the JSON from `slice --json` or `plan --json`
+works). With `plan --json` output, `--model` takes the original file, which the check turns by the
+plan's `orientations[0].rotation_matrix`, or the `--write-oriented` file, which it recognizes by its
+STL header and reads as it is. Any other settings file has no orientation, so the part is checked as
+drawn, z up. The output says which of the three it did. Both only read files: they never contact a printer, and `plan` is not wired into `upload`
+or `slice`. The code is in `src/gantrel_printer/plan/` (Python and numpy only); the skill is
+`skills/plugin/print-plan/`. Exit codes: 0 when every rule passes, 1 when a rule fails or the
+printer and filament cannot go together.
+
+A 3MF is read as its first build object. Bambu Studio and OrcaSlicer save each mesh in its own
+part (`3D/Objects/object_N.model`) and give the root model only components that point at it; those
+are followed with their transforms, and the build item's transform is applied, so a part scaled
+in the slicer keeps its size. A component may only point at a part inside the same archive. Cycles,
+nesting deeper than 16, more than 100000 components, more than 5000000 triangles in total and more
+than 200 MB of model XML uncompressed are refused. Modifier and negative volumes are not told
+apart from solid parts (Bambu Studio keeps that in its own config), so export such a part as STL.
+
+`plan` and `check --model` take parts of up to 100000 triangles. A bigger part is refused at once with
+the count; simplify it in the CAD program or slicer and plan again. Slicing the original still works.
+
+### Where the numbers come from
+
+- Filament: `src/gantrel_printer/data/materials.json`, one entry per family (PLA, PLA-CF, PETG,
+  PETG-CF, ABS, ASA, TPU 95A, PA, PA-CF, PC, PVA, HIPS). Every value names its sources (Bambu Lab's
+  filament table and drying guide, OrcaSlicer's and Bambu Studio's generic filament profiles at a
+  pinned commit, Polymaker and Prusament data sheets) and a `basis` line saying how disagreements
+  were settled. The conservative value wins: the narrower nozzle and bed range, the lower flow, the
+  longer minimum layer time, the lower softening temperature. Glass transition is `null` where no
+  source gives a DSC value (TPU, PVA, HIPS), and HIPS has no drying figure.
+- Printers: `PrinterProfile` in `slicing.py` gained `hotend_max_c`, `bed_max_c`, `max_flow`,
+  `high_flow`, `hardened_nozzle`, `max_accel` and `chamber_heater`. A value is cited only when its
+  name is in the profile's `cited` list, with the sources in `limits_source` and the page's own words
+  in the comment above the profile; every other value is Gantrel's default (250 C hotend, 100 C bed,
+  12 mm3/s, brass nozzle, no chamber heater) and the planner labels it "Gantrel default, not a spec".
+- Only a cited limit can fail a check or refuse a plan. Past one of Gantrel's defaults the rule is a
+  warning that names the assumption, for example "260 C is over Gantrel's default hotend max of
+  250 C, not a printer spec: check that your Creality K1 / K1C's hotend reaches 260 C". It means
+  "check your printer", not "stop".
+- Cited hotend, bed and nozzle limits (vendor pages read 2026-11-23):
+
+  | Printer | Hotend | Bed | Nozzle | Source |
+  |---|---|---|---|---|
+  | Creality K2 | 300 C | 100 C | hardened steel | Creality K2 series page, Orca machine profile |
+  | Creality K2 Plus | 350 C | 120 C | hardened steel | Creality K2 Plus page, Orca machine profile |
+  | Creality K1 Max | 300 C | default | hardened steel | Creality K1 Max page |
+  | Creality Ender-3 V3 | 300 C | 110 C | hardened steel tip | Creality Ender-3 V3 page |
+  | Bambu Lab X1 Carbon | 300 C | 120 C | hardened steel | Bambu Lab X1 page and its spec table |
+  | Bambu Lab P1S, P1P | 300 C | 100 C | stainless steel | Bambu Lab P1S store page (P1P and P1S table) |
+  | Bambu Lab A1 | 300 C | 100 C | stainless steel | Bambu Lab A1 tech specs |
+  | Bambu Lab A1 mini | 300 C | 80 C | stainless steel | Bambu Lab A1 mini tech specs |
+  | Original Prusa MK4/MK4S | 290 C | 120 C | brass | Prusa MK4S page |
+
+  Stainless steel and brass count as not hardened: Bambu Lab lists carbon and glass fibre filament
+  as "Not Recommended" on those printers. OrcaSlicer's machine profiles set `nozzle_type`, but the
+  value disagrees with the vendor for the Prusa MK4 (Orca: hardened steel, Prusa: brass) and the K1
+  Max (Orca: brass, Creality: hardened steel), so a nozzle is cited only from the vendor. The
+  `creality-k1` profile covers the K1 (brass) and the K1C (hardened steel) and keeps the defaults.
+  Several printers also cite `max_accel` from OrcaSlicer's machine profiles.
+- Motion: a profile's `max_speed` and `accel` are Gantrel's chosen caps for the settings it plans,
+  not printer specs. `top_speed` is the hardware's top speed, cited from the vendor's page, its
+  OrcaSlicer machine profile (`machine_max_speed_x`) or Prusa's PrusaSlicer profile
+  (`machine_max_feedrate_x`, release 2.9.7): K2, K2 Plus and K1 Max 800 mm/s, K1/K1C and Ender-3 V3
+  600, X1 Carbon, P1S, P1P, A1 and A1 mini 500, MK4/MK4S 300, MK3S+ 200. The A1 mini's 10000
+  mm/s2 and the MK3S+'s 1250 mm/s2 `max_accel` are cited too.
+- Flow by printer and filament: `src/gantrel_printer/data/printer_material_flow.json` holds the
+  `filament_max_volumetric_speed` of each printer vendor's own Generic filament preset in OrcaSlicer
+  (pinned commit a31c95e), with the preset name, its file and URL, and the file the value is
+  inherited from when it is not set in the preset itself. It covers the Creality K2, K2 Plus, K1C,
+  K1 Max and Ender-3 V3, the Bambu Lab X1C, P1S, P1P, A1 and A1 mini, and the Prusa MK4 and MK3S,
+  for each family the vendor ships a Generic preset for. The vendor's own basic filament and its
+  high speed presets are listed under `also` for reference (for example on the K2: Generic PLA
+  14 mm3/s, CR-PLA 18, Hyper PLA 23); the planner uses the Generic one.
+- `slicing.py` now reads "needs an enclosure" and "flexible" from the table. Two temp-tower ranges
+  started below the cited minimum nozzle temperature (PETG at 220 C, ABS at 235 C) and now start
+  at 240 C. Nothing else it emits changed.
+
+### Orientation and supports
+
+Candidates are the six axis directions plus the area-weighted mean normals of the largest flat
+regions (facet normals within 5 degrees), at most 40 after dropping directions within 2 degrees of
+each other. Each candidate direction d is turned to face the bed with Rodrigues' rotation
+R = I + [v]x + [v]x^2 / (1 + c), where v = d x (0, 0, -1) and c = d . (0, 0, -1).
+
+- A facet needs support when its normal points down more steeply than the material allows:
+  n_z < -sin(overhang angle), with the overhang angle 45 degrees from vertical for every family,
+  and the facet not on the bed.
+- Overhang area is projected: sum of area x |n_z| over those facets.
+- Support volume: 1024 points are sampled on the overhang facets (area-weighted, fixed seed). From
+  each one a vertical ray finds the highest up-facing surface below it, or the bed. Volume =
+  sum of (overhang area / 1024) x (point height - floor height). For flat overhangs this equals
+  area x height (exact on the test shapes).
+- Support contact = the overhang area plus the area where supports land on the part.
+- Fit: the footprint fits the bed as is or turned 90 degrees, and the height is within the
+  printer's.
+- Load: with `--load-axis`, strength penalty = |(R l)_z| for the load axis l. 0 means the layers
+  run along the load; 1 means the load pulls them apart.
+- Bridges: flat downward regions whose edges sit on walls that face each other; span = twice the
+  largest distance from a point in the region to its nearest held edge.
+- Thin walls: rays cast inward from 512 surface points; the 2nd percentile distance is the
+  thinnest wall. Skipped above 200000 triangles.
+
+Ranking (best first): fits, then strength penalty, then support contact area and support volume
+(differences under 1 percent of the part's area or volume are ties), then for `quality` the most
+bed contact and the lowest height; `balanced` uses the time estimate before bed contact, and
+`speed` puts the time estimate before supports.
+
+### Settings (the optimizer)
+
+Quality is held first; speed is then taken wherever it does not cost quality.
+
+- Layer height (0.4 mm nozzle, scaled by nozzle / 0.4): quality 0.16 mm, or 0.12 mm when shallow
+  up-facing slopes about 1 to 60 degrees from flat (0.5 < n_z < 0.9998) cover more than 10 percent
+  of the surface; balanced 0.20 mm;
+  speed 0.28 mm. First layer 0.5 x nozzle.
+- Line widths: 1.125 x nozzle general, 1.05 x outer wall, 1.25 x first layer.
+- Walls and infill: quality and balanced 3 walls and 15 percent, speed 2 walls and 10 percent; a
+  load axis adds a wall and sets 25 percent infill.
+- Temperatures and fan: slicing.py's set points where the family has them, else the middle of the
+  cited range; always clamped into the material range and under the hotend and bed limits.
+- Flow cap F, in mm3/s: the vendor's Generic preset value for this printer and filament family
+  when there is one (used as is: the vendor tuned it on that hotend), else
+  0.9 x min(printer max_flow, filament max flow for that hotend class). The estimate, the check and
+  the optimizer all use this one function (`plan/estimate.py` `flow_limit`), and every result names
+  the source: "vendor preset <name>" or "Gantrel default".
+- Speed for a feature = min(feature limit, floor(F / (layer height x line width))). The outer wall
+  and top surface limit is the goal's cap (quality 150, balanced 200, speed 350 mm/s) and the
+  printer's top speed; inner walls, infill and supports may go to the printer's top speed.
+- Acceleration is the profile's `accel` (Gantrel's chosen value, never above `max_accel`). Travel is
+  the profile's `max_speed`, never above a cited `top_speed`.
+- Retraction: slicing.py's value, clamped into 0.2 to 2 mm for direct drive or 2 to 7 mm for Bowden.
+- Supports: off when nothing overhangs; normal (grid) when most overhang area is flat; tree
+  otherwise.
+
+The plan is then checked. A failed rule that settings cannot fix (enclosure, hardened nozzle,
+flexible filament on Bowden, part does not fit, hotend or bed too cold for the filament) refuses the
+plan with the reasons. The hardened nozzle, hotend and bed rules fail only on a cited limit; past a
+Gantrel default they warn, and the plan goes ahead with temperatures inside the filament's range. Any other failure is a planner bug and raises; the tests sweep every printer,
+filament and goal to keep that from happening.
+
+### Time and filament estimate
+
+The estimate is Gantrel's model, not a slicer's, and says so.
+
+- Walls = side area (|n_z| < sin 45) x walls x line width. Skins = projected up area x top layers
+  x layer height + projected down area x bottom layers x layer height. Infill = (volume - walls -
+  skins) x infill fraction. Supports = support volume x 0.15 + contact area x 2 interface layers x
+  layer height.
+- Time per feature = (volume / (layer height x line width)) / average speed, where the speed is
+  limited by the flow cap and acceleration over a typical move of length L (walls 20 mm, others
+  10 mm): t = L / v + v / a when L >= v^2 / a, else t = 2 sqrt(L / a).
+- The extrusion time is split across layers in proportion to each layer's own time (outline taken
+  as a square of the same cross-section area, cross-sections from 4096 vertical rays). Every layer
+  faster than the material's minimum layer time is padded up to it.
+- Total = extrusion x 1.10 (travel) + 0.5 s per layer + padding. The range printed is 0.85 to 1.25
+  times that.
+- Filament length = extruded volume / (pi x (diameter / 2)^2); weight = volume x density.
+
+`plan/estimate.py` also reads a slicer's own figures from G-code comments: PrusaSlicer's
+`; estimated printing time (normal mode) = ...` and `; filament used [mm|cm3|g] = ...`, and
+OrcaSlicer's header block or its Bambu form `; model printing time: ...; total estimated time: ...`.
+`plan` does not run a slicer.
+
+### The check
+
+Each rule returns its name, pass, warn, fail or skip, the formula, the numbers and the fix. Every
+limit is a named constant in `plan/check.py`.
+
+| Rule | Formula | Result when broken |
+|---|---|---|
+| Nozzle and first layer temperature | material min <= T <= material max, and T <= hotend max | fail (past a default hotend max: warn) |
+| Bed and first layer bed temperature | material min <= T <= material max, and T <= bed heater max | fail (past a default bed max: warn) |
+| Layer height | 0.25 <= layer / nozzle <= 0.75 (warn outside 0.3 to 0.7) | fail |
+| First layer | 0.5 x nozzle <= first layer <= 0.75 x nozzle | fail |
+| Line widths | 0.9 <= width / nozzle <= 1.6 (warn outside 1.0 to 1.5) | fail |
+| Walls | walls >= 2 | warn |
+| Flow per feature | layer x width x speed <= F (vendor preset, else 0.9 x min(hotend, material)) | fail |
+| Speeds | speed <= cited top speed, else Gantrel's default cap (`max_speed`) | warn |
+| Acceleration | accel <= max_accel (cited, else Gantrel's default) | warn |
+| Outer wall for the goal | outer wall <= 150, 200 or 350 mm/s | fail for quality, warn otherwise |
+| Enclosure | material needs one -> printer enclosed | fail |
+| Enclosure heat | material softens below 50 C on an enclosed printer | warn (open the lid) |
+| Chamber | chamber <= material max chamber; heater present to reach it | fail, or warn without a heater |
+| Hardened nozzle | abrasive -> hardened nozzle | fail when the nozzle is cited, warn on the brass default |
+| Flexible | flexible -> direct drive | fail |
+| Retraction | direct drive 0.2 to 2 mm, Bowden 2 to 7 mm | fail over, warn under |
+| Part fan | material fan min <= fan <= material fan max | warn |
+| Minimum layer time | fastest layer >= material minimum layer time | warn |
+| Fit (with a model) | footprint <= bed either way round, height <= max | fail |
+| Supports (with a model) | overhang area > 0 -> supports on | fail |
+| Thin walls (with a model) | thinnest wall >= 1 line width | warn |
+| Bridges (with a model) | longest bridge <= 25 mm without supports (Gantrel's own cautious limit) | warn |
+
+Speed and acceleration only warn. A printer's firmware caps every move at its own top speed and
+acceleration, so a higher setting runs at the cap and the print is not harmed: Bambu Studio's own
+A1 preset asks for 700 mm/s travel on a toolhead Bambu Lab rates at 500 mm/s. Past a cited limit the
+warning says the move runs at the cap and the time estimate assumes the setting; past one of
+Gantrel's defaults it says the cap is a default, not a spec, and to check the printer. Flow, which
+does spoil a print, is its own rule and fails.
+
+slicing.py's own standard settings fail the flow rule on many printers: it asks for up to 300
+mm/s of infill, which at 0.2 x 0.45 mm is 27 mm3/s. That is over every PLA preset Creality ships for
+the K2 (Generic PLA 14 mm3/s, Hyper PLA 23). OrcaSlicer slows such moves to its filament preset's
+limit; PrusaSlicer, as slicing.py calls it, sets no volumetric limit, so they would under-extrude.
+`plan` reports this next to its time-saved figure, with the requested flow, the cap and its source,
+and only when the standard settings are over the cap. Its Bowden retraction (0.8 mm) is under the Bowden
+range and warns.
 
 ## Agent-written adapters
 
