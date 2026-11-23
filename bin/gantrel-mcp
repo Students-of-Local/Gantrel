@@ -1,0 +1,18 @@
+#!/bin/sh
+# Gantrel's MCP server for Local Studio (stdio). Runs the pinned code with uv; installs nothing itself.
+# The virtual environment lives outside the plugin folder: a write inside it would change the folder's
+# hash, and Local Studio would ask for consent again.
+set -eu
+case "$0" in
+  */*) here=${0%/*} ;;
+  *) here=. ;;
+esac
+root=$(cd "$here/.." && pwd -P)
+if ! command -v uv >/dev/null 2>&1; then
+  echo "gantrel-mcp needs uv. Install it from https://docs.astral.sh/uv/getting-started/installation/ and start the thread again." >&2
+  exit 1
+fi
+PYTHONDONTWRITEBYTECODE=1
+UV_PROJECT_ENVIRONMENT="${XDG_CACHE_HOME:-$HOME/.cache}/gantrel/venv"
+export PYTHONDONTWRITEBYTECODE UV_PROJECT_ENVIRONMENT
+exec uv run --frozen --no-dev --project "$root" gantrel-mcp "$@"
