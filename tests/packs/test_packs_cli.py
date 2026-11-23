@@ -341,3 +341,24 @@ def test_material_max_flow_reaches_both_slicers(capsys, tmp_path, fake_slicer, f
     s = slicing.settings(k2, slicing.material("PLA"))
     assert s["max_flow_mm3s"] == estimate.flow_cap(k2, materials.get("PLA"))
     assert float(slicing.orca_overrides(s, k2)[2]["filament_max_volumetric_speed"][0]) == s["max_flow_mm3s"]
+
+
+def test_orca_writes_the_packs_reviewed_start_and_end_gcode(capsys, tmp_path, good, write, fake_orca):
+    f = write(good)
+    sha = packs.sha256(f.read_bytes())
+    assert run(capsys, "pack", "import", f, "--accept", sha[:12])[0] == 0
+    model = tmp_path / "part.stl"
+    model.write_bytes(STL)
+    rc, _, err = run(capsys, "slice", model, "--printer", "pack:test-k2", "--material", "PLA",
+                     "--slicer", "orcaslicer", "--json")
+    assert rc == 0, err
+    machine = json.loads(fake_orca.read_text())["machine"]
+    # The exact text the person reviewed, with real line breaks, as Orca's own machine profiles hold it.
+    assert machine["machine_start_gcode"] == good["printer"]["start_gcode"]
+    assert machine["machine_end_gcode"] == good["printer"]["end_gcode"]
+    assert "\\" not in machine["machine_start_gcode"]
+    # A built-in profile still uses the bundled Orca machine's own G-code.
+    from gantrel_printer import slicing
+    k2 = slicing.PRINTERS["creality-k2"]
+    machine, _, _ = slicing.orca_overrides(slicing.settings(k2, slicing.material("PLA")), k2)
+    assert "machine_start_gcode" not in machine and "machine_end_gcode" not in machine

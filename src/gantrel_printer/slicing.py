@@ -466,6 +466,13 @@ def orca_overrides(s: dict, printer: PrinterProfile) -> tuple[dict, dict, dict]:
                 "textured_plate_temp": [str(s["bed_c"])], "textured_plate_temp_initial_layer": [str(s["bed_first_layer_c"])],
                 "fan_min_speed": [str(s["fan_percent"][0])], "fan_max_speed": [str(s["fan_percent"][1])],
                 "filament_max_volumetric_speed": [str(s["max_flow_mm3s"])]}
+    if printer.source:
+        # A pack profile: Orca writes the pack's reviewed start and end G-code, not the bundled machine's.
+        # Orca's machine profiles hold real line breaks; the profile carries \n escapes (packs.to_profile), and a
+        # pack's G-code may hold no backslash of its own, so turning them back gives exactly the reviewed text.
+        for key, text in (("machine_start_gcode", printer.start_gcode), ("machine_end_gcode", printer.end_gcode)):
+            if text:
+                machine[key] = text.replace("\\n", "\n")
     if "retract_speed_mms" in s:
         machine["retraction_speed"] = [str(s["retract_speed_mms"])]
     if "flow_ratio" in s:
