@@ -27,3 +27,8 @@ skill = "studio"
 name = "plan"
 description = "Plan a print: orientation, supports, time, filament and a settings check"
 skill = "print-plan"
+
+[[commands]]
+name = "setup-printer"
+description = "Set up a new printer, then save and (with your yes) share its working setup as a pack"
+skill = "printer-setup"
