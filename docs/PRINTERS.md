@@ -221,6 +221,49 @@ same DNS answer the send connects to), or after
 long random topic name or a self-hosted ntfy server. `--no-attach-frame` turns frames off, and
 `--clear-notify` forgets the target. A notice that fails is logged and never stops the watch.
 
+## Loaded filament
+
+`gantrel-printer filaments <name> [--json]` lists what is loaded right now, one row per slot: the
+slot id, whether it is empty, the material family (PLA, PETG, ABS, ASA, TPU, PA, PC, PLA-CF,
+PETG-CF, PVA, HIPS, other, or unknown when the printer doesn't say), the printer's own material word
+or code, the brand and product name when the printer gives them, the color as `#rrggbb`, percent or
+grams left when known, the nozzle temperature range when the printer reports one, and `source`, the
+API field the row came from. Agents use it to pick the slot whose family matches the print's
+filament, and ask the person when two slots match or none does.
+
+It only reads. Every reply is capped at 1 MiB before it is parsed (Bambu reports at 4 MiB), and
+every field is treated as untrusted: strings are cut to 64 printable characters, colors must be
+6-digit hex, and numbers outside a sane range are dropped. A reply in a shape Gantrel can't read is
+a plain `protocol` error, never a crash.
+
+| Adapter | What it reads | Slots | Proven |
+|---|---|---|---|
+| Moonraker on a Creality K-series with a CFS | Klipper's `box` object (`/printer/objects/query?box`): per unit T1 to T4, `material_type`, `color_value`, `remain_len`, `dry_and_humidity`, `temperature` | `T1A` to `T4D`; `ext` when there is no box or it is not connected | Fixture. Real: one read-only read on the owner's K2 (2026-11-22), see below |
+| Creality stock firmware (`--type creality`) | The same `box` object, from the K2's own Moonraker on port 7125 (`extra.moonraker_port` changes it). The stock socket on 9999 has no call for it that Gantrel knows. | as above | Fixture and fake. On a K1, Ender-3 V3 or Hi without Moonraker it says it can't report filament |
+| Moonraker with Spoolman | `/server/spoolman/status`, `/server/spoolman/spool_id`, then the active spool through Moonraker's proxy (`POST /server/spoolman/proxy` asking Spoolman for `GET /v1/spool/<id>`): material, vendor, name, color, remaining weight | `ext` | Fake only |
+| Moonraker without Spoolman or a CFS | Nothing to read | one `ext` slot, family unknown | Fake only |
+| Bambu Lab LAN | The `print.ams` and `print.vt_tray` parts of the pushall report status already asks for: `tray_type`, `tray_sub_brands`, `tray_color`, `remain` (-1 means unknown), `nozzle_temp_min` and `nozzle_temp_max` | `A1` to `A4` for the first AMS, `B1` to `B4` for the next, `ext` for the external spool | Fake only |
+| Every other adapter | PrusaLink's `/api/v1/status` has no filament (MMU is out of scope); OctoPrint, Elegoo, Duet, FlashForge, Snapmaker, UltiMaker, Repetier-Server and USB serial have no filament report Gantrel reads | none: an `unsupported` error saying so | Tested |
+
+**The K2 read.** On 2026-11-22 a read-only tool queried `box` on the owner's K2 once and reported
+a summary: unit T1 connected, humidity 41, temperature 25; T1A empty; T1B code 008001, color ffffff,
+100 percent; T1C empty; T1D code 008001, color 000000, 0 percent. The fixture in
+`tests/printers/test_filaments.py` is rebuilt from that summary, not from the raw bytes, and the
+parser reproduces exactly those rows from it.
+
+**Creality material codes.** `box` reports a 6-character Creality code per slot ("-1" when empty).
+Creality's firmware takes it from the spool's RFID text
+([Hi_Klipper `external_material_wrapper.py` at 646b6aa](https://github.com/CrealityOfficial/Hi_Klipper/blob/646b6aaaa4dc1fe9c4f773f1a425ea4666e5ed9b/klippy/extras/external_material_wrapper.py)).
+Creality Print does not publish these codes. At
+[CrealityPrint 6262848](https://github.com/CrealityOfficial/CrealityPrint/tree/6262848e302b8c0d593f2b341cd01310aa2f58a1)
+its filament profiles carry 5-character `filament_id` values (08001 is Ender-PLA in
+`resources/profiles/Creality/filament/Ender-PLA @Creality K2 0.4 nozzle.json`), and it downloads
+its full material list from Creality's cloud at run time (`src/slic3r/GUI/MaterialListDownloader.cpp`).
+Mapping 008001 to 08001 by dropping the first character would be a guess, so
+`src/gantrel_printer/data/creality_materials.json` lists only 008001 as PLA, seen on the owner's K2,
+with no brand, product name or temperatures. Every other code shows as family unknown with the code
+in the material field, and the agent asks the person.
+
 ## Agent-written adapters
 
 An agent can write a new adapter by reading a device's docs or API reference. Before it is used:

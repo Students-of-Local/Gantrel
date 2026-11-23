@@ -191,6 +191,33 @@ def cmd_camera(args):
         f"Look at the image: is the bed clear and the print OK? If not: gantrel-printer pause {args.name}")
 
 
+def slot_row(s) -> str:
+    if s.empty:
+        return f"{s.slot:6} empty"
+    what = s.family if s.family != "unknown" else ("unknown" + (f" (code {s.material})" if s.material else ""))
+    label = " ".join(x for x in (s.brand, s.name) if x) or (s.material if s.material != what else "")
+    left = (f"{s.percent_left:.0f}%" if s.percent_left is not None else
+            f"{s.grams_left:.0f} g" if s.grams_left is not None else "?")
+    nozzle = f"{s.nozzle_min_c:.0f}-{s.nozzle_max_c:.0f}C" if s.nozzle_min_c is not None else "-"
+    return f"{s.slot:6} {what:20} {label[:24]:24} {s.color or '-':8} {left:7} {nozzle:9} {s.source}"
+
+
+def cmd_filaments(args):
+    adapter = open_printer(args.name)
+    before = snapshot_cfg(adapter)
+    slots = adapter.filaments()
+    save_if_changed(adapter, before)
+    loaded = [s for s in slots if not s.empty]
+    head = f"{'SLOT':6} {'FAMILY':20} {'NAME':24} {'COLOR':8} {'LEFT':7} {'NOZZLE':9} SOURCE"
+    text = "\n".join([head] + [slot_row(s) for s in slots])
+    if not loaded:
+        nxt = f"Tell the person {args.name} reports no filament loaded and ask them to load the print's filament"
+    else:
+        nxt = ("Pick the slot whose family matches the print's filament. If two slots match, or none does, or "
+               "the family is unknown, ask the person which slot to use")
+    out(args, {"printer": args.name, "type": adapter.type_name, "slots": [s.to_dict() for s in slots]}, text, nxt)
+
+
 def cmd_profiles(args):
     data = {"printers": {k: p.label for k, p in slicing.PRINTERS.items()},
             "materials": {k: m.note for k, m in slicing.MATERIALS.items()}, "quality": list(slicing.QUALITY)}
@@ -551,6 +578,8 @@ def parser() -> argparse.ArgumentParser:
     sp = add("camera", cmd_camera, "save one camera frame")
     sp.add_argument("name")
     sp.add_argument("--out", required=True, help="where to save the JPEG")
+    sp = add("filaments", cmd_filaments, "what filament is loaded in each slot (read-only)")
+    sp.add_argument("name")
     add("profiles", cmd_profiles, "printer models, materials and quality levels for slicing")
     sp = add("slice", cmd_slice, "slice a model with the printer's profile")
     sp.add_argument("model")

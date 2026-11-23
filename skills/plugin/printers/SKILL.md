@@ -98,6 +98,15 @@ surfaces), follow "Calibration prints" below.
 10. Trouble you see on the camera: follow "First: is this a stop request?" above. Tell the person
     what you did and what you saw. Only they can resume it, on the printer.
 
+## Loaded filament
+
+Before slicing, when the person hasn't said which filament is loaded, run
+`gantrel-printer filaments <name> --json`. Each slot has `slot`, `empty`, `family` (PLA, PETG, ABS
+and so on, or unknown), `color` and the amount left. Pick the slot that isn't empty and whose
+family matches the print's filament, and slice with that material. If two slots match, none does,
+or the family is unknown, ask the person which slot and filament to use. If it says the printer
+doesn't report loaded filament, ask the person.
+
 ## Calibration prints
 
 Use these when prints don't stick, string between parts, look rough or have gaps, or when the
