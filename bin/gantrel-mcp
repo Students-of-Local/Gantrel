@@ -1,7 +1,8 @@
 #!/bin/sh
 # Gantrel's MCP server for Local Studio (stdio). Runs the pinned code with uv; installs nothing itself.
 # The virtual environment lives outside the plugin folder: a write inside it would change the folder's
-# hash, and Local Studio would ask for consent again.
+# hash, and Local Studio would ask for consent again. It is keyed on the plugin root, so two checkouts
+# never share one environment or re-point each other's editable install.
 set -eu
 case "$0" in
   */*) here=${0%/*} ;;
@@ -13,6 +14,7 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 PYTHONDONTWRITEBYTECODE=1
-UV_PROJECT_ENVIRONMENT="${XDG_CACHE_HOME:-$HOME/.cache}/gantrel/venv"
+key=$(printf %s "$root" | cksum | cut -d' ' -f1)
+UV_PROJECT_ENVIRONMENT="${XDG_CACHE_HOME:-$HOME/.cache}/gantrel/venv-$key"
 export PYTHONDONTWRITEBYTECODE UV_PROJECT_ENVIRONMENT
 exec uv run --frozen --no-dev --project "$root" gantrel-mcp "$@"

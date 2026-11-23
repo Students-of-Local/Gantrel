@@ -112,8 +112,9 @@ The card also can't tell what is on the bed. The person checks that.
 ## Registering the server
 
 Point the client at the absolute path of `bin/gantrel-mcp` in your Gantrel checkout. It needs `uv`
-on `PATH`; it keeps its Python environment in `${XDG_CACHE_HOME:-~/.cache}/gantrel/venv` and writes
-nothing in the checkout.
+on `PATH`; it keeps its Python environment in `${XDG_CACHE_HOME:-~/.cache}/gantrel/venv-<key>`, where
+`<key>` is the `cksum` of the checkout's resolved path, so each checkout gets its own environment, and
+it writes nothing in the checkout.
 
 - **Local Studio:** nothing to do. The plugin's `plugin.toml` asks for `mcp-server` and `ask-user`;
   grant both on the consent sheet, and Local Studio starts the server for each thread with the ask
