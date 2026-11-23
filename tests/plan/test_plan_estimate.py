@@ -33,9 +33,10 @@ def test_cube_volumes_by_hand():
 
 def test_cube_time_by_hand():
     e = est.estimate(shapes.cube(), S, K2, PLA)
-    cap = 0.9 * min(23, 12)                    # K2 hotend 23, PLA standard flow 12
+    cap = 14.0                                 # Creality's Generic PLA @K2-all preset
     assert e["flow_cap_mm3s"] == pytest.approx(cap)
-    v = min(100, cap / (0.2 * 0.45))           # 100 mm/s is under the 120 mm/s flow limit
+    assert e["flow_cap_source"] == "vendor preset Generic PLA @K2-all"
+    v = min(100, cap / (0.2 * 0.45))           # 100 mm/s is under the 155 mm/s flow limit
 
     def avg(seg):                             # trapezoid: t = L / v + v / a
         return seg / (seg / v + v / 10000)
@@ -62,8 +63,9 @@ def test_flow_cap_limits_speed():
     fast = dict(S, outer_wall_speed_mms=300, inner_wall_speed_mms=300, infill_speed_mms=300)
     e = est.estimate(shapes.cube(), fast, K2, PLA)
     assert set(e["flow_limited"]) >= {"wall", "infill"}
-    slow = est.estimate(shapes.cube(), dict(S, outer_wall_speed_mms=120, inner_wall_speed_mms=120,
-                                            infill_speed_mms=120), K2, PLA)
+    v = est.flow_cap(K2, PLA) / (0.2 * 0.45)
+    slow = est.estimate(shapes.cube(), dict(S, outer_wall_speed_mms=v, inner_wall_speed_mms=v,
+                                            infill_speed_mms=v), K2, PLA)
     assert e["seconds_by_feature"]["wall"] == pytest.approx(slow["seconds_by_feature"]["wall"])
 
 
@@ -143,3 +145,32 @@ def test_slicing_time_regex_misses_the_bambu_form():
 
 def test_nothing_to_read():
     assert est.parse_slicer_gcode("G28\nG1 X10\n") == {}
+
+
+def test_k2_pla_cap_comes_from_creality_preset():
+    lim = est.flow_limit(K2, PLA)
+    assert lim["mm3s"] == 14.0 and lim["mm3s"] > 12
+    assert lim["preset"] == "Generic PLA @K2-all"
+    assert "a31c95e273d3423abf185a444d70beae4941c697" in lim["url"]
+
+
+def test_printer_without_a_preset_keeps_gantrel_rule():
+    klipper = slicing.PRINTERS["generic-klipper"]
+    lim = est.flow_limit(klipper, PLA)
+    assert lim["mm3s"] == pytest.approx(est.FLOW_MARGIN * min(klipper.max_flow, PLA.max_flow_standard_mm3s))
+    assert lim["source"].startswith("Gantrel default")
+    # A printer with presets, but none for this family, also keeps the rule.
+    pc = materials.get("PC")
+    lim = est.flow_limit(K2, pc)
+    assert lim["source"].startswith("Gantrel default")
+    assert lim["mm3s"] == pytest.approx(est.FLOW_MARGIN * min(K2.max_flow, pc.max_flow_standard_mm3s))
+
+
+def test_vendor_flow_table_matches_the_profiles():
+    for key, entry in materials.VENDOR_FLOW.items():
+        p = slicing.PRINTERS[key]
+        assert entry["orca_machine"] == p.orca_machine, key
+        for fam, v in entry["families"].items():
+            assert fam in materials.FAMILIES and v["mm3s"] > 0, (key, fam)
+            assert v["preset"].startswith(f"Generic {fam}"), (key, fam, v["preset"])
+            assert materials.VENDOR_FLOW_COMMIT in v["url"] and v["file"].endswith(".json")

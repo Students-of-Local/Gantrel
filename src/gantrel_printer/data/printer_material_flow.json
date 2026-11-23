@@ -1,0 +1,1499 @@
+{
+ "_about": "Volumetric flow limits (filament_max_volumetric_speed, mm3/s) from the printer vendor's own filament presets in OrcaSlicer, by Gantrel printer key and filament family. The planner uses the vendor's Generic preset for that family; other presets for the same family on that machine (the vendor's own basic filament, high speed variants) are listed under 'also' for reference only. Inherited values are resolved through each preset's 'inherits' chain. Generated from a checkout of OrcaSlicer at the commit below.",
+ "source": "https://github.com/OrcaSlicer/OrcaSlicer/tree/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles",
+ "commit": "a31c95e273d3423abf185a444d70beae4941c697",
+ "printers": {
+  "creality-k2": {
+   "orca_machine": "Creality K2 0.4 nozzle",
+   "families": {
+    "PLA": {
+     "mm3s": 14.0,
+     "preset": "Generic PLA @K2-all",
+     "file": "Creality/filament/Generic PLA @K2-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PLA%20%40K2-all.json",
+     "also": [
+      {
+       "preset": "CR-PLA @K2-all",
+       "mm3s": 18.0,
+       "file": "Creality/filament/CR-PLA @K2-all.json"
+      },
+      {
+       "preset": "Hyper PLA @K2-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Hyper PLA @K2-all.json"
+      },
+      {
+       "preset": "Generic PLA High Speed @Creality K2-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Generic PLA High Speed @Creality K2-all.json"
+      }
+     ]
+    },
+    "PLA-CF": {
+     "mm3s": 18.0,
+     "preset": "Generic PLA-CF @K2-all",
+     "file": "Creality/filament/Generic PLA-CF @K2-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PLA-CF%20%40K2-all.json",
+     "also": [
+      {
+       "preset": "Hyper PLA-CF @K2-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Hyper PLA-CF @K2-all.json"
+      }
+     ]
+    },
+    "PETG": {
+     "mm3s": 12.0,
+     "preset": "Generic PETG @K2-all",
+     "file": "Creality/filament/Generic PETG @K2-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PETG%20%40K2-all.json",
+     "also": [
+      {
+       "preset": "CR-PETG @K2-all",
+       "mm3s": 18.0,
+       "file": "Creality/filament/CR-PETG @K2-all.json"
+      },
+      {
+       "preset": "Hyper PETG @K2-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Hyper PETG @K2-all.json"
+      }
+     ]
+    },
+    "PETG-CF": {
+     "mm3s": 10.0,
+     "preset": "Generic PETG-CF @K2-all",
+     "file": "Creality/filament/Generic PETG-CF @K2-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PETG-CF%20%40K2-all.json",
+     "also": [
+      {
+       "preset": "Hyper PETG-CF @K2-all",
+       "mm3s": 12.0,
+       "file": "Creality/filament/Hyper PETG-CF @K2-all.json"
+      }
+     ]
+    },
+    "ABS": {
+     "mm3s": 16.0,
+     "preset": "Generic ABS @K2-all",
+     "file": "Creality/filament/Generic ABS @K2-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20ABS%20%40K2-all.json",
+     "also": [
+      {
+       "preset": "CR-ABS @K2-all",
+       "mm3s": 18.0,
+       "file": "Creality/filament/CR-ABS @K2-all.json"
+      },
+      {
+       "preset": "Hyper ABS @K2-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Hyper ABS @K2-all.json"
+      }
+     ]
+    },
+    "ASA": {
+     "mm3s": 8.0,
+     "preset": "Generic ASA @K2-all",
+     "file": "Creality/filament/Generic ASA @K2-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20ASA%20%40K2-all.json"
+    },
+    "TPU": {
+     "mm3s": 2.0,
+     "preset": "Generic TPU @K2-all",
+     "file": "Creality/filament/Generic TPU @K2-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20TPU%20%40K2-all.json",
+     "also": [
+      {
+       "preset": "CR-TPU @K2-all",
+       "mm3s": 2.0,
+       "file": "Creality/filament/CR-TPU @K2-all.json"
+      }
+     ]
+    },
+    "PA": {
+     "mm3s": 8.0,
+     "preset": "Generic PA @K2-all",
+     "file": "Creality/filament/Generic PA @K2-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PA%20%40K2-all.json",
+     "value_from": "Creality/filament/fdm_filament_pa.json"
+    },
+    "PA-CF": {
+     "mm3s": 8.0,
+     "preset": "Generic PA-CF @Creality K2-all",
+     "file": "Creality/filament/Generic PA-CF @Creality K2-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PA-CF%20%40Creality%20K2-all.json",
+     "value_from": "Creality/filament/Generic PA-CF @Creality.json"
+    },
+    "PVA": {
+     "mm3s": 6.0,
+     "preset": "Generic PVA @K2-all",
+     "file": "Creality/filament/Generic PVA @K2-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PVA%20%40K2-all.json"
+    }
+   }
+  },
+  "creality-k2-plus": {
+   "orca_machine": "Creality K2 Plus 0.4 nozzle",
+   "families": {
+    "PLA": {
+     "mm3s": 14.0,
+     "preset": "Generic PLA @K2 Plus-all",
+     "file": "Creality/filament/Generic PLA @K2 Plus-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PLA%20%40K2%20Plus-all.json",
+     "also": [
+      {
+       "preset": "CR-PLA @K2 Plus-all",
+       "mm3s": 18.0,
+       "file": "Creality/filament/CR-PLA @K2 Plus-all.json"
+      },
+      {
+       "preset": "Hyper PLA @K2 Plus-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Hyper PLA @K2 Plus-all.json"
+      },
+      {
+       "preset": "Generic PLA High Speed @Creality K2-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Generic PLA High Speed @Creality K2-all.json"
+      }
+     ]
+    },
+    "PLA-CF": {
+     "mm3s": 18.0,
+     "preset": "Generic PLA-CF @K2 Plus-all",
+     "file": "Creality/filament/Generic PLA-CF @K2 Plus-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PLA-CF%20%40K2%20Plus-all.json",
+     "also": [
+      {
+       "preset": "CR-PLA Carbon @K2 Plus-all",
+       "mm3s": 18.0,
+       "file": "Creality/filament/CR-PLA Carbon @K2 Plus-all.json"
+      },
+      {
+       "preset": "Hyper PLA-CF @K2 Plus-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Hyper PLA-CF @K2 Plus-all.json"
+      }
+     ]
+    },
+    "PETG": {
+     "mm3s": 16.0,
+     "preset": "Generic PETG @K2 Plus-all",
+     "file": "Creality/filament/Generic PETG @K2 Plus-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PETG%20%40K2%20Plus-all.json",
+     "also": [
+      {
+       "preset": "CR-PETG @K2 Plus-all",
+       "mm3s": 18.0,
+       "file": "Creality/filament/CR-PETG @K2 Plus-all.json"
+      },
+      {
+       "preset": "Hyper PETG @K2 Plus-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Hyper PETG @K2 Plus-all.json"
+      }
+     ]
+    },
+    "PETG-CF": {
+     "mm3s": 10.0,
+     "preset": "Generic PETG-CF @K2 Plus-all",
+     "file": "Creality/filament/Generic PETG-CF @K2 Plus-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PETG-CF%20%40K2%20Plus-all.json",
+     "also": [
+      {
+       "preset": "Hyper PETG-CF @K2 Plus-all",
+       "mm3s": 12.0,
+       "file": "Creality/filament/Hyper PETG-CF @K2 Plus-all.json"
+      }
+     ]
+    },
+    "ABS": {
+     "mm3s": 16.0,
+     "preset": "Generic ABS @K2 Plus-all",
+     "file": "Creality/filament/Generic ABS @K2 Plus-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20ABS%20%40K2%20Plus-all.json",
+     "also": [
+      {
+       "preset": "CR-ABS @K2 Plus-all",
+       "mm3s": 18.0,
+       "file": "Creality/filament/CR-ABS @K2 Plus-all.json"
+      },
+      {
+       "preset": "Hyper ABS @K2 Plus-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Hyper ABS @K2 Plus-all.json"
+      }
+     ]
+    },
+    "ASA": {
+     "mm3s": 10.0,
+     "preset": "Generic ASA @K2 Plus-all",
+     "file": "Creality/filament/Generic ASA @K2 Plus-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20ASA%20%40K2%20Plus-all.json"
+    },
+    "TPU": {
+     "mm3s": 2.0,
+     "preset": "Generic TPU @K2 Plus-all",
+     "file": "Creality/filament/Generic TPU @K2 Plus-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20TPU%20%40K2%20Plus-all.json",
+     "also": [
+      {
+       "preset": "CR-TPU @K2 Plus-all",
+       "mm3s": 2.0,
+       "file": "Creality/filament/CR-TPU @K2 Plus-all.json"
+      }
+     ]
+    },
+    "PA": {
+     "mm3s": 10.0,
+     "preset": "Generic PA @K2 Plus-all",
+     "file": "Creality/filament/Generic PA @K2 Plus-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PA%20%40K2%20Plus-all.json",
+     "also": [
+      {
+       "preset": "CR-Nylon @K2 Plus-all",
+       "mm3s": 12.0,
+       "file": "Creality/filament/CR-Nylon @K2 Plus-all.json"
+      }
+     ]
+    },
+    "PA-CF": {
+     "mm3s": 6.0,
+     "preset": "Generic PA-CF @K2 Plus-all",
+     "file": "Creality/filament/Generic PA-CF @K2 Plus-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PA-CF%20%40K2%20Plus-all.json"
+    },
+    "PC": {
+     "mm3s": 16.0,
+     "preset": "Generic PC @K2 Plus-all",
+     "file": "Creality/filament/Generic PC @K2 Plus-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PC%20%40K2%20Plus-all.json",
+     "also": [
+      {
+       "preset": "Hyper PC @K2 Plus-all",
+       "mm3s": 18.0,
+       "file": "Creality/filament/Hyper PC @K2 Plus-all.json"
+      }
+     ]
+    },
+    "PVA": {
+     "mm3s": 6.0,
+     "preset": "Generic PVA @K2 Plus-all",
+     "file": "Creality/filament/Generic PVA @K2 Plus-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PVA%20%40K2%20Plus-all.json"
+    },
+    "HIPS": {
+     "mm3s": 10.0,
+     "preset": "Generic HIPS @K2 Plus-all",
+     "file": "Creality/filament/Generic HIPS @K2 Plus-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20HIPS%20%40K2%20Plus-all.json"
+    }
+   }
+  },
+  "creality-k1": {
+   "orca_machine": "Creality K1C 0.4 nozzle",
+   "families": {
+    "PLA": {
+     "mm3s": 14.0,
+     "preset": "Generic PLA @K1C-all",
+     "file": "Creality/filament/Generic PLA @K1C-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PLA%20%40K1C-all.json",
+     "also": [
+      {
+       "preset": "CR-PLA @K1C-all",
+       "mm3s": 18.0,
+       "file": "Creality/filament/CR-PLA @K1C-all.json"
+      },
+      {
+       "preset": "Hyper PLA @K1C-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Hyper PLA @K1C-all.json"
+      },
+      {
+       "preset": "Generic PLA High Speed @Creality K1-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Generic PLA High Speed @Creality K1-all.json"
+      }
+     ]
+    },
+    "PLA-CF": {
+     "mm3s": 18.0,
+     "preset": "Generic PLA-CF @K1C-all",
+     "file": "Creality/filament/Generic PLA-CF @K1C-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PLA-CF%20%40K1C-all.json",
+     "also": [
+      {
+       "preset": "CR-PLA Carbon @K1C-all",
+       "mm3s": 18.0,
+       "file": "Creality/filament/CR-PLA Carbon @K1C-all.json"
+      },
+      {
+       "preset": "Hyper PLA-CF @K1C-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Hyper PLA-CF @K1C-all.json"
+      }
+     ]
+    },
+    "PETG": {
+     "mm3s": 12.0,
+     "preset": "Generic PETG @K1C-all",
+     "file": "Creality/filament/Generic PETG @K1C-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PETG%20%40K1C-all.json",
+     "also": [
+      {
+       "preset": "CR-PETG @K1C-all",
+       "mm3s": 18.0,
+       "file": "Creality/filament/CR-PETG @K1C-all.json"
+      },
+      {
+       "preset": "Hyper PETG @K1C-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Hyper PETG @K1C-all.json"
+      }
+     ]
+    },
+    "PETG-CF": {
+     "mm3s": 10.0,
+     "preset": "Generic PETG-CF @K1C-all",
+     "file": "Creality/filament/Generic PETG-CF @K1C-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PETG-CF%20%40K1C-all.json",
+     "also": [
+      {
+       "preset": "Hyper PETG-CF @K1C-all",
+       "mm3s": 10.0,
+       "file": "Creality/filament/Hyper PETG-CF @K1C-all.json"
+      }
+     ]
+    },
+    "ABS": {
+     "mm3s": 16.0,
+     "preset": "Generic ABS @K1C-all",
+     "file": "Creality/filament/Generic ABS @K1C-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20ABS%20%40K1C-all.json",
+     "also": [
+      {
+       "preset": "CR-ABS @K1C-all",
+       "mm3s": 18.0,
+       "file": "Creality/filament/CR-ABS @K1C-all.json"
+      },
+      {
+       "preset": "Hyper ABS @K1C-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Hyper ABS @K1C-all.json"
+      }
+     ]
+    },
+    "ASA": {
+     "mm3s": 16.0,
+     "preset": "Generic ASA @K1C-all",
+     "file": "Creality/filament/Generic ASA @K1C-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20ASA%20%40K1C-all.json"
+    },
+    "TPU": {
+     "mm3s": 3.0,
+     "preset": "Generic TPU @K1C-all",
+     "file": "Creality/filament/Generic TPU @K1C-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20TPU%20%40K1C-all.json",
+     "also": [
+      {
+       "preset": "CR-TPU @K1C-all",
+       "mm3s": 2.0,
+       "file": "Creality/filament/CR-TPU @K1C-all.json"
+      }
+     ]
+    },
+    "PA": {
+     "mm3s": 8.0,
+     "preset": "Generic PA @K1C-all",
+     "file": "Creality/filament/Generic PA @K1C-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PA%20%40K1C-all.json",
+     "value_from": "Creality/filament/fdm_filament_pa.json",
+     "also": [
+      {
+       "preset": "CR-Nylon @K1C-all",
+       "mm3s": 8.0,
+       "file": "Creality/filament/CR-Nylon @K1C-all.json"
+      }
+     ]
+    },
+    "PA-CF": {
+     "mm3s": 8.0,
+     "preset": "Generic PA-CF @K1C-all",
+     "file": "Creality/filament/Generic PA-CF @K1C-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PA-CF%20%40K1C-all.json",
+     "value_from": "Creality/filament/fdm_filament_pa.json"
+    },
+    "PC": {
+     "mm3s": 10.0,
+     "preset": "Generic PC @K1C-all",
+     "file": "Creality/filament/Generic PC @K1C-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PC%20%40K1C-all.json"
+    },
+    "PVA": {
+     "mm3s": 6.0,
+     "preset": "Generic PVA @K1C-all",
+     "file": "Creality/filament/Generic PVA @K1C-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PVA%20%40K1C-all.json"
+    },
+    "HIPS": {
+     "mm3s": 10.0,
+     "preset": "Generic HIPS @K1C-all",
+     "file": "Creality/filament/Generic HIPS @K1C-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20HIPS%20%40K1C-all.json"
+    }
+   }
+  },
+  "creality-k1-max": {
+   "orca_machine": "Creality K1 Max (0.4 nozzle)",
+   "families": {
+    "PLA": {
+     "mm3s": 12.0,
+     "preset": "Generic PLA @Creality",
+     "file": "Creality/filament/Generic PLA @Creality.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PLA%20%40Creality.json",
+     "also": [
+      {
+       "preset": "Generic PLA High Speed @Creality K1-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Generic PLA High Speed @Creality K1-all.json"
+      }
+     ]
+    },
+    "PLA-CF": {
+     "mm3s": 12.0,
+     "preset": "Generic PLA-CF @Creality K1-all",
+     "file": "Creality/filament/Generic PLA-CF @Creality K1-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PLA-CF%20%40Creality%20K1-all.json",
+     "value_from": "Creality/filament/Generic PLA-CF @Creality.json"
+    },
+    "PETG": {
+     "mm3s": 10.0,
+     "preset": "Generic PETG @Creality",
+     "file": "Creality/filament/Generic PETG @Creality.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PETG%20%40Creality.json"
+    },
+    "ABS": {
+     "mm3s": 12.0,
+     "preset": "Generic ABS @Creality",
+     "file": "Creality/filament/Generic ABS @Creality.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20ABS%20%40Creality.json"
+    },
+    "ASA": {
+     "mm3s": 12.0,
+     "preset": "Generic ASA @Creality",
+     "file": "Creality/filament/Generic ASA @Creality.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20ASA%20%40Creality.json"
+    },
+    "TPU": {
+     "mm3s": 3.2,
+     "preset": "Generic TPU @Creality",
+     "file": "Creality/filament/Generic TPU @Creality.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20TPU%20%40Creality.json"
+    },
+    "PA-CF": {
+     "mm3s": 8.0,
+     "preset": "Generic PA-CF @Creality K1-all",
+     "file": "Creality/filament/Generic PA-CF @Creality K1-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PA-CF%20%40Creality%20K1-all.json",
+     "value_from": "Creality/filament/Generic PA-CF @Creality.json"
+    },
+    "PC": {
+     "mm3s": 16.0,
+     "preset": "Generic PC @Creality K1-all",
+     "file": "Creality/filament/Generic PC @Creality K1-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PC%20%40Creality%20K1-all.json",
+     "value_from": "Creality/filament/Generic PC @Creality.json"
+    }
+   }
+  },
+  "creality-ender3-v3": {
+   "orca_machine": "Creality Ender-3 V3 0.4 nozzle",
+   "families": {
+    "PLA": {
+     "mm3s": 14.0,
+     "preset": "Generic PLA @Ender-3 V3-all",
+     "file": "Creality/filament/Generic PLA @Ender-3 V3-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PLA%20%40Ender-3%20V3-all.json",
+     "also": [
+      {
+       "preset": "CR-PLA @Ender-3 V3-all",
+       "mm3s": 18.0,
+       "file": "Creality/filament/CR-PLA @Ender-3 V3-all.json"
+      },
+      {
+       "preset": "Hyper PLA @Ender-3 V3-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Hyper PLA @Ender-3 V3-all.json"
+      },
+      {
+       "preset": "Generic PLA High Speed @Creality Ender-3V3-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Generic PLA High Speed @Creality Ender-3V3-all.json"
+      }
+     ]
+    },
+    "PLA-CF": {
+     "mm3s": 18.0,
+     "preset": "Generic PLA-CF @Ender-3 V3-all",
+     "file": "Creality/filament/Generic PLA-CF @Ender-3 V3-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PLA-CF%20%40Ender-3%20V3-all.json",
+     "also": [
+      {
+       "preset": "CR-PLA Carbon @Ender-3 V3-all",
+       "mm3s": 18.0,
+       "file": "Creality/filament/CR-PLA Carbon @Ender-3 V3-all.json"
+      },
+      {
+       "preset": "Hyper PLA-CF @Ender-3 V3-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Hyper PLA-CF @Ender-3 V3-all.json"
+      }
+     ]
+    },
+    "PETG": {
+     "mm3s": 8.0,
+     "preset": "Generic PETG @Ender-3 V3-all",
+     "file": "Creality/filament/Generic PETG @Ender-3 V3-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PETG%20%40Ender-3%20V3-all.json",
+     "also": [
+      {
+       "preset": "CR-PETG @Ender-3 V3-all",
+       "mm3s": 8.0,
+       "file": "Creality/filament/CR-PETG @Ender-3 V3-all.json"
+      },
+      {
+       "preset": "Hyper PETG @Ender-3 V3-all",
+       "mm3s": 23.0,
+       "file": "Creality/filament/Hyper PETG @Ender-3 V3-all.json"
+      }
+     ]
+    },
+    "ABS": {
+     "mm3s": 9.0,
+     "preset": "Generic ABS @Creality Ender-3V3-all",
+     "file": "Creality/filament/Generic ABS @Creality Ender-3V3-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20ABS%20%40Creality%20Ender-3V3-all.json",
+     "also": [
+      {
+       "preset": "CR-ABS @Ender-3 V3-all",
+       "mm3s": 14.0,
+       "file": "Creality/filament/CR-ABS @Ender-3 V3-all.json"
+      }
+     ]
+    },
+    "ASA": {
+     "mm3s": 9.0,
+     "preset": "Generic ASA @Creality Ender-3V3-all",
+     "file": "Creality/filament/Generic ASA @Creality Ender-3V3-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20ASA%20%40Creality%20Ender-3V3-all.json"
+    },
+    "TPU": {
+     "mm3s": 2.0,
+     "preset": "Generic TPU @Ender-3 V3-all",
+     "file": "Creality/filament/Generic TPU @Ender-3 V3-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20TPU%20%40Ender-3%20V3-all.json",
+     "also": [
+      {
+       "preset": "CR-TPU @Ender-3 V3-all",
+       "mm3s": 3.5,
+       "file": "Creality/filament/CR-TPU @Ender-3 V3-all.json"
+      }
+     ]
+    },
+    "PA-CF": {
+     "mm3s": 8.0,
+     "preset": "Generic PA-CF @Creality Ender-3V3-all",
+     "file": "Creality/filament/Generic PA-CF @Creality Ender-3V3-all.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Creality/filament/Generic%20PA-CF%20%40Creality%20Ender-3V3-all.json",
+     "value_from": "Creality/filament/Generic PA-CF @Creality.json"
+    }
+   }
+  },
+  "bambu-x1c": {
+   "orca_machine": "Bambu Lab X1 Carbon 0.4 nozzle",
+   "families": {
+    "PLA": {
+     "mm3s": 12.0,
+     "preset": "Generic PLA",
+     "file": "BBL/filament/Generic PLA.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PLA.json",
+     "value_from": "BBL/filament/fdm_filament_pla.json",
+     "also": [
+      {
+       "preset": "Bambu PLA Basic @BBL X1C",
+       "mm3s": 21.0,
+       "file": "BBL/filament/Bambu PLA Basic @BBL X1C.json"
+      },
+      {
+       "preset": "Generic PLA High Speed @BBL X1C",
+       "mm3s": 18.0,
+       "file": "BBL/filament/Generic PLA High Speed @BBL X1C.json"
+      }
+     ]
+    },
+    "PLA-CF": {
+     "mm3s": 12.0,
+     "preset": "Generic PLA-CF",
+     "file": "BBL/filament/Generic PLA-CF.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PLA-CF.json",
+     "value_from": "BBL/filament/fdm_filament_pla.json",
+     "also": [
+      {
+       "preset": "Bambu PLA-CF @BBL X1C",
+       "mm3s": 15.0,
+       "file": "BBL/filament/Bambu PLA-CF @BBL X1C.json"
+      }
+     ]
+    },
+    "PETG": {
+     "mm3s": 12.0,
+     "preset": "Generic PETG",
+     "file": "BBL/filament/Generic PETG.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PETG.json",
+     "value_from": "BBL/filament/Generic PETG @base.json",
+     "also": [
+      {
+       "preset": "Bambu PETG Basic @BBL X1C",
+       "mm3s": 15.0,
+       "file": "BBL/filament/Bambu PETG Basic @BBL X1C.json"
+      }
+     ]
+    },
+    "PETG-CF": {
+     "mm3s": 11.5,
+     "preset": "Generic PETG-CF @BBL X1C",
+     "file": "BBL/filament/Generic PETG-CF @BBL X1C.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PETG-CF%20%40BBL%20X1C.json",
+     "also": [
+      {
+       "preset": "Bambu PETG-CF @BBL X1C 0.4 nozzle",
+       "mm3s": 11.5,
+       "file": "BBL/filament/Bambu PETG-CF @BBL X1C 0.4 nozzle.json"
+      }
+     ]
+    },
+    "ABS": {
+     "mm3s": 15.0,
+     "preset": "Generic ABS",
+     "file": "BBL/filament/Generic ABS.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20ABS.json",
+     "also": [
+      {
+       "preset": "Bambu ABS @BBL X1C",
+       "mm3s": 16.0,
+       "file": "BBL/filament/Bambu ABS @BBL X1C.json"
+      }
+     ]
+    },
+    "ASA": {
+     "mm3s": 12.0,
+     "preset": "Generic ASA",
+     "file": "BBL/filament/Generic ASA.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20ASA.json",
+     "value_from": "BBL/filament/Generic ASA @base.json",
+     "also": [
+      {
+       "preset": "Bambu ASA @BBL X1C 0.4 nozzle",
+       "mm3s": 18.0,
+       "file": "BBL/filament/Bambu ASA @BBL X1C 0.4 nozzle.json"
+      }
+     ]
+    },
+    "TPU": {
+     "mm3s": 3.2,
+     "preset": "Generic TPU",
+     "file": "BBL/filament/Generic TPU.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20TPU.json",
+     "value_from": "BBL/filament/Generic TPU @base.json",
+     "also": [
+      {
+       "preset": "Bambu TPU 95A @BBL X1C",
+       "mm3s": 3.6,
+       "file": "BBL/filament/Bambu TPU 95A @BBL X1C.json"
+      }
+     ]
+    },
+    "PA": {
+     "mm3s": 12.0,
+     "preset": "Generic PA",
+     "file": "BBL/filament/Generic PA.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PA.json",
+     "value_from": "BBL/filament/Generic PA @base.json"
+    },
+    "PA-CF": {
+     "mm3s": 8.0,
+     "preset": "Generic PA-CF",
+     "file": "BBL/filament/Generic PA-CF.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PA-CF.json",
+     "value_from": "BBL/filament/fdm_filament_pa.json",
+     "also": [
+      {
+       "preset": "Bambu PA-CF @BBL X1C",
+       "mm3s": 8.0,
+       "file": "BBL/filament/Bambu PA-CF @BBL X1C.json"
+      }
+     ]
+    },
+    "PC": {
+     "mm3s": 16.0,
+     "preset": "Generic PC",
+     "file": "BBL/filament/Generic PC.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PC.json",
+     "value_from": "BBL/filament/Generic PC @base.json",
+     "also": [
+      {
+       "preset": "Bambu PC @BBL X1C",
+       "mm3s": 18.0,
+       "file": "BBL/filament/Bambu PC @BBL X1C.json"
+      }
+     ]
+    },
+    "PVA": {
+     "mm3s": 16.0,
+     "preset": "Generic PVA",
+     "file": "BBL/filament/Generic PVA.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PVA.json",
+     "value_from": "BBL/filament/Generic PVA @base.json"
+    },
+    "HIPS": {
+     "mm3s": 8.0,
+     "preset": "Generic HIPS @BBL X1C",
+     "file": "BBL/filament/Generic HIPS @BBL X1C.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20HIPS%20%40BBL%20X1C.json"
+    }
+   }
+  },
+  "bambu-p1s": {
+   "orca_machine": "Bambu Lab P1S 0.4 nozzle",
+   "families": {
+    "PLA": {
+     "mm3s": 12.0,
+     "preset": "Generic PLA",
+     "file": "BBL/filament/Generic PLA.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PLA.json",
+     "value_from": "BBL/filament/fdm_filament_pla.json",
+     "also": [
+      {
+       "preset": "Bambu PLA Basic @BBL P1S 0.4 nozzle",
+       "mm3s": 21.0,
+       "file": "BBL/filament/Bambu PLA Basic @BBL P1S 0.4 nozzle.json"
+      },
+      {
+       "preset": "Generic PLA High Speed @BBL X1C",
+       "mm3s": 18.0,
+       "file": "BBL/filament/Generic PLA High Speed @BBL X1C.json"
+      }
+     ]
+    },
+    "PLA-CF": {
+     "mm3s": 12.0,
+     "preset": "Generic PLA-CF",
+     "file": "BBL/filament/Generic PLA-CF.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PLA-CF.json",
+     "value_from": "BBL/filament/fdm_filament_pla.json",
+     "also": [
+      {
+       "preset": "Bambu PLA-CF @BBL X1C",
+       "mm3s": 15.0,
+       "file": "BBL/filament/Bambu PLA-CF @BBL X1C.json"
+      }
+     ]
+    },
+    "PETG": {
+     "mm3s": 12.0,
+     "preset": "Generic PETG",
+     "file": "BBL/filament/Generic PETG.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PETG.json",
+     "value_from": "BBL/filament/Generic PETG @base.json",
+     "also": [
+      {
+       "preset": "Bambu PETG Basic @BBL X1C",
+       "mm3s": 15.0,
+       "file": "BBL/filament/Bambu PETG Basic @BBL X1C.json"
+      }
+     ]
+    },
+    "PETG-CF": {
+     "mm3s": 11.5,
+     "preset": "Generic PETG-CF @BBL X1C",
+     "file": "BBL/filament/Generic PETG-CF @BBL X1C.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PETG-CF%20%40BBL%20X1C.json",
+     "also": [
+      {
+       "preset": "Bambu PETG-CF @BBL X1C 0.4 nozzle",
+       "mm3s": 11.5,
+       "file": "BBL/filament/Bambu PETG-CF @BBL X1C 0.4 nozzle.json"
+      }
+     ]
+    },
+    "ABS": {
+     "mm3s": 15.0,
+     "preset": "Generic ABS",
+     "file": "BBL/filament/Generic ABS.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20ABS.json",
+     "also": [
+      {
+       "preset": "Bambu ABS @BBL P1S 0.4 nozzle",
+       "mm3s": 16.0,
+       "file": "BBL/filament/Bambu ABS @BBL P1S 0.4 nozzle.json"
+      }
+     ]
+    },
+    "ASA": {
+     "mm3s": 12.0,
+     "preset": "Generic ASA",
+     "file": "BBL/filament/Generic ASA.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20ASA.json",
+     "value_from": "BBL/filament/Generic ASA @base.json",
+     "also": [
+      {
+       "preset": "Bambu ASA @BBL X1C 0.4 nozzle",
+       "mm3s": 18.0,
+       "file": "BBL/filament/Bambu ASA @BBL X1C 0.4 nozzle.json"
+      }
+     ]
+    },
+    "TPU": {
+     "mm3s": 3.2,
+     "preset": "Generic TPU",
+     "file": "BBL/filament/Generic TPU.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20TPU.json",
+     "value_from": "BBL/filament/Generic TPU @base.json",
+     "also": [
+      {
+       "preset": "Bambu TPU 95A @BBL X1C",
+       "mm3s": 3.6,
+       "file": "BBL/filament/Bambu TPU 95A @BBL X1C.json"
+      }
+     ]
+    },
+    "PA": {
+     "mm3s": 12.0,
+     "preset": "Generic PA",
+     "file": "BBL/filament/Generic PA.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PA.json",
+     "value_from": "BBL/filament/Generic PA @base.json"
+    },
+    "PA-CF": {
+     "mm3s": 8.0,
+     "preset": "Generic PA-CF",
+     "file": "BBL/filament/Generic PA-CF.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PA-CF.json",
+     "value_from": "BBL/filament/fdm_filament_pa.json",
+     "also": [
+      {
+       "preset": "Bambu PA-CF @BBL X1C",
+       "mm3s": 8.0,
+       "file": "BBL/filament/Bambu PA-CF @BBL X1C.json"
+      }
+     ]
+    },
+    "PC": {
+     "mm3s": 16.0,
+     "preset": "Generic PC @BBL P1S",
+     "file": "BBL/filament/Generic PC @BBL P1S.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PC%20%40BBL%20P1S.json",
+     "also": [
+      {
+       "preset": "Bambu PC @BBL P1S",
+       "mm3s": 18.0,
+       "file": "BBL/filament/Bambu PC @BBL P1S.json"
+      }
+     ]
+    },
+    "PVA": {
+     "mm3s": 16.0,
+     "preset": "Generic PVA",
+     "file": "BBL/filament/Generic PVA.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PVA.json",
+     "value_from": "BBL/filament/Generic PVA @base.json"
+    },
+    "HIPS": {
+     "mm3s": 8.0,
+     "preset": "Generic HIPS @BBL X1C",
+     "file": "BBL/filament/Generic HIPS @BBL X1C.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20HIPS%20%40BBL%20X1C.json"
+    }
+   }
+  },
+  "bambu-p1p": {
+   "orca_machine": "Bambu Lab P1P 0.4 nozzle",
+   "families": {
+    "PLA": {
+     "mm3s": 12.0,
+     "preset": "Generic PLA @BBL P1P",
+     "file": "BBL/filament/P1P/Generic PLA @BBL P1P.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/P1P/Generic%20PLA%20%40BBL%20P1P.json",
+     "also": [
+      {
+       "preset": "Bambu PLA Basic @BBL P1P",
+       "mm3s": 21.0,
+       "file": "BBL/filament/P1P/Bambu PLA Basic @BBL P1P.json"
+      },
+      {
+       "preset": "Generic PLA High Speed @BBL P1P",
+       "mm3s": 18.0,
+       "file": "BBL/filament/Generic PLA High Speed @BBL P1P.json"
+      }
+     ]
+    },
+    "PLA-CF": {
+     "mm3s": 12.0,
+     "preset": "Generic PLA-CF @BBL P1P",
+     "file": "BBL/filament/P1P/Generic PLA-CF @BBL P1P.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/P1P/Generic%20PLA-CF%20%40BBL%20P1P.json",
+     "also": [
+      {
+       "preset": "Bambu PLA-CF @BBL P1P",
+       "mm3s": 15.0,
+       "file": "BBL/filament/P1P/Bambu PLA-CF @BBL P1P.json"
+      }
+     ]
+    },
+    "PETG": {
+     "mm3s": 12.0,
+     "preset": "Generic PETG @BBL P1P",
+     "file": "BBL/filament/P1P/Generic PETG @BBL P1P.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/P1P/Generic%20PETG%20%40BBL%20P1P.json",
+     "also": [
+      {
+       "preset": "Bambu PETG Basic @BBL X1C",
+       "mm3s": 15.0,
+       "file": "BBL/filament/Bambu PETG Basic @BBL X1C.json"
+      }
+     ]
+    },
+    "PETG-CF": {
+     "mm3s": 11.5,
+     "preset": "Generic PETG-CF @BBL P1P",
+     "file": "BBL/filament/P1P/Generic PETG-CF @BBL P1P.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/P1P/Generic%20PETG-CF%20%40BBL%20P1P.json",
+     "also": [
+      {
+       "preset": "Bambu PETG-CF @BBL P1P 0.4 nozzle",
+       "mm3s": 11.5,
+       "file": "BBL/filament/P1P/Bambu PETG-CF @BBL P1P 0.4 nozzle.json"
+      }
+     ]
+    },
+    "ABS": {
+     "mm3s": 15.0,
+     "preset": "Generic ABS @BBL P1P",
+     "file": "BBL/filament/P1P/Generic ABS @BBL P1P.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/P1P/Generic%20ABS%20%40BBL%20P1P.json",
+     "also": [
+      {
+       "preset": "Bambu ABS @BBL P1P",
+       "mm3s": 16.0,
+       "file": "BBL/filament/P1P/Bambu ABS @BBL P1P.json"
+      }
+     ]
+    },
+    "ASA": {
+     "mm3s": 12.0,
+     "preset": "Generic ASA @BBL P1P",
+     "file": "BBL/filament/P1P/Generic ASA @BBL P1P.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/P1P/Generic%20ASA%20%40BBL%20P1P.json",
+     "also": [
+      {
+       "preset": "Bambu ASA @BBL X1C 0.4 nozzle",
+       "mm3s": 18.0,
+       "file": "BBL/filament/Bambu ASA @BBL X1C 0.4 nozzle.json"
+      }
+     ]
+    },
+    "TPU": {
+     "mm3s": 3.2,
+     "preset": "Generic TPU @BBL P1P",
+     "file": "BBL/filament/P1P/Generic TPU @BBL P1P.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/P1P/Generic%20TPU%20%40BBL%20P1P.json",
+     "also": [
+      {
+       "preset": "Bambu TPU 95A @BBL P1P",
+       "mm3s": 3.6,
+       "file": "BBL/filament/P1P/Bambu TPU 95A @BBL P1P.json"
+      }
+     ]
+    },
+    "PA": {
+     "mm3s": 12.0,
+     "preset": "Generic PA @BBL P1P",
+     "file": "BBL/filament/P1P/Generic PA @BBL P1P.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/P1P/Generic%20PA%20%40BBL%20P1P.json"
+    },
+    "PA-CF": {
+     "mm3s": 8.0,
+     "preset": "Generic PA-CF @BBL P1P",
+     "file": "BBL/filament/P1P/Generic PA-CF @BBL P1P.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/P1P/Generic%20PA-CF%20%40BBL%20P1P.json",
+     "also": [
+      {
+       "preset": "Bambu PA-CF @BBL P1P",
+       "mm3s": 8.0,
+       "file": "BBL/filament/P1P/Bambu PA-CF @BBL P1P.json"
+      }
+     ]
+    },
+    "PC": {
+     "mm3s": 16.0,
+     "preset": "Generic PC @BBL P1P",
+     "file": "BBL/filament/P1P/Generic PC @BBL P1P.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/P1P/Generic%20PC%20%40BBL%20P1P.json",
+     "also": [
+      {
+       "preset": "Bambu PC @BBL P1P",
+       "mm3s": 18.0,
+       "file": "BBL/filament/P1P/Bambu PC @BBL P1P.json"
+      }
+     ]
+    },
+    "PVA": {
+     "mm3s": 16.0,
+     "preset": "Generic PVA @BBL P1P",
+     "file": "BBL/filament/P1P/Generic PVA @BBL P1P.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/P1P/Generic%20PVA%20%40BBL%20P1P.json"
+    },
+    "HIPS": {
+     "mm3s": 8.0,
+     "preset": "Generic HIPS @BBL X1C",
+     "file": "BBL/filament/Generic HIPS @BBL X1C.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20HIPS%20%40BBL%20X1C.json"
+    }
+   }
+  },
+  "bambu-a1": {
+   "orca_machine": "Bambu Lab A1 0.4 nozzle",
+   "families": {
+    "PLA": {
+     "mm3s": 12.0,
+     "preset": "Generic PLA @BBL A1",
+     "file": "BBL/filament/Generic PLA @BBL A1.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PLA%20%40BBL%20A1.json",
+     "value_from": "BBL/filament/fdm_filament_pla.json",
+     "also": [
+      {
+       "preset": "Bambu PLA Basic @BBL A1",
+       "mm3s": 21.0,
+       "file": "BBL/filament/Bambu PLA Basic @BBL A1.json"
+      },
+      {
+       "preset": "Generic PLA High Speed @BBL A1",
+       "mm3s": 18.0,
+       "file": "BBL/filament/Generic PLA High Speed @BBL A1.json"
+      }
+     ]
+    },
+    "PLA-CF": {
+     "mm3s": 12.0,
+     "preset": "Generic PLA-CF @BBL A1",
+     "file": "BBL/filament/Generic PLA-CF @BBL A1.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PLA-CF%20%40BBL%20A1.json",
+     "value_from": "BBL/filament/fdm_filament_pla.json",
+     "also": [
+      {
+       "preset": "Bambu PLA-CF @BBL A1",
+       "mm3s": 15.0,
+       "file": "BBL/filament/Bambu PLA-CF @BBL A1.json"
+      }
+     ]
+    },
+    "PETG": {
+     "mm3s": 8.0,
+     "preset": "Generic PETG @BBL A1",
+     "file": "BBL/filament/Generic PETG @BBL A1.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PETG%20%40BBL%20A1.json",
+     "also": [
+      {
+       "preset": "Bambu PETG Basic @BBL A1",
+       "mm3s": 13.0,
+       "file": "BBL/filament/Bambu PETG Basic @BBL A1.json"
+      }
+     ]
+    },
+    "PETG-CF": {
+     "mm3s": 8.0,
+     "preset": "Generic PETG-CF @BBL A1",
+     "file": "BBL/filament/Generic PETG-CF @BBL A1.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PETG-CF%20%40BBL%20A1.json",
+     "also": [
+      {
+       "preset": "Bambu PETG-CF @BBL A1 0.4 nozzle",
+       "mm3s": 9.0,
+       "file": "BBL/filament/Bambu PETG-CF @BBL A1 0.4 nozzle.json"
+      }
+     ]
+    },
+    "ABS": {
+     "mm3s": 15.0,
+     "preset": "Generic ABS @BBL A1",
+     "file": "BBL/filament/Generic ABS @BBL A1.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20ABS%20%40BBL%20A1.json",
+     "also": [
+      {
+       "preset": "Bambu ABS @BBL A1",
+       "mm3s": 16.0,
+       "file": "BBL/filament/Bambu ABS @BBL A1.json"
+      }
+     ]
+    },
+    "ASA": {
+     "mm3s": 12.0,
+     "preset": "Generic ASA @BBL A1",
+     "file": "BBL/filament/Generic ASA @BBL A1.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20ASA%20%40BBL%20A1.json",
+     "value_from": "BBL/filament/Generic ASA @base.json",
+     "also": [
+      {
+       "preset": "Bambu ASA @BBL A1 0.4 nozzle",
+       "mm3s": 18.0,
+       "file": "BBL/filament/Bambu ASA @BBL A1 0.4 nozzle.json"
+      }
+     ]
+    },
+    "TPU": {
+     "mm3s": 3.2,
+     "preset": "Generic TPU @BBL A1",
+     "file": "BBL/filament/Generic TPU @BBL A1.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20TPU%20%40BBL%20A1.json",
+     "value_from": "BBL/filament/Generic TPU @base.json",
+     "also": [
+      {
+       "preset": "Bambu TPU 95A @BBL A1",
+       "mm3s": 3.6,
+       "file": "BBL/filament/Bambu TPU 95A @BBL A1.json"
+      }
+     ]
+    },
+    "PA": {
+     "mm3s": 12.0,
+     "preset": "Generic PA @BBL A1",
+     "file": "BBL/filament/Generic PA @BBL A1.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PA%20%40BBL%20A1.json",
+     "value_from": "BBL/filament/Generic PA @base.json"
+    },
+    "PA-CF": {
+     "mm3s": 8.0,
+     "preset": "Generic PA-CF @BBL A1",
+     "file": "BBL/filament/Generic PA-CF @BBL A1.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PA-CF%20%40BBL%20A1.json",
+     "value_from": "BBL/filament/fdm_filament_pa.json",
+     "also": [
+      {
+       "preset": "Bambu PA-CF @BBL A1",
+       "mm3s": 8.0,
+       "file": "BBL/filament/Bambu PA-CF @BBL A1.json"
+      }
+     ]
+    },
+    "PC": {
+     "mm3s": 16.0,
+     "preset": "Generic PC @BBL A1",
+     "file": "BBL/filament/Generic PC @BBL A1.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PC%20%40BBL%20A1.json",
+     "value_from": "BBL/filament/Generic PC @base.json",
+     "also": [
+      {
+       "preset": "Bambu PC @BBL A1",
+       "mm3s": 18.0,
+       "file": "BBL/filament/Bambu PC @BBL A1.json"
+      }
+     ]
+    },
+    "PVA": {
+     "mm3s": 16.0,
+     "preset": "Generic PVA @BBL A1",
+     "file": "BBL/filament/Generic PVA @BBL A1.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PVA%20%40BBL%20A1.json",
+     "value_from": "BBL/filament/Generic PVA @base.json"
+    },
+    "HIPS": {
+     "mm3s": 8.0,
+     "preset": "Generic HIPS @BBL A1",
+     "file": "BBL/filament/Generic HIPS @BBL A1.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20HIPS%20%40BBL%20A1.json",
+     "value_from": "BBL/filament/fdm_filament_hips.json"
+    }
+   }
+  },
+  "bambu-a1-mini": {
+   "orca_machine": "Bambu Lab A1 mini 0.4 nozzle",
+   "families": {
+    "PLA": {
+     "mm3s": 12.0,
+     "preset": "Generic PLA @BBL A1M",
+     "file": "BBL/filament/Generic PLA @BBL A1M.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PLA%20%40BBL%20A1M.json",
+     "value_from": "BBL/filament/fdm_filament_pla.json",
+     "also": [
+      {
+       "preset": "Bambu PLA Basic @BBL A1M",
+       "mm3s": 21.0,
+       "file": "BBL/filament/Bambu PLA Basic @BBL A1M.json"
+      },
+      {
+       "preset": "Generic PLA High Speed @BBL A1M",
+       "mm3s": 18.0,
+       "file": "BBL/filament/Generic PLA High Speed @BBL A1M.json"
+      }
+     ]
+    },
+    "PLA-CF": {
+     "mm3s": 12.0,
+     "preset": "Generic PLA-CF @BBL A1M",
+     "file": "BBL/filament/Generic PLA-CF @BBL A1M.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PLA-CF%20%40BBL%20A1M.json",
+     "value_from": "BBL/filament/fdm_filament_pla.json",
+     "also": [
+      {
+       "preset": "Bambu PLA-CF @BBL A1M",
+       "mm3s": 15.0,
+       "file": "BBL/filament/Bambu PLA-CF @BBL A1M.json"
+      }
+     ]
+    },
+    "PETG": {
+     "mm3s": 8.0,
+     "preset": "Generic PETG @BBL A1M",
+     "file": "BBL/filament/Generic PETG @BBL A1M.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PETG%20%40BBL%20A1M.json",
+     "also": [
+      {
+       "preset": "Bambu PETG Basic @BBL A1M 0.4 nozzle",
+       "mm3s": 13.0,
+       "file": "BBL/filament/Bambu PETG Basic @BBL A1M 0.4 nozzle.json"
+      }
+     ]
+    },
+    "PETG-CF": {
+     "mm3s": 8.0,
+     "preset": "Generic PETG-CF @BBL A1M",
+     "file": "BBL/filament/P1P/Generic PETG-CF @BBL A1M.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/P1P/Generic%20PETG-CF%20%40BBL%20A1M.json",
+     "also": [
+      {
+       "preset": "Bambu PETG-CF @BBL A1M 0.4 nozzle",
+       "mm3s": 9.0,
+       "file": "BBL/filament/Bambu PETG-CF @BBL A1M 0.4 nozzle.json"
+      }
+     ]
+    },
+    "TPU": {
+     "mm3s": 3.2,
+     "preset": "Generic TPU @BBL A1M",
+     "file": "BBL/filament/Generic TPU @BBL A1M.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20TPU%20%40BBL%20A1M.json",
+     "value_from": "BBL/filament/Generic TPU @base.json",
+     "also": [
+      {
+       "preset": "Bambu TPU 95A @BBL A1M",
+       "mm3s": 3.6,
+       "file": "BBL/filament/Bambu TPU 95A @BBL A1M.json"
+      }
+     ]
+    },
+    "PVA": {
+     "mm3s": 16.0,
+     "preset": "Generic PVA @BBL A1M",
+     "file": "BBL/filament/Generic PVA @BBL A1M.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20PVA%20%40BBL%20A1M.json",
+     "value_from": "BBL/filament/Generic PVA @base.json"
+    },
+    "HIPS": {
+     "mm3s": 8.0,
+     "preset": "Generic HIPS @BBL A1M",
+     "file": "BBL/filament/Generic HIPS @BBL A1M.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/BBL/filament/Generic%20HIPS%20%40BBL%20A1M.json",
+     "value_from": "BBL/filament/fdm_filament_hips.json"
+    }
+   }
+  },
+  "prusa-mk4": {
+   "orca_machine": "Prusa MK4 0.4 nozzle",
+   "families": {
+    "PLA": {
+     "mm3s": 12.0,
+     "preset": "Generic PLA @Prusa MK4",
+     "file": "Prusa/filament/Generic PLA @Prusa MK4.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20PLA%20%40Prusa%20MK4.json",
+     "also": [
+      {
+       "preset": "Prusament PLA @MK4",
+       "mm3s": 12.0,
+       "file": "Prusa/filament/Prusament PLA @MK4.json"
+      }
+     ]
+    },
+    "PLA-CF": {
+     "mm3s": 12.0,
+     "preset": "Generic PLA-CF @Prusa",
+     "file": "Prusa/filament/Generic PLA-CF @Prusa.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20PLA-CF%20%40Prusa.json"
+    },
+    "PETG": {
+     "mm3s": 10.0,
+     "preset": "Generic PETG @Prusa MK4",
+     "file": "Prusa/filament/Generic PETG @Prusa MK4.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20PETG%20%40Prusa%20MK4.json",
+     "also": [
+      {
+       "preset": "Prusament PETG @MK4",
+       "mm3s": 10.0,
+       "file": "Prusa/filament/Prusament PETG @MK4.json"
+      }
+     ]
+    },
+    "ABS": {
+     "mm3s": 12.0,
+     "preset": "Generic ABS @Prusa MK4",
+     "file": "Prusa/filament/Generic ABS @Prusa MK4.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20ABS%20%40Prusa%20MK4.json"
+    },
+    "ASA": {
+     "mm3s": 12.0,
+     "preset": "Generic ASA @Prusa MK4",
+     "file": "Prusa/filament/Generic ASA @Prusa MK4.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20ASA%20%40Prusa%20MK4.json",
+     "also": [
+      {
+       "preset": "Prusament ASA @MK4",
+       "mm3s": 12.0,
+       "file": "Prusa/filament/Prusament ASA @MK4.json"
+      }
+     ]
+    },
+    "TPU": {
+     "mm3s": 3.2,
+     "preset": "Generic TPU @Prusa MK4",
+     "file": "Prusa/filament/Generic TPU @Prusa MK4.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20TPU%20%40Prusa%20MK4.json"
+    },
+    "PA": {
+     "mm3s": 12.0,
+     "preset": "Generic PA @Prusa",
+     "file": "Prusa/filament/Generic PA @Prusa.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20PA%20%40Prusa.json"
+    },
+    "PA-CF": {
+     "mm3s": 8.0,
+     "preset": "Generic PA-CF @Prusa",
+     "file": "Prusa/filament/Generic PA-CF @Prusa.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20PA-CF%20%40Prusa.json"
+    },
+    "PC": {
+     "mm3s": 12.0,
+     "preset": "Generic PC @Prusa",
+     "file": "Prusa/filament/Generic PC @Prusa.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20PC%20%40Prusa.json",
+     "value_from": "OrcaFilamentLibrary/filament/Generic PC @System.json",
+     "also": [
+      {
+       "preset": "Prusament PC Blend @MK4",
+       "mm3s": 8.0,
+       "file": "Prusa/filament/Prusament PC Blend @MK4.json"
+      }
+     ]
+    },
+    "PVA": {
+     "mm3s": 12.0,
+     "preset": "Generic PVA @Prusa",
+     "file": "Prusa/filament/Generic PVA @Prusa.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20PVA%20%40Prusa.json"
+    }
+   }
+  },
+  "prusa-mk3": {
+   "orca_machine": "Prusa MK3S 0.4 nozzle",
+   "families": {
+    "PLA": {
+     "mm3s": 12.0,
+     "preset": "Generic PLA @Prusa",
+     "file": "Prusa/filament/Generic PLA @Prusa.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20PLA%20%40Prusa.json",
+     "also": [
+      {
+       "preset": "Prusament PLA @MK3S",
+       "mm3s": 12.0,
+       "file": "Prusa/filament/Prusament PLA @MK3S.json"
+      }
+     ]
+    },
+    "PLA-CF": {
+     "mm3s": 12.0,
+     "preset": "Generic PLA-CF @Prusa",
+     "file": "Prusa/filament/Generic PLA-CF @Prusa.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20PLA-CF%20%40Prusa.json"
+    },
+    "PETG": {
+     "mm3s": 8.0,
+     "preset": "Generic PETG @Prusa",
+     "file": "Prusa/filament/Generic PETG @Prusa.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20PETG%20%40Prusa.json",
+     "also": [
+      {
+       "preset": "Prusament PETG @MK3S",
+       "mm3s": 8.0,
+       "file": "Prusa/filament/Prusament PETG @MK3S.json"
+      }
+     ]
+    },
+    "ABS": {
+     "mm3s": 11.0,
+     "preset": "Generic ABS @Prusa",
+     "file": "Prusa/filament/Generic ABS @Prusa.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20ABS%20%40Prusa.json"
+    },
+    "ASA": {
+     "mm3s": 11.0,
+     "preset": "Generic ASA @Prusa",
+     "file": "Prusa/filament/Generic ASA @Prusa.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20ASA%20%40Prusa.json",
+     "also": [
+      {
+       "preset": "Prusament ASA @MK3S",
+       "mm3s": 11.0,
+       "file": "Prusa/filament/Prusament ASA @MK3S.json"
+      }
+     ]
+    },
+    "TPU": {
+     "mm3s": 3.2,
+     "preset": "Generic TPU @Prusa",
+     "file": "Prusa/filament/Generic TPU @Prusa.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20TPU%20%40Prusa.json"
+    },
+    "PA": {
+     "mm3s": 12.0,
+     "preset": "Generic PA @Prusa",
+     "file": "Prusa/filament/Generic PA @Prusa.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20PA%20%40Prusa.json"
+    },
+    "PA-CF": {
+     "mm3s": 8.0,
+     "preset": "Generic PA-CF @Prusa",
+     "file": "Prusa/filament/Generic PA-CF @Prusa.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20PA-CF%20%40Prusa.json"
+    },
+    "PC": {
+     "mm3s": 12.0,
+     "preset": "Generic PC @Prusa",
+     "file": "Prusa/filament/Generic PC @Prusa.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20PC%20%40Prusa.json",
+     "value_from": "OrcaFilamentLibrary/filament/Generic PC @System.json",
+     "also": [
+      {
+       "preset": "Prusament PC Blend @MK3S",
+       "mm3s": 8.0,
+       "file": "Prusa/filament/Prusament PC Blend @MK3S.json"
+      }
+     ]
+    },
+    "PVA": {
+     "mm3s": 12.0,
+     "preset": "Generic PVA @Prusa",
+     "file": "Prusa/filament/Generic PVA @Prusa.json",
+     "url": "https://github.com/OrcaSlicer/OrcaSlicer/blob/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles/Prusa/filament/Generic%20PVA%20%40Prusa.json"
+    }
+   }
+  }
+ }
+}

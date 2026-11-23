@@ -293,6 +293,14 @@ printer and filament cannot go together.
   planner labels it "Gantrel default, not a spec". The Creality K2 and K2 Plus limits are cited from
   Creality's product pages and OrcaSlicer's machine and filament profiles; several other printers
   cite `max_accel` from OrcaSlicer's machine profiles.
+- Flow by printer and filament: `src/gantrel_printer/data/printer_material_flow.json` holds the
+  `filament_max_volumetric_speed` of each printer vendor's own Generic filament preset in OrcaSlicer
+  (pinned commit a31c95e), with the preset name, its file and URL, and the file the value is
+  inherited from when it is not set in the preset itself. It covers the Creality K2, K2 Plus, K1C,
+  K1 Max and Ender-3 V3, the Bambu Lab X1C, P1S, P1P, A1 and A1 mini, and the Prusa MK4 and MK3S,
+  for each family the vendor ships a Generic preset for. The vendor's own basic filament and its
+  high speed presets are listed under `also` for reference (for example on the K2: Generic PLA
+  14 mm3/s, CR-PLA 18, Hyper PLA 23); the planner uses the Generic one.
 - `slicing.py` now reads "needs an enclosure" and "flexible" from the table. Two temp-tower ranges
   started below the cited minimum nozzle temperature (PETG at 220 C, ABS at 235 C) and now start
   at 240 C. Nothing else it emits changed.
@@ -340,7 +348,11 @@ Quality is held first; speed is then taken wherever it does not cost quality.
   load axis adds a wall and sets 25 percent infill.
 - Temperatures and fan: slicing.py's set points where the family has them, else the middle of the
   cited range; always clamped into the material range and under the hotend and bed limits.
-- Flow cap F = 0.9 x min(printer max_flow, filament max flow for that hotend class), in mm3/s.
+- Flow cap F, in mm3/s: the vendor's Generic preset value for this printer and filament family
+  when there is one (used as is: the vendor tuned it on that hotend), else
+  0.9 x min(printer max_flow, filament max flow for that hotend class). The estimate, the check and
+  the optimizer all use this one function (`plan/estimate.py` `flow_limit`), and every result names
+  the source: "vendor preset <name>" or "Gantrel default".
 - Speed for a feature = min(feature limit, floor(F / (layer height x line width))). The outer wall
   and top surface limit is the goal's cap (quality 150, balanced 200, speed 350 mm/s) and the
   printer's top speed; inner walls, infill and supports may go to the printer's top speed.
@@ -390,7 +402,7 @@ limit is a named constant in `plan/check.py`.
 | First layer | 0.5 x nozzle <= first layer <= 0.75 x nozzle | fail |
 | Line widths | 0.9 <= width / nozzle <= 1.6 (warn outside 1.0 to 1.5) | fail |
 | Walls | walls >= 2 | warn |
-| Flow per feature | layer x width x speed <= 0.9 x min(hotend, material) | fail |
+| Flow per feature | layer x width x speed <= F (vendor preset, else 0.9 x min(hotend, material)) | fail |
 | Speeds | speed <= printer top speed | fail |
 | Acceleration | accel <= max_accel | fail |
 | Outer wall for the goal | outer wall <= 150, 200 or 350 mm/s | fail for quality, warn otherwise |
@@ -408,8 +420,11 @@ limit is a named constant in `plan/check.py`.
 | Bridges (with a model) | longest bridge <= 25 mm without supports (Gantrel's own cautious limit) | warn |
 
 slicing.py's own standard settings fail the flow rule on many printers: it asks for up to 300
-mm/s of infill, which at 0.2 x 0.45 mm is 27 mm3/s, more than a 12 mm3/s hotend gives. `plan`
-reports that next to its time-saved figure. Its Bowden retraction (0.8 mm) is under the Bowden
+mm/s of infill, which at 0.2 x 0.45 mm is 27 mm3/s. That is over every PLA preset Creality ships for
+the K2 (Generic PLA 14 mm3/s, Hyper PLA 23). OrcaSlicer slows such moves to its filament preset's
+limit; PrusaSlicer, as slicing.py calls it, sets no volumetric limit, so they would under-extrude.
+`plan` reports this next to its time-saved figure, with the requested flow, the cap and its source,
+and only when the standard settings are over the cap. Its Bowden retraction (0.8 mm) is under the Bowden
 range and warns.
 
 ## Agent-written adapters

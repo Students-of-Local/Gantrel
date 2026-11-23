@@ -179,3 +179,11 @@ def test_every_limit_is_a_named_constant():
                  "LINE_MAX_FRAC", "MIN_WALLS", "OUTER_WALL_CAP", "RETRACT_DIRECT", "RETRACT_BOWDEN",
                  "OPEN_LID_BELOW_C", "BRIDGE_WARN_MM", "THIN_WALL_LINES"):
         assert hasattr(C, name)
+
+
+def test_flow_rule_says_which_source_it_used():
+    k2 = rule(C.check(good(K2), K2, PLA, PART), "flow at infill")["values"]
+    assert k2["cap_mm3s"] == 14.0 and k2["cap_source"] == "vendor preset Generic PLA @K2-all"
+    gk = slicing.PRINTERS["generic-klipper"]
+    other = rule(C.check(good(gk), gk, PLA, PART), "flow at infill")["values"]
+    assert other["cap_mm3s"] == pytest.approx(10.8) and other["cap_source"].startswith("Gantrel default")

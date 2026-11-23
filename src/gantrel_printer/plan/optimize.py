@@ -160,9 +160,13 @@ def baseline(cand: orient.Candidate, printer: PrinterProfile, fil: materials.Fil
     c = checks.check(s, printer, fil, None, "balanced")
     out = {"available": True, "settings": "slicing.py standard", "seconds": e["seconds"],
            "check_fails": c["fails"], "check_warns": c["warns"]}
-    if any(f.startswith("flow at") for f in c["fails"]):
-        out["note"] = ("These defaults ask for more flow than the hotend and filament allow; the estimate caps the "
-                       "flow, so the real print would under-extrude rather than finish at this time")
+    over = [r for r in c["rules"] if r["rule"].startswith("flow at") and r["status"] == "fail"]
+    if over:
+        worst = max(over, key=lambda r: r["values"]["flow_mm3s"])["values"]
+        out["note"] = (f"slicing.py's standard speeds ask for up to {worst['flow_mm3s']} mm3/s, over the "
+                       f"{worst['cap_mm3s']} mm3/s cap ({worst['cap_source']}). OrcaSlicer slows those moves to its filament "
+                       "preset's limit; PrusaSlicer, as slicing.py calls it, sets no volumetric limit, so those moves "
+                       "would under-extrude. The time above assumes the capped flow")
     return out
 
 

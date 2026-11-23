@@ -72,6 +72,23 @@ def _load() -> tuple[dict[str, Filament], dict[str, str]]:
 
 FAMILIES, SOURCES = _load()
 
+VENDOR_FLOW_DATA = DATA.with_name("printer_material_flow.json")
+
+
+def _load_vendor_flow() -> tuple[dict, str]:
+    raw = json.loads(VENDOR_FLOW_DATA.read_text())
+    return raw["printers"], raw["commit"]
+
+
+VENDOR_FLOW, VENDOR_FLOW_COMMIT = _load_vendor_flow()
+
+
+def vendor_flow(printer_key: str, family: str) -> dict | None:
+    """The printer vendor's own Generic filament preset for this family in OrcaSlicer, if there is one:
+    {"mm3s", "preset", "file", "url", ...}. See data/printer_material_flow.json."""
+    entry = VENDOR_FLOW.get(printer_key, {}).get("families", {}).get(get(family).name)
+    return dict(entry) if entry else None
+
 
 def get(name: str) -> Filament:
     key = name.strip().upper()

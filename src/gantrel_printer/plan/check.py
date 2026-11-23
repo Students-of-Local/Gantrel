@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from .. import materials
 from ..slicing import PrinterProfile
-from .estimate import DEFAULT_LINE_WIDTH, FLOW_MARGIN, supports_on
+from .estimate import DEFAULT_LINE_WIDTH, flow_limit, supports_on
 
 GOALS = ("quality", "balanced", "speed")
 
@@ -138,8 +138,8 @@ def _widths(s, n):
 def _flow_and_speed(s, printer, fil, n, goal):
     out = []
     lh, flh = float(s["layer_height_mm"]), float(s["first_layer_height_mm"])
-    hot, mat = printer.max_flow, fil.max_flow(printer.high_flow)
-    cap = FLOW_MARGIN * min(hot, mat)
+    limit = flow_limit(printer, fil)
+    cap = limit["mm3s"]
     for key, wkey in FEATURE_WIDTH.items():
         if key not in s:
             continue
@@ -149,12 +149,11 @@ def _flow_and_speed(s, printer, fil, n, goal):
         flow = h * w * v
         ok = flow <= cap + 1e-9
         out.append(_r(f"flow at {key.replace('_speed_mms', '').replace('_', ' ')}", "pass" if ok else "fail",
-                      f"layer x width x speed <= {FLOW_MARGIN} x min(hotend, material)",
+                      "layer x width x speed <= flow cap",
                       {"flow_mm3s": round(flow, 2), "layer_mm": h, "width_mm": w, "speed_mms": v,
-                       "hotend_mm3s": hot, "hotend_cited": printer.is_cited("max_flow"), "material_mm3s": mat,
-                       "cap_mm3s": round(cap, 2)},
-                      f"Lower {key} to {int(cap / (h * w))} mm/s or less: the hotend cannot melt {flow:.1f} mm3/s "
-                      "and the part will under-extrude"))
+                       "cap_mm3s": round(cap, 2), "cap_source": limit["source"]},
+                      f"Lower {key} to {int(cap / (h * w))} mm/s or less: {flow:.1f} mm3/s is over the "
+                      f"{cap:.1f} mm3/s cap ({limit['source']}), so the part would under-extrude"))
     for key in SPEED_KEYS:
         if key not in s:
             continue

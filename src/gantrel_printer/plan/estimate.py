@@ -35,9 +35,26 @@ def line_width(s: dict, key: str = "line_width_mm") -> float:
     return float(s.get(key) or s.get("line_width_mm") or DEFAULT_LINE_WIDTH * float(s.get("nozzle_mm", 0.4)))
 
 
+def flow_limit(printer: PrinterProfile, fil: materials.Filament) -> dict:
+    """The volumetric flow (mm3/s) the plan may use, and where it came from.
+
+    When the printer's vendor ships an OrcaSlicer preset for this filament family on this printer
+    (data/printer_material_flow.json), its max volumetric speed is used as is: the vendor tuned it on
+    that hotend. Otherwise Gantrel's rule: FLOW_MARGIN x the lower of the hotend and the material column.
+    """
+    v = materials.vendor_flow(printer.key, fil.name)
+    if v:
+        return {"mm3s": float(v["mm3s"]), "source": f"vendor preset {v['preset']}", "preset": v["preset"],
+                "url": v["url"]}
+    hot, mat = printer.max_flow, fil.max_flow(printer.high_flow)
+    return {"mm3s": FLOW_MARGIN * min(hot, mat),
+            "source": f"Gantrel default: {FLOW_MARGIN} x min(hotend {hot}, {fil.name} {mat})"
+                      + ("" if printer.is_cited("max_flow") else ", hotend value is Gantrel's default"),
+            "hotend_mm3s": hot, "material_mm3s": mat}
+
+
 def flow_cap(printer: PrinterProfile, fil: materials.Filament) -> float:
-    """The volumetric flow (mm3/s) the plan may use: the lower of hotend and material, times FLOW_MARGIN."""
-    return FLOW_MARGIN * min(printer.max_flow, fil.max_flow(printer.high_flow))
+    return flow_limit(printer, fil)["mm3s"]
 
 
 def flow_of(lh: float, lw: float, speed: float) -> float:
@@ -159,7 +176,8 @@ def estimate(m: Mesh, s: dict, printer: PrinterProfile, fil: materials.Filament,
         "filament_m": round(extruded / fil_area / 1000, 3),
         "filament_g": round(extruded / 1000 * fil.density_g_cm3, 2),
         "density_g_cm3": fil.density_g_cm3,
-        "flow_cap_mm3s": round(cap, 2), "flow_limited": flow_limited,
+        "flow_cap_mm3s": round(cap, 2), "flow_cap_source": flow_limit(printer, fil)["source"],
+        "flow_limited": flow_limited,
         "layers_below_min_layer_time": int(short.sum() * scale),
         "smallest_layer_mm2": round(float(layer_area.min()) if len(layer_area) else 0.0, 2),
         "smallest_layer_seconds": round(float(per.min()) if len(per) else 0.0, 2),

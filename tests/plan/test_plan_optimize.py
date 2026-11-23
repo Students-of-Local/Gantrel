@@ -64,7 +64,8 @@ def test_k2_plus_uses_high_flow_and_heats_the_chamber():
     plus = slicing.PRINTERS["creality-k2-plus"]
     p = optimize.plan(CUBE, plus, "ABS", "speed")
     abs_ = materials.get("ABS")
-    assert p["estimate"]["flow_cap_mm3s"] == pytest.approx(0.9 * min(40, abs_.max_flow_high_flow_mm3s))
+    assert p["estimate"]["flow_cap_mm3s"] == pytest.approx(16.0)        # Generic ABS @K2 Plus-all
+    assert p["estimate"]["flow_cap_source"] == "vendor preset Generic ABS @K2 Plus-all"
     assert 0 < p["settings"]["chamber_c"] <= abs_.max_chamber_c
     assert p["printer_limits"]["max_flow"]["source"] == "cited"
     other = optimize.plan(CUBE, slicing.PRINTERS["bambu-a1"], "PLA")
@@ -113,3 +114,15 @@ def test_resin_and_unknown_goal_are_refused():
         optimize.plan(CUBE, slicing.PRINTERS["elegoo-saturn-4-ultra"], "PLA")
     with pytest.raises(ValueError):
         optimize.plan(CUBE, slicing.PRINTERS["creality-k2"], "PLA", "fastest")
+
+
+def test_baseline_note_only_when_slicing_exceeds_the_cap():
+    k2 = slicing.PRINTERS["creality-k2"]
+    p = optimize.plan(CUBE, k2, "PLA", "balanced")
+    b = p["baseline"]
+    # slicing.py's 300 mm/s PLA infill at 0.2 x 0.45 mm is 27 mm3/s, over even Creality's Hyper PLA (23).
+    assert "flow at infill" in b["check_fails"]
+    assert "27.0 mm3/s" in b["note"] and "vendor preset Generic PLA @K2-all" in b["note"]
+    # TPU's standard speed (30 mm/s) is far under any cap: no under-extrusion claim.
+    t = optimize.plan(CUBE, slicing.PRINTERS["bambu-a1"], "TPU", "balanced")["baseline"]
+    assert not any(f.startswith("flow at") for f in t["check_fails"]) and "note" not in t
