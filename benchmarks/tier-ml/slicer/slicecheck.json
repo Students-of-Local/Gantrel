@@ -96,13 +96,13 @@
  },
  {
   "part": "p09_vase",
-  "pass": true,
+  "pass": false,
   "exit": 0,
   "warnings": [],
   "pinned_volume": 109224.144,
   "solid_exit": 0,
   "solid_volume": 522494.624,
-  "mesh_volume": 522083.39,
+  "mesh_volume": -522083.39,
   "solid_over_mesh": 1.0008
  },
  {
