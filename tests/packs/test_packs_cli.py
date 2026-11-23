@@ -407,6 +407,36 @@ def test_an_empty_pack_gcode_block_reaches_both_slicers_empty(capsys, tmp_path, 
     assert argv[argv.index("--end-gcode") + 1] == good["printer"]["end_gcode"].replace("\n", "\\n")
 
 
+def test_a_packs_own_geometry_reaches_both_slicers(capsys, tmp_path, good, write, fake_slicer, fake_orca):
+    # Still inherits the K2's Orca machine (260 x 260 x 260, 0.4 mm, Klipper, 1.75 mm), but the pack's printer differs.
+    good["printer"].update(bed=[200, 180], height=200, nozzle=0.6, flavor="marlin2", filament_mm=2.85)
+    assert good["printer"]["orca_machine"] == "Creality K2 0.4 nozzle"
+    f = write(good)
+    sha = packs.sha256(f.read_bytes())
+    rc, _, err = run(capsys, "pack", "import", f, "--accept", sha[:12])
+    assert rc == 0, err
+    model = tmp_path / "part.stl"
+    model.write_bytes(STL)
+    rc, _, err = run(capsys, "slice", model, "--printer", "pack:test-k2", "--material", "PLA", "--slicer",
+                     "orcaslicer", "--json")
+    assert rc == 0, err
+    got = json.loads(fake_orca.read_text())
+    machine, fil = got["machine"], got["filament"]
+    assert machine["inherits"] == "Creality K2 0.4 nozzle"
+    assert machine["printable_area"] == ["0x0", "200x0", "200x180", "0x180"]
+    assert machine["printable_height"] == "200"
+    assert machine["nozzle_diameter"] == ["0.6"]
+    assert machine["gcode_flavor"] == "marlin2"
+    assert fil["filament_diameter"] == ["2.85"]
+    rc, _, err = run(capsys, "slice", model, "--printer", "pack:test-k2", "--material", "PLA", "--slicer",
+                     "prusaslicer", "--json")
+    assert rc == 0, err
+    argv = json.loads(fake_slicer.read_text())
+    for flag, want in (("--bed-shape", "0x0,200x0,200x180,0x180"), ("--max-print-height", "200"),
+                       ("--nozzle-diameter", "0.6"), ("--gcode-flavor", "marlin2"), ("--filament-diameter", "2.85")):
+        assert argv[argv.index(flag) + 1] == want, flag
+
+
 @pytest.mark.parametrize("where, before, secret", [
     ("notes", "Questions to ", "maker@example.com"),
     ("notes", "printer password: ", "Hunter2Secret"),

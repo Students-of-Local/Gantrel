@@ -476,6 +476,12 @@ def orca_overrides(s: dict, printer: PrinterProfile) -> tuple[dict, dict, dict]:
         # no one reviewed.
         for key, text in (("machine_start_gcode", printer.start_gcode), ("machine_end_gcode", printer.end_gcode)):
             machine[key] = text.replace("\\n", "\n")
+        # The pack's own printer, not the inherited machine's: a pack may keep a K2's orca_machine for a smaller
+        # bed, another nozzle or another firmware. Key names and forms as Orca's machine profiles hold them.
+        w, d = printer.bed
+        machine.update(printable_area=["0x0", f"{w}x0", f"{w}x{d}", f"0x{d}"], printable_height=str(printer.height),
+                       nozzle_diameter=[str(printer.nozzle)], gcode_flavor=printer.flavor)
+        filament["filament_diameter"] = [str(printer.filament_mm)]
     if "retract_speed_mms" in s:
         machine["retraction_speed"] = [str(s["retract_speed_mms"])]
     if "flow_ratio" in s:

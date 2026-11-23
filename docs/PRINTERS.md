@@ -614,7 +614,13 @@ holds both slicers to it (PrusaSlicer `--max-volumetric-speed`, OrcaSlicer
 only (PrusaSlicer has no such setting). On OrcaSlicer the pack's start and end G-code replace the
 bundled machine profile's (`machine_start_gcode`, `machine_end_gcode`), exactly as reviewed, and
 PrusaSlicer always gets `--start-gcode` and `--end-gcode`. An empty block is passed as empty to
-both, so neither slicer falls back to G-code no one reviewed. The
+both, so neither slicer falls back to G-code no one reviewed. The pack's own printer reaches both
+slicers too: PrusaSlicer gets `--bed-shape`, `--max-print-height`, `--nozzle-diameter`,
+`--gcode-flavor` and `--filament-diameter` from it, and OrcaSlicer, which builds on the bundled
+machine named in `orca_machine`, gets `printable_area`, `printable_height`, `nozzle_diameter`,
+`gcode_flavor` and `filament_diameter` from the pack, so a pack that keeps a K2's machine name for
+a smaller bed or another nozzle slices for its own printer. The pack's speed and acceleration caps
+are not passed to OrcaSlicer yet. The
 sliced file is named `<part>_pack_<id>_<material>.gcode`, which `upload` takes as is. The pack's
 printer limits (`hotend_max_c`, `bed_max_c`, `max_flow`, `high_flow`, `hardened_nozzle`, `max_accel`,
 `chamber_heater`, and `top_speed` when given) are its author's values. They count as cited, with the
