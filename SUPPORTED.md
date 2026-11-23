@@ -97,7 +97,7 @@ Calibration prints (`gantrel-printer calibrate <printer> first-layer|temp-tower|
 | While a start card is open, pause, cancel and emergency_stop on another printer still answer at once | Fake: a card held open through the in-process client; each stop returns within 2 s while the card is still open. The same test fails when the SDK is patched to run sync tools on the event loop. |
 | A socket served by another process gets nothing, not even the ask token | Fake: `LOCAL_STUDIO_ASK_PID` set to another pid; the fake socket receives zero bytes. Linux (SO_PEERCRED) only; the macOS branch (LOCAL_PEERPID) is untested. |
 | Outside Local Studio nothing starts and the reply says how to start it on the printer | Fake, with each of the three ask variables missing. |
-| Refused before any card: printer busy, file replaced on the printer, local file changed, printer name pointed elsewhere, unknown or malformed job id, printer that can't start a stored file | Fake. |
+| Refused before any card: printer busy, file replaced on the printer, local file changed, printer name pointed elsewhere, unknown or malformed job id, printer that can't start a stored file | Fake. The last one through the real Snapmaker fake: paired, uploaded, then refused with the ask socket never contacted. |
 | Refused after the card when the printer starts something else or the file is swapped while the card is open | Fake. |
 | The card holds no tool argument | Fake: an injection string as the job id, in the upload's folder, in a file name, as a plan id and as a material never reaches a card or the log. |
 | Resume only of a paused print Gantrel uploaded, on the answer Resume print | Fake. |

@@ -111,7 +111,7 @@ def ready_to_start(adapter, job: safety.Job) -> None:
     if job.identity != adapter.identity():
         raise SafetyError(f"printer name {adapter.cfg.name} now points at a different printer than job {job.id}",
                           "Upload again for this printer")
-    if not getattr(adapter, "network_start", True):
+    if not adapter.network_start:
         raise Refused(f"{adapter.label} printers can't start a stored file over the network",
                       adapter.start_by_hand(job.remote_name))
     safety.verify_job_file(job)

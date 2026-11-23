@@ -367,16 +367,31 @@ def test_unreachable_printer_is_an_error_and_logged(printer, tmp_path, card, min
     assert [x["outcome"] for x in log()] == ["error"]
 
 
-def test_printer_without_network_start_is_refused_before_any_card(printer, tmp_path, card, mints, monkeypatch):
-    """Snapmaker and UltiMaker can't start a stored file over the network: no card for those."""
-    from gantrel_printer.adapters.moonraker import MoonrakerAdapter
+def test_snapmaker_is_refused_before_any_card(tmp_path, card, mints, capsys):
+    """Snapmaker and UltiMaker can't start a stored file over the network, so they get no card. The
+    base Adapter declares network_start, and only those two turn it off."""
+    from gantrel_printer.adapters import ADAPTERS
+    from gantrel_printer.adapters.base import Adapter
 
-    job = upload(tmp_path)
-    monkeypatch.setattr(MoonrakerAdapter, "network_start", False, raising=False)
-    fake = card(answered("Start print"))
-    r = call("print_start", {"job_id": job["job"]})
+    assert Adapter.network_start is True
+    assert {t for t, cls in ADAPTERS.items() if not cls.network_start} == {"snapmaker", "ultimaker"}
+    brain = fakes.Brain()
+    fs = fakes.FakeSnapmaker(brain, approve=True)
+    try:
+        assert cli.main(["pair", "sm", "--type", "snapmaker", "--host", "127.0.0.1", "--port", str(fs.port),
+                         "--model", "snapmaker-a350"]) == 0
+        f = tmp_path / "part.gcode"
+        f.write_bytes(GCODE)
+        job = call("upload", {"path": str(f), "printer": "sm"}).data
+        assert job["remote_name"] in brain.files
+        fake = card(answered("Start print"))
+        r = call("print_start", {"job_id": job["job"]})
+    finally:
+        fs.close()
     assert r.is_error and "can't start a stored file over the network" in r.text
-    assert fake.connections == 0 and mints == [] and not printer.started
+    assert fake.connections == 0 and fake.questions == []
+    assert mints == [] and brain.events == [] and brain.state == "idle"
+    assert [(x["outcome"], x["printer"]) for x in log()] == [("refused", "sm")]
 
 
 # ---------------------------------------------------------------- the card holds no tool argument
