@@ -211,8 +211,9 @@ def build() -> MCPServer:
     def upload(path: str, printer: str, material: str | None = None, plan_id: str | None = None) -> str:
         """Send a sliced file to a paired printer and record the job. Never starts the print.
 
-        material: the filament it was sliced for, if the file doesn't say. plan_id: from the plan tool, so
-        the person's start card shows the plan.
+        material: the filament it was sliced for, used only if the file doesn't say. When the file names its
+        filament, a different material here is refused. plan_id: from the plan tool, so the person's start
+        card shows the plan.
         """
         gcode = files.checked(path, "gcode")
         summary = safety.load_plan(plan_id) if plan_id else None

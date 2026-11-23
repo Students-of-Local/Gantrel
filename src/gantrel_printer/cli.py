@@ -278,8 +278,13 @@ def upload_file(printer: str, path: Path, name: str | None = None, material_name
                           "Send .ctb or .goo files only to an Elegoo resin printer paired with a resin --model")
     before = snapshot_cfg(adapter)
     facts = slicing.gcode_facts(path)
-    gfacts_material = facts.get("material", "")
-    material = material or (gfacts_material if gfacts_material.upper() in slicing.MATERIALS else "")
+    # The file's own filament_type wins: it is what the G-code heats for. A material argument that
+    # disagrees is refused, and the argument is used only when the file names no known material.
+    sliced_for = slicing.MATERIALS.get(str(facts.get("material", "")).upper())
+    if sliced_for and material and material != sliced_for.name:
+        raise ConfigError(f"{path.name} was sliced for {sliced_for.name}, not {material}",
+                          f"Upload it without a material, or slice it again for {material}")
+    material = sliced_for.name if sliced_for else material
     if plan:
         profile = slicing.profile_for(adapter.cfg.model, adapter.cfg.type).key
         if plan.get("printer") != profile:
@@ -796,7 +801,7 @@ def parser() -> argparse.ArgumentParser:
     sp = add("upload", cmd_upload, "send a file to the printer (never starts it)")
     sp.add_argument("file")
     sp.add_argument("--printer", required=True)
-    sp.add_argument("--material")
+    sp.add_argument("--material", help="only if the file names no filament_type; one that disagrees is refused")
     sp.add_argument("--name", help="file name on the printer")
     sp = add("calibrate", cmd_calibrate, "make a calibration print (saved locally; never starts a print)")
     sp.add_argument("printer", help="a paired printer, or a profile key from: gantrel-printer profiles")

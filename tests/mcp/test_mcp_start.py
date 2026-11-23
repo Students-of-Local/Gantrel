@@ -494,6 +494,27 @@ def test_plan_and_slot_reach_the_card(printer, tmp_path, card):
     assert safety.load_job(job["job"]).plan is None
 
 
+def test_the_files_own_material_wins_and_a_different_argument_is_refused(printer, tmp_path):
+    """A file sliced for PETG says so (; filament_type = PETG). Uploading it as PLA would put PLA on the
+    card for a file that heats to PETG temperatures, so the upload is refused and nothing is sent."""
+    petg = GCODE.replace(b"filament_type = PLA", b"filament_type = PETG")
+    f = tmp_path / "petg.gcode"
+    f.write_bytes(petg)
+    r = call("upload", {"path": str(f), "printer": "moon", "material": "PLA"})
+    assert r.is_error and "petg.gcode was sliced for PETG, not PLA" in r.text
+    assert printer.files == {} and safety.list_jobs() == []
+    # The same material in another case, or no argument, records the file's own.
+    assert call("upload", {"path": str(f), "printer": "moon", "material": "petg"}).data["material"] == "PETG"
+    g = tmp_path / "petg2.gcode"
+    g.write_bytes(petg + b"; second copy\n")
+    assert call("upload", {"path": str(g), "printer": "moon"}).data["material"] == "PETG"
+    # A file that names no material takes the argument.
+    h = tmp_path / "plain.gcode"
+    h.write_bytes(b"G28\nG1 X10\n")
+    assert call("upload", {"path": str(h), "printer": "moon", "material": "ASA"}).data["material"] == "ASA"
+    assert len(safety.list_jobs()) == 3
+
+
 # ---------------------------------------------------------------- resume
 
 

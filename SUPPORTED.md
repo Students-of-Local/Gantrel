@@ -100,6 +100,7 @@ Calibration prints (`gantrel-printer calibrate <printer> first-layer|temp-tower|
 | Refused before any card: printer busy, file replaced on the printer, local file changed, printer name pointed elsewhere, unknown or malformed job id, printer that can't start a stored file | Fake. The last one through the real Snapmaker fake: paired, uploaded, then refused with the ask socket never contacted. |
 | Refused after the card when the printer starts something else or the file is swapped while the card is open | Fake. |
 | The card holds no tool argument | Fake: an injection string as the job id, in the upload's folder, in a file name, as a plan id and as a material never reaches a card or the log. |
+| Upload records the material the file was sliced for: a material argument that disagrees with the file's `filament_type` is refused, with nothing sent or recorded | Fake: a PETG file uploaded as PLA through the MCP tool. |
 | Resume only of a paused print Gantrel uploaded, on the answer Resume print | Fake. |
 | prints.log (0600) records every attempt and never the token; `gantrel-printer prints` lists it | Fake. |
 | File arguments: inside home or the working folder, links out refused, size caps | Unit tests with HOME and the working folder moved into a temp folder. |
