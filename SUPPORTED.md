@@ -85,6 +85,26 @@ Calibration prints (`gantrel-printer calibrate <printer> first-layer|temp-tower|
 | Bambu Lab AMS and external spool (`vt_tray`) | Fake only, from public protocol notes. |
 | Every other printer type | Says it does not report loaded filament (tested). |
 
+### MCP server
+
+`gantrel-mcp` (stdio), and the Local Studio card that is the only way it starts a print. Details in [docs/MCP.md](docs/MCP.md). Every row is fake only: `tests/mcp/` drives the real server through the MCP SDK's in-process client against the fake printers in `tests/printers/fakes.py` and a fake Local Studio ask socket served by the test process.
+
+| Part | Proven |
+|---|---|
+| The 14 tools list and answer through the MCP SDK (mcp 2.3.0) | Fake: in-process client, and `bin/gantrel-mcp` answering initialize and tools/list over stdio from a copy of the plugin without `scripts` and `tests` (the catalog's exclude), writing nothing in that copy. |
+| A print starts only on the exact answer Start print, once, with a token bound to that job, file hash and printer | Fake (Moonraker fake). Don't start, Stop, a refusal, typed text and near misses ("start print", "Start print.") start nothing. |
+| No answer in 55 s withdraws the card; nothing starts | Fake, with the wait shortened in the test. |
+| A socket served by another process gets nothing, not even the ask token | Fake: `LOCAL_STUDIO_ASK_PID` set to another pid; the fake socket receives zero bytes. Linux (SO_PEERCRED) only; the macOS branch (LOCAL_PEERPID) is untested. |
+| Outside Local Studio nothing starts and the reply says how to start it on the printer | Fake, with each of the three ask variables missing. |
+| Refused before any card: printer busy, file replaced on the printer, local file changed, printer name pointed elsewhere, unknown or malformed job id, printer that can't start a stored file | Fake. |
+| Refused after the card when the printer starts something else or the file is swapped while the card is open | Fake. |
+| The card holds no tool argument | Fake: an injection string as the job id, in the upload's folder, in a file name, as a plan id and as a material never reaches a card or the log. |
+| Resume only of a paused print Gantrel uploaded, on the answer Resume print | Fake. |
+| prints.log (0600) records every attempt and never the token; `gantrel-printer prints` lists it | Fake. |
+| File arguments: inside home or the working folder, links out refused, size caps | Unit tests with HOME and the working folder moved into a temp folder. |
+
+Not checked yet: a real Local Studio thread showing the card and a person clicking it; any MCP start on a real printer; the server under Claude Code, Codex or Grok Bot.
+
 ## Not supported yet
 
 - Making a part through `/gantrel` on LFM2.5-8B-A1B or LFM2.5-24B-A2B. In 5 runs the 8B always ran `stone status` first, then lost the request: three times it asked the user what to make, once it ran `stone new` and then wandered through the job files, once it printed the NEXT line as text instead of running it. The 24B on parish1 (split across CPU and GPU) never sent a token within Eukhe's 300 and 600 s stream timeouts, in 2 runs straight to Ollama and 2 through the controller.
