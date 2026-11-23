@@ -613,6 +613,26 @@ def test_the_files_own_material_wins_and_a_different_argument_is_refused(printer
     assert len(safety.list_jobs()) == 3
 
 
+def test_a_file_sliced_for_a_family_outside_the_slicer_defaults_keeps_its_own_material(printer, tmp_path):
+    """first-F3: PLA-CF, PA and the other families slicing.MATERIALS has no defaults for are still
+    compared by family. A PLA-CF file uploaded as PLA is refused, with nothing sent or recorded, and
+    the file's own family is what the job records."""
+    cf = GCODE.replace(b"filament_type = PLA", b"filament_type = PLA-CF")
+    f = tmp_path / "cf.gcode"
+    f.write_bytes(cf)
+    r = call("upload", {"path": str(f), "printer": "moon", "material": "PLA"})
+    assert r.is_error and "cf.gcode was sliced for PLA-CF, not PLA" in r.text
+    assert printer.files == {} and safety.list_jobs() == []
+    assert call("upload", {"path": str(f), "printer": "moon"}).data["material"] == "PLA-CF"
+    # Another name for the same family agrees: PA6-CF is PA-CF.
+    pa = tmp_path / "pa.gcode"
+    pa.write_bytes(GCODE.replace(b"filament_type = PLA", b"filament_type = PA6-CF"))
+    assert call("upload", {"path": str(pa), "printer": "moon", "material": "PA-CF"}).data["material"] == "PA-CF"
+    r = call("upload", {"path": str(pa), "printer": "moon", "material": "PA"})
+    assert r.is_error and "pa.gcode was sliced for PA-CF, not PA" in r.text
+    assert len(printer.files) == 2 and sorted(j.material for j in safety.list_jobs()) == ["PA-CF", "PLA-CF"]
+
+
 # ---------------------------------------------------------------- resume
 
 

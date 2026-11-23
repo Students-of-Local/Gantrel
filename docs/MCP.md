@@ -24,7 +24,7 @@ anything else.
 | `plan` | `path`, `printer`, `material`, `goal`, `load_axis` | Orientation, supports, settings, time, filament and check for an STL or 3MF. Returns a `plan_id`. Contacts no printer. |
 | `check` | `settings`, `printer`, `material`, `model_path`, `goal` | Checks a settings object against the printer, filament and part. Pass the whole `plan` result to check the part turned the plan's way. Contacts no printer. |
 | `slice` | `path`, `printer`, `material`, `quality` | Slices with the printer's profile; writes the G-code next to the model. |
-| `upload` | `path`, `printer`, `material`, `plan_id` | Sends a sliced file and records the job. Never starts it. The file's own `; filament_type` is the job's material; a `material` that disagrees with it is refused, and `material` is used only when the file names none. With `plan_id`, the job keeps that plan's summary. |
+| `upload` | `path`, `printer`, `material`, `plan_id` | Sends a sliced file and records the job. Never starts it. The file's own `; filament_type` is the job's material; a `material` of another family (PLA-CF is not PLA) is refused, and `material` is used only when the file names none. With `plan_id`, the job keeps that plan's summary. |
 | `pause` | `printer` | Pauses now. Needs no permission. |
 | `cancel` | `printer` | Cancels the current print. |
 | `emergency_stop` | `printer` | The strongest stop the printer offers over the network. |

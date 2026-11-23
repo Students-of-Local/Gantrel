@@ -20,10 +20,10 @@ import sys
 import time
 from pathlib import Path
 
-from . import __version__, calibrate, config, discover as disc, guard as vguard, monitor, notify, printlog, safety, slicing
+from . import __version__, calibrate, config, discover as disc, guard as vguard, materials, monitor, notify, printlog, safety, slicing
 from .adapters import ADAPTERS, adapter_class, build
 from .errors import ConfigError, PrinterError, SafetyError
-from .model import fmt_duration, material_family
+from .model import clip, fmt_duration, material_family
 
 EXIT_ERROR, EXIT_USAGE, EXIT_SAFETY = 1, 2, 3
 REMOTE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(gcode|bgcode|3mf|ctb|goo)$")
@@ -252,6 +252,17 @@ def cmd_slice(args):
         f"gantrel-printer upload {gcode} --printer {cfg.name} --material {mat.name}")
 
 
+def material_word_family(word: str) -> str | None:
+    """The filament family a material word names: materials.json's family (with its aliases), or the
+    family printers use the word for (model.material_family); None if it names no known family."""
+    try:
+        return materials.get(word).name
+    except ConfigError:
+        pass
+    fam = material_family(word)
+    return fam if fam in materials.FAMILIES else None
+
+
 def upload_file(printer: str, path: Path, name: str | None = None, material_name: str | None = None,
                 plan: dict | None = None, record_slot: bool = False):
     """Send a file to a paired printer and record the job. Never starts it. Returns (job, adapter).
@@ -267,7 +278,9 @@ def upload_file(printer: str, path: Path, name: str | None = None, material_name
                           "Use letters, digits, . _ - only, ending in .gcode, .bgcode, .3mf, .ctb or .goo")
     material = ""
     if material_name:
-        material = slicing.material(material_name).name  # only known materials are stored
+        material = material_word_family(material_name) or ""  # only known families are stored
+        if not material:
+            raise ConfigError(f"no data for filament {material_name!r}", f"Use one of: {', '.join(materials.FAMILIES)}")
     sha = safety.file_sha256(path)
     stem, ext = requested.rsplit(".", 1)
     # The name on the printer carries the content hash, so a different file never shares a job's name.
@@ -278,13 +291,16 @@ def upload_file(printer: str, path: Path, name: str | None = None, material_name
                           "Send .ctb or .goo files only to an Elegoo resin printer paired with a resin --model")
     before = snapshot_cfg(adapter)
     facts = slicing.gcode_facts(path)
-    # The file's own filament_type wins: it is what the G-code heats for. A material argument that
-    # disagrees is refused, and the argument is used only when the file names no known material.
-    sliced_for = slicing.MATERIALS.get(str(facts.get("material", "")).upper())
-    if sliced_for and material and material != sliced_for.name:
-        raise ConfigError(f"{path.name} was sliced for {sliced_for.name}, not {material}",
-                          f"Upload it without a material, or slice it again for {material}")
-    material = sliced_for.name if sliced_for else material
+    # The file's own filament_type wins: it is what the G-code heats for. Compared by family, so PLA-CF
+    # is not PLA and PA6-CF is PA-CF. A material argument that disagrees is refused, and the argument is
+    # used only when the file names no material. A word that names no known family is kept as written.
+    said = clip(str(facts.get("material", "")), 32).upper()
+    if said:
+        sliced_for = material_word_family(said) or said
+        if material and material != sliced_for:
+            raise ConfigError(f"{path.name} was sliced for {sliced_for}, not {material}",
+                              f"Upload it without a material, or slice it again for {material}")
+        material = sliced_for
     if plan:
         profile = slicing.profile_for(adapter.cfg.model, adapter.cfg.type).key
         if plan.get("printer") != profile:
