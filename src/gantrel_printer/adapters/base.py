@@ -15,7 +15,7 @@ from pathlib import Path
 from .. import net, safety
 from ..config import PrinterConfig
 from ..errors import PrinterError, ProtocolError, Refused, SafetyError, Unsupported
-from ..model import READY_STATES, Camera, Status
+from ..model import FILAMENT_REPLY_MAX, READY_STATES, Camera, Slot, Status
 
 
 class Adapter(ABC):
@@ -66,6 +66,16 @@ class Adapter(ABC):
             n += 1
             if count is None or n < count:
                 time.sleep(interval)
+
+    # ------------------------------------------------------------ loaded filament
+
+    def filaments(self) -> list[Slot]:
+        """Read-only: what is loaded now, one Slot per place filament feeds from.
+
+        Adapters whose printer reports it override this. It never sends a command to the printer.
+        """
+        raise Unsupported(f"{self.cfg.name} is a {self.label} printer, and that printer type does not report "
+                          "loaded filament", "Ask the person which filament is loaded")
 
     # ------------------------------------------------------------ files and jobs
 
@@ -190,6 +200,13 @@ def resume_binding(adapter: Adapter, st: Status) -> tuple[str, str]:
     """
     job = safety.job_for_print(adapter.cfg.name, adapter.identity(), st.file)
     return "resume:" + job.id, job.sha256
+
+
+def filament_json(data: bytes, what: str) -> dict:
+    """Parse a loaded-filament reply, refusing one far bigger than such a reply ever is."""
+    if len(data) > FILAMENT_REPLY_MAX:
+        raise ProtocolError(f"{what} sent a filament reply that is too large")
+    return net.parse_json(data, what)
 
 
 def write_image(data: bytes, out: Path) -> Path:
