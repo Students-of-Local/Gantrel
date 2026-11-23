@@ -1,7 +1,8 @@
 """Slicer check for Gantrel parts: pinned OrcaSlicer 2.5.0, 0.4 mm nozzle PLA, supports off.
 
-A part passes when the pinned slice exits 0 with no warnings, the mesh is not inside out (positive
-signed volume), and a 100% infill slice with the same profile extrudes within 5% of the mesh volume.
+A part passes when the pinned slice exits 0, writes its result and statistics, and reports no
+warnings, the mesh is not inside out (positive signed volume), and a 100% infill slice with the same
+profile does the same and extrudes within 5% of the mesh volume.
 Usage: python3 -I slicecheck.py [--json PATH] <part.stl>... ; prints one line per part and writes
 PATH (default out/slicecheck.json; the committed slicecheck.json is the recorded 12 part run).
 ORCA_SLICER names the OrcaSlicer 2.5.0 binary (default: the extracted AppImage under ~/.local/opt).
@@ -45,8 +46,11 @@ def slice_part(stl, process, out):
            "--arrange", "1", "--orient", "0", "--slice", "0", "--export-statistics", "--outputdir", out, stl]
     with open(os.path.join(out, "log.txt"), "w") as log:
         rc = subprocess.run(["nice"] + cmd, stdout=log, stderr=subprocess.STDOUT, timeout=900).returncode
-    res = json.load(open(os.path.join(out, "result.json"))) if os.path.exists(os.path.join(out, "result.json")) else {}
+    result = os.path.join(out, "result.json")
+    res = json.load(open(result)) if os.path.exists(result) else {}
     warns = list(res.get("warnings", [])) + [p.get("warning_message") for p in res.get("sliced_plates", []) if p.get("warning_message")]
+    if not res:
+        warns.append("no result.json in the output folder")
     stats = os.path.join(out, "plate_1.statistics.json")
     vol = json.load(open(stats))["summary"]["volume"] if os.path.exists(stats) else None
     return rc, warns, vol
@@ -65,7 +69,8 @@ def main(args):
         rc2, warns2, solid = slice_part(stl, "process_solid.json", os.path.join(HERE, "out", name, "solid"))
         mv = mesh_volume(stl)
         ratio = solid / abs(mv) if solid and mv else None
-        ok = rc == 0 and not warns and rc2 == 0 and mv > 0 and ratio is not None and abs(ratio - 1) <= 0.05
+        ok = (rc == 0 and not warns and vol is not None and rc2 == 0 and not warns2 and mv > 0
+              and ratio is not None and abs(ratio - 1) <= 0.05)
         rows.append({"part": name, "pass": ok, "exit": rc, "warnings": warns, "pinned_volume": vol,
                      "solid_exit": rc2, "solid_volume": solid, "mesh_volume": round(mv, 2),
                      "solid_over_mesh": round(ratio, 4) if ratio else None})
