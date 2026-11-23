@@ -66,8 +66,10 @@ def _clamp(v: float, lo: float, hi: float) -> float:
 
 
 def settings_for(goal: str, printer: PrinterProfile, fil: materials.Filament, m: Mesh | None = None,
-                 cand: orient.Candidate | None = None, load_axis: str | None = None) -> dict:
-    """Settings for this goal. m is the part as it sits on the bed (it decides the fine layer height)."""
+                 cand: orient.Candidate | None = None, load_axis: str | None = None,
+                 turned: Mesh | None = None) -> dict:
+    """Settings for this goal. m is the part as it sits on the bed (it decides the fine layer height).
+    turned is cand's part on the bed when the caller already has it (cand.mesh rebuilds it)."""
     k = _k(printer)
     n = printer.nozzle
     lh = LAYER_HEIGHT[goal]
@@ -102,7 +104,8 @@ def settings_for(goal: str, printer: PrinterProfile, fil: materials.Filament, m:
     retract = _clamp(retract, 0.0 if fil.flexible else lo, hi)
     supports = "off"
     if cand is not None and cand.needs_support:
-        flat = cand.mesh is not None and _flat_overhangs(cand.mesh, fil)
+        turned = turned if turned is not None else cand.mesh
+        flat = turned is not None and _flat_overhangs(turned, fil)
         supports = "normal" if flat else "tree"
     brim = 0
     if cand is not None and min(cand.footprint_mm) > 0 and cand.height_mm / min(cand.footprint_mm) > BRIM_ASPECT:
@@ -154,13 +157,15 @@ def printer_limits(printer: PrinterProfile) -> dict:
             for k in keys} | ({"sources": printer.limits_source} if printer.limits_source else {})
 
 
-def baseline(cand: orient.Candidate, printer: PrinterProfile, fil: materials.Filament, profile) -> dict:
+def baseline(cand: orient.Candidate, printer: PrinterProfile, fil: materials.Filament, profile,
+             turned: Mesh | None = None) -> dict:
     """slicing.py's standard settings for the same orientation, for the time saved figure."""
     if fil.name not in slicing.MATERIALS:
         return {"available": False, "why": f"slicing.py has no defaults for {fil.name}"}
     s = slicing.settings(printer, slicing.MATERIALS[fil.name], "standard", force=True)
     s["supports"] = "auto" if cand.needs_support else "off"
-    e = est.estimate(cand.mesh, s, printer, fil, cand.support_volume_mm3, cand.support_contact_mm2, profile)
+    e = est.estimate(turned if turned is not None else cand.mesh, s, printer, fil, cand.support_volume_mm3,
+                     cand.support_contact_mm2, profile)
     c = checks.check(s, printer, fil, None, "balanced")
     out = {"available": True, "settings": "slicing.py standard", "seconds": e["seconds"],
            "check_fails": c["fails"], "check_warns": c["warns"]}
@@ -171,6 +176,18 @@ def baseline(cand: orient.Candidate, printer: PrinterProfile, fil: materials.Fil
                        f"{worst['cap_mm3s']} mm3/s cap ({worst['cap_source']}). OrcaSlicer slows those moves to its filament "
                        "preset's limit; PrusaSlicer, as slicing.py calls it, sets no volumetric limit, so those moves "
                        "would under-extrude. The time above assumes the capped flow")
+    return out
+
+
+def scoring(m: Mesh, ranked: list[orient.Candidate]) -> dict:
+    """How many triangles the orientations were scored on, and a sentence saying so when it was a copy."""
+    total = len(m.tris)
+    scored = min((c.scored_on for c in ranked if c.scored_on), default=total)
+    out = {"triangles": total, "scored_on_triangles": scored, "simplified": scored < total}
+    if scored < total:
+        out["note"] = (f"orientation was scored on {scored} of {total} triangles (a simplified copy) for supports "
+                       f"and time; the best {orient.FINALISTS} were measured again on the full mesh, and fit, size, "
+                       "bed contact, overhang, volume and the estimate come from the full mesh")
     return out
 
 
@@ -185,17 +202,18 @@ def plan(m: Mesh, printer: PrinterProfile, material: str, goal: str = "quality",
     fil = materials.get(material)
     time_fn = None
     if goal != "quality":
-        def time_fn(c: orient.Candidate) -> float:
-            s = settings_for(goal, printer, fil, c.mesh, c, load_axis)
-            prof = est.layer_profile(c.mesh, s["layer_height_mm"], s["first_layer_height_mm"], RANK_COLUMNS)
-            return float(est.estimate(c.mesh, s, printer, fil, c.support_volume_mm3, c.support_contact_mm2,
+        def time_fn(c: orient.Candidate, turned: Mesh) -> float:
+            s = settings_for(goal, printer, fil, turned, c, load_axis, turned)
+            prof = est.layer_profile(turned, s["layer_height_mm"], s["first_layer_height_mm"], RANK_COLUMNS)
+            return float(est.estimate(turned, s, printer, fil, c.support_volume_mm3, c.support_contact_mm2,
                                       prof)["seconds"])
     ranked = orient.rank(m, printer, fil, goal, load_axis, time_fn)
     best = ranked[0]
-    s = settings_for(goal, printer, fil, best.mesh, best, load_axis)
-    profile = est.layer_profile(best.mesh, s["layer_height_mm"], s["first_layer_height_mm"])
-    e = est.estimate(best.mesh, s, printer, fil, best.support_volume_mm3, best.support_contact_mm2, profile)
-    thin = orient.thinnest_wall(best.mesh)
+    placed = best.mesh
+    s = settings_for(goal, printer, fil, placed, best, load_axis, placed)
+    profile = est.layer_profile(placed, s["layer_height_mm"], s["first_layer_height_mm"])
+    e = est.estimate(placed, s, printer, fil, best.support_volume_mm3, best.support_contact_mm2, profile)
+    thin = orient.thinnest_wall(placed)
     facts = part_facts(best, e, printer, thin)
     result = checks.check(s, printer, fil, facts, goal)
     out = {
@@ -203,6 +221,7 @@ def plan(m: Mesh, printer: PrinterProfile, material: str, goal: str = "quality",
         "printer": printer.key, "printer_label": printer.label, "printer_limits": printer_limits(printer),
         "material": fil.name, "material_sources": fil.source_urls(), "goal": goal, "load_axis": load_axis,
         "orientations": [c.summary() for c in ranked[:3]],
+        "orientation_scoring": scoring(m, ranked),
         "settings": s, "estimate": e, "check": result,
         "thin_wall_note": None if thin is not None else
         f"thin wall check skipped: more than {orient.THIN_MAX_TRIANGLES} triangles or no wall found",
@@ -216,7 +235,7 @@ def plan(m: Mesh, printer: PrinterProfile, material: str, goal: str = "quality",
                           bad[0]["fix"], out)
     if not result["ok"]:   # a planner bug: the optimizer must never emit settings that fail
         raise AssertionError(f"plan failed its own check: {result['fails']}")
-    b = baseline(best, printer, fil, profile)
+    b = baseline(best, printer, fil, profile, placed)
     if b.get("available"):
         b["seconds_saved"] = b["seconds"] - e["seconds"]
     out["baseline"] = b

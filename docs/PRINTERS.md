@@ -288,7 +288,7 @@ nesting deeper than 16, more than 100000 components, more than 5000000 triangles
 than 200 MB of model XML uncompressed are refused. Modifier and negative volumes are not told
 apart from solid parts (Bambu Studio keeps that in its own config), so export such a part as STL.
 
-`plan` and `check --model` take parts of up to 100000 triangles. A bigger part is refused at once with
+`plan` and `check --model` take parts of up to 2000000 triangles. A bigger part is refused at once with
 the count; simplify it in the CAD program or slicer and plan again. Slicing the original still works.
 
 ### Where the numbers come from
@@ -376,6 +376,15 @@ Ranking (best first): fits, then strength penalty, then support contact area and
 (differences under 1 percent of the part's area or volume are ties), then for `quality` the most
 bed contact and the lowest height; `balanced` uses the time estimate before bed contact, and
 `speed` puts the time estimate before supports.
+
+Big parts: above 200000 triangles, every candidate still gets its fit, size, bed contact and
+overhang area from the full mesh, but its support floors and time estimate come from a simplified
+copy of about 100000 triangles (vertices snapped to a grid of cubes and merged, so the same part
+always gives the same copy). The best 3 are then measured again on the full mesh and sorted among
+themselves, and volume, the estimate and the check use the full mesh. The plan's
+`orientation_scoring` gives both triangle counts, and the text output adds a note when a copy was
+used. A 1M-triangle part plans in about 10 to 15 seconds in under 1 GB; no candidate keeps a turned
+copy of the part.
 
 ### Settings (the optimizer)
 

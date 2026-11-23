@@ -6,6 +6,7 @@ fixes) a mesh that is not watertight. Units are millimeters throughout.
 
 from __future__ import annotations
 
+import math
 import posixpath
 import re
 import struct
@@ -21,7 +22,7 @@ from ..errors import ConfigError
 
 MAX_BYTES = 200 * 1024 * 1024      # refuse files (or a 3MF's model part, uncompressed) larger than this
 MAX_TRIANGLES = 5_000_000          # and meshes with more triangles than this
-PLAN_MAX_TRIANGLES = 100_000       # the planner and check --model take parts up to this many triangles
+PLAN_MAX_TRIANGLES = 2_000_000     # the planner and check --model take parts up to this many triangles
 DEGENERATE_AREA_MM2 = 1e-9         # facets smaller than this have no usable normal
 WELD_MM = 1e-4                     # vertices closer than this are the same vertex for edge matching
 SMALL_PART_MM = 2.0                # a part this small was probably drawn in meters or inches
@@ -44,6 +45,8 @@ class Mesh:
     kind: str = ""                       # stl-binary, stl-ascii or 3mf
     warnings: list[str] = field(default_factory=list)
     removed_degenerate: int = 0
+    # A turned copy points here at the mesh it was turned from, and takes its welding and edges from it.
+    topology: Mesh | None = field(default=None, repr=False, compare=False)
 
     @cached_property
     def cross(self) -> np.ndarray:
@@ -71,8 +74,7 @@ class Mesh:
 
     @cached_property
     def bbox(self) -> tuple[np.ndarray, np.ndarray]:
-        pts = self.tris.reshape(-1, 3)
-        return pts.min(axis=0), pts.max(axis=0)
+        return bounds(self.tris)
 
     @property
     def size(self) -> np.ndarray:
@@ -80,20 +82,57 @@ class Mesh:
         return hi - lo
 
     @cached_property
+    def vertices(self) -> tuple[np.ndarray, np.ndarray]:
+        """The distinct corner points (exactly equal coordinates merged, no welding) and, per facet, the
+        index of each corner among them. Turning these instead of every corner of every facet is several
+        times less work, with the same numbers."""
+        pts = self.tris.reshape(-1, 3)
+        order = np.lexsort((pts[:, 2], pts[:, 1], pts[:, 0]))
+        s = pts[order]
+        new = np.ones(len(s), bool)
+        new[1:] = (s[1:] != s[:-1]).any(axis=1)
+        ids = np.empty(len(pts), np.int64)
+        ids[order] = np.cumsum(new) - 1
+        return s[new], ids.reshape(-1, 3)
+
+    @cached_property
     def faces(self) -> np.ndarray:
-        """(n, 3) vertex ids after welding vertices closer than WELD_MM."""
+        """(n, 3) vertex ids after welding vertices closer than WELD_MM, numbered in sorted (x, y, z) order."""
+        if self.topology is not None:
+            return self.topology.faces
         q = np.round(self.tris.reshape(-1, 3) / WELD_MM).astype(np.int64)
-        _, inv = np.unique(q, axis=0, return_inverse=True)
-        return inv.reshape(-1, 3)
+        order = np.lexsort((q[:, 2], q[:, 1], q[:, 0]))
+        s = q[order]
+        new = np.ones(len(s), bool)
+        new[1:] = (s[1:] != s[:-1]).any(axis=1)
+        ids = np.empty(len(q), np.int64)
+        ids[order] = np.cumsum(new) - 1
+        return ids.reshape(-1, 3)
 
     @cached_property
     def edges(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Unique undirected edges as (a, b) pairs, the facet count per edge, and per facet-edge its edge index."""
+        if self.topology is not None:
+            return self.topology.edges
         f = self.faces
         e = np.concatenate([f[:, [0, 1]], f[:, [1, 2]], f[:, [2, 0]]])
         e.sort(axis=1)
-        uniq, inv, counts = np.unique(e, axis=0, return_inverse=True, return_counts=True)
+        n = int(f.max()) + 1 if len(f) else 1
+        key, inv, counts = np.unique(e[:, 0] * n + e[:, 1], return_inverse=True, return_counts=True)
+        uniq = np.column_stack([key // n, key % n])
         return uniq, counts, inv.reshape(3, -1).T
+
+    @cached_property
+    def edge_owners(self) -> tuple[np.ndarray, np.ndarray]:
+        """The facets on each edge: owners[start[e]:start[e + 1]] are edge e's facets, in facet order."""
+        if self.topology is not None:
+            return self.topology.edge_owners
+        _, counts, fe = self.edges
+        slot_edge = fe.ravel()
+        order = np.argsort(slot_edge, kind="stable")
+        start = np.zeros(len(counts) + 1, np.int64)
+        np.cumsum(counts, out=start[1:])
+        return order // 3, start
 
     def watertight(self) -> dict:
         """Every edge shared by exactly two facets. Reported, not fixed."""
@@ -105,13 +144,54 @@ class Mesh:
 
     def transformed(self, rot: np.ndarray, center_on: tuple[float, float] | None = None) -> Mesh:
         """Rotated by rot (3x3), dropped to z = 0, and centered on the (x, y) point if given."""
-        t = self.tris @ np.asarray(rot, float).T
-        pts = t.reshape(-1, 3)
-        lo, hi = pts.min(axis=0), pts.max(axis=0)
-        shift = np.array([0.0, 0.0, -lo[2]])
-        if center_on is not None:
-            shift[:2] = np.asarray(center_on, float) - (lo[:2] + hi[:2]) / 2
-        return Mesh(t + shift, self.name, self.kind, list(self.warnings), self.removed_degenerate)
+        rot = np.asarray(rot, float)
+        return self.placed(turn(self.tris, rot), rot, center_on)
+
+    def placed(self, t: np.ndarray, rot: np.ndarray, center_on: tuple[float, float] | None = None,
+               lo_hi: tuple[np.ndarray, np.ndarray] | None = None) -> Mesh:
+        """This mesh with its triangles already turned by rot (t = tris @ rot.T): dropped to z = 0, centered
+        on center_on if given. t is shifted in place and kept. The turned copy takes its welding and edges from
+        this mesh (a rigid turn keeps them, and they are worked out once), shares its facet areas, and turns its
+        normals by rot rather than recomputing them. lo_hi is bounds(t) when the caller has it already."""
+        lo, hi = lo_hi if lo_hi is not None else bounds(t)
+        shift = placement(lo, hi, center_on)
+        t += shift
+        m = Mesh(t, self.name, self.kind, list(self.warnings), self.removed_degenerate,
+                 topology=self.topology or self)
+        for key in ("areas", "surface_area"):
+            if key in self.__dict__:
+                m.__dict__[key] = self.__dict__[key]
+        if abs(np.linalg.det(rot) - 1.0) < 1e-9:   # a proper rotation: normals turn with the part
+            m.__dict__["normals"] = self.normals @ rot.T
+        m.__dict__["bbox"] = (lo + shift, hi + shift)
+        return m
+
+    def simplified(self, target: int) -> Mesh:
+        """A copy with about target triangles, for scoring orientations on a big part (vertex clustering).
+
+        The distinct vertices are snapped to a grid of cubes and each cube's vertices merge into their mean;
+        facets whose corners fall in fewer than three cubes go. The cube size starts from the surface area
+        and grows until the copy has at most 1.25 x target facets. Same part in, same copy out. Flat faces
+        stay flat; sharp edges are rounded by about one cube.
+        """
+        v, vid = self.vertices
+        lo, _ = self.bbox
+        # A surface cut by cubes of side h crosses about area / h^2 of them, with about two facets each.
+        h = math.sqrt(2.0 * max(self.surface_area, 1e-9) / max(target, 1))
+        for _ in range(8):
+            q = np.floor((v - lo) / h).astype(np.int64)
+            dims = q.max(axis=0) + 1
+            cell, inv = np.unique((q[:, 0] * dims[1] + q[:, 1]) * dims[2] + q[:, 2], return_inverse=True)
+            f = inv[vid]
+            keep = (f[:, 0] != f[:, 1]) & (f[:, 1] != f[:, 2]) & (f[:, 0] != f[:, 2])
+            if keep.sum() <= 1.25 * target:
+                break
+            h *= math.sqrt(keep.sum() / target)
+        count = np.bincount(inv, minlength=len(cell))
+        mean = np.column_stack([np.bincount(inv, weights=v[:, k], minlength=len(cell)) for k in range(3)])
+        mean /= count[:, None]
+        m = Mesh(mean[f[keep]], self.name, self.kind)
+        return Mesh(m.tris[m.areas > DEGENERATE_AREA_MM2], self.name, self.kind)
 
     def facts(self) -> dict:
         lo, hi = self.bbox
@@ -127,6 +207,31 @@ def fits_planner(m: "Mesh") -> None:
         raise MeshError(f"the part has {n} triangles; the planner takes up to {PLAN_MAX_TRIANGLES}",
                         f"Simplify the mesh to under {PLAN_MAX_TRIANGLES} triangles (decimate it in the CAD program "
                         "or slicer) and plan again; slicing the original still works")
+
+
+def turn(tris: np.ndarray, rot: np.ndarray) -> np.ndarray:
+    """tris @ rot.T as one (3n x 3) product, which is several times faster than the batched form."""
+    return (tris.reshape(-1, 3) @ np.asarray(rot, float).T).reshape(tris.shape)
+
+
+def placement(lo: np.ndarray, hi: np.ndarray, center_on: tuple[float, float] | None = None) -> np.ndarray:
+    """The shift that drops a part with these bounds to z = 0 and centers it on (x, y) if given."""
+    shift = np.array([0.0, 0.0, -lo[2]])
+    if center_on is not None:
+        shift[:2] = np.asarray(center_on, float) - (lo[:2] + hi[:2]) / 2
+    return shift
+
+
+def bounds(tris: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The (x, y, z) minimum and maximum over every vertex, one coordinate at a time (fast on big meshes)."""
+    lo = np.array([tris[..., k].min() for k in range(3)])
+    hi = np.array([tris[..., k].max() for k in range(3)])
+    return lo, hi
+
+
+def corner_z(tris: np.ndarray, fn=np.minimum) -> np.ndarray:
+    """Each facet's lowest (fn=np.minimum) or highest (np.maximum) z."""
+    return fn(fn(tris[:, 0, 2], tris[:, 1, 2]), tris[:, 2, 2])
 
 
 # ---------------------------------------------------------------- reading

@@ -386,6 +386,8 @@ def cmd_plan(args):
     for alt in p["orientations"][1:]:
         lines.append(f"  also: X {alt['rotate_xyz_deg'][0]}, Y {alt['rotate_xyz_deg'][1]}, Z {alt['rotate_xyz_deg'][2]}: "
                      f"{alt['reason']}")
+    if p["orientation_scoring"].get("note"):
+        lines.append(f"  Note: {p['orientation_scoring']['note']}")
     lines.append(f"Supports: {s['supports']}" + (f" (about {best['support_volume_mm3']:.0f} mm3 to hold up "
                                                    f"{best['overhang_mm2']:.0f} mm2)" if s["supports"] != "off" else ""))
     lines.append(f"Time: about {fmt_duration(e['seconds'])} (between {fmt_duration(e['low_seconds'])} and "
@@ -452,10 +454,11 @@ def cmd_check(args):
             m = m.transformed(rot)
             turned = "turned the plan's way (its orientations[0].rotation_matrix)"
         cand = orient.evaluate(m, np.array([0.0, 0.0, -1.0]), printer, fil)
-        e = pest.estimate(cand.mesh, s, printer, fil, cand.support_volume_mm3, cand.support_contact_mm2)
+        placed = cand.mesh
+        e = pest.estimate(placed, s, printer, fil, cand.support_volume_mm3, cand.support_contact_mm2)
         part = {"fits": cand.fits, "size_mm": [round(v, 2) for v in (*cand.footprint_mm, cand.height_mm)],
                 "bed_mm": list(printer.bed), "max_height_mm": printer.height, "overhang_mm2": cand.overhang_mm2,
-                "bridges": cand.bridges, "thinnest_wall_mm": orient.thinnest_wall(cand.mesh),
+                "bridges": cand.bridges, "thinnest_wall_mm": orient.thinnest_wall(placed),
                 "smallest_layer_seconds": e["smallest_layer_seconds"],
                 "layers_below_min_layer_time": e["layers_below_min_layer_time"]}
         part["orientation"] = turned
