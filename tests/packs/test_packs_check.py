@@ -309,3 +309,20 @@ def test_top_speed_is_optional_and_bounds_max_speed(good):
     assert check(good).result == "pass"
     good["printer"]["top_speed"] = 150
     refused_at(check(good), "printer.max_speed", word="above top_speed")
+
+
+@pytest.mark.parametrize("line", ["G92 Z20", "G92 X0 Y0", "G92 E0 Z5", "G92 Z{layer_height}", "G92", "g92 z1"])
+def test_g92_that_moves_an_axis_is_a_finding(good, line):
+    # G92 Z20 then G1 Z0 drives the nozzle 20 mm below where the printer thinks it is: into the bed.
+    good["printer"]["start_gcode"] = f"G28\n{line}\nG1 Z0 F600"
+    rep = check(good)
+    assert not [i for i in rep.refusals if i.path == "printer.start_gcode"], rep.refusals
+    hits = [i for i in rep.findings if i.path == "printer.start_gcode" and i.line == 2 and "G92" in i.reason]
+    assert hits and rep.result == "findings", rep.items
+
+
+@pytest.mark.parametrize("line", ["G92 E0", "G92 E-1.5", "G92 E{retract_length[0]}", "N3 G92 E0*17"])
+def test_g92_that_resets_only_the_extruder_passes(good, line):
+    good["printer"]["start_gcode"] = f"G28\n{line}"
+    rep = check(good)
+    assert not [i for i in rep.items if i.path == "printer.start_gcode"], rep.items

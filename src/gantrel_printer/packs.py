@@ -569,6 +569,11 @@ def gcode_policy(text: str, path: str, hotend_max: float | None, bed_max: float 
                     finding = f"{cmd} picks a tool past T15"
             elif not ((letter == "G" and num in ALLOWED_G) or (letter == "M" and num in ALLOWED_M)):
                 finding = f"{cmd} is not on Gantrel's allowed list"
+            elif cmd == "G92" and set(re.findall(r"[A-Z]", rest)) != {"E"}:
+                # Only G92 E<n> (resetting the extruder) passes. With an axis, or with none (Klipper then sets every
+                # axis to 0), it tells the printer the head is somewhere it is not, as SET_KINEMATIC_POSITION does.
+                finding = ("G92 other than G92 E tells the printer the head is somewhere it may not be, so a later move "
+                           "can drive the nozzle into the bed or the frame")
             heater = {104: "hotend", 109: "hotend", 140: "bed", 190: "bed"}.get(num) if letter == "M" else None
             if heater:
                 for key in ("S", "R"):
