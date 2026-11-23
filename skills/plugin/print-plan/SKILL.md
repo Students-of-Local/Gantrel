@@ -24,6 +24,7 @@ Planning only reads files. It never talks to a printer, and it never starts a pr
 - The printer: a paired printer name from `gantrel-printer list`, or a profile key from
   `gantrel-printer profiles` (for example `creality-k2`).
 - The filament: PLA, PLA-CF, PETG, PETG-CF, ABS, ASA, TPU, PA, PA-CF, PC, PVA or HIPS.
+  For a paired printer, run `gantrel-printer filaments <name> --json` first (the `filaments` tool in Local Studio) to learn the loaded family and slot, then plan with that material.
   Ask the person if you do not know it. Do not guess.
 - The goal. Use `quality` unless the person says they want it fast. Use `balanced` for "normal".
   Use `speed` only when they ask for speed.

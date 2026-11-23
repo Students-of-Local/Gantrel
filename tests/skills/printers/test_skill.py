@@ -24,8 +24,10 @@ def test_every_command_in_the_skill_exists():
 
 def test_skill_keeps_the_safety_rules():
     text = SKILL.read_text()
-    assert "You never start or resume a print" in text
-    assert "Never start or resume a print, by any route" in text
+    assert "You never start or resume a print yourself" in text
+    assert "Never start or resume a print by any route but `print_start` and `print_resume`" in text
+    assert "Never say the print started\n     unless the tool's reply says `started`" in text
+    assert "a card will appear" in text
     for gone in ("gantrel-printer confirm", "gantrel-printer start", "gantrel-printer resume", "--token"):
         assert gone not in text
     assert "Pause needs no permission" in text
