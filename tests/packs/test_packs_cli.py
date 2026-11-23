@@ -421,3 +421,15 @@ def test_reimporting_an_accepted_pack_is_a_no_op(capsys, tmp_path, good, write, 
     model.write_bytes(STL)
     rc, _, err = run(capsys, "slice", model, "--printer", "pack:test-k2", "--material", "PLA")
     assert rc == 0, err
+
+
+@pytest.mark.parametrize("body", [b"null", b"null\n", b"0", b"true", b'"pack"', b"[]"])
+def test_a_file_that_is_not_one_json_object_is_refused(capsys, write, body):
+    f = write(body)
+    sha = packs.sha256(body)
+    rep = packs.check_bytes(body)[1]
+    assert rep.result == "refused" and "one JSON object" in rep.refusals[0].reason
+    rc, text, _ = run(capsys, "pack", "check", f)
+    assert rc == 1 and "REFUSED" in text and "one JSON object" in text
+    rc, _, err = run(capsys, "pack", "import", f, "--accept", sha[:12])
+    assert rc == 3 and "one JSON object" in err

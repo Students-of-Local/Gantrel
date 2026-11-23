@@ -708,27 +708,30 @@ def _const(name):
     raise ValueError(f"{name} is not allowed in a pack")
 
 
+UNREADABLE = object()   # parse() could not read the file (JSON null parses to None, so None cannot say so)
+
+
 def parse(data: bytes, rep: Report):
-    """The JSON value, or None after adding a refusal."""
+    """The JSON value, or UNREADABLE after adding a refusal."""
     if len(data) > MAX_FILE:
         rep.add("refusal", "(file)", f"is {len(data)} bytes; the limit is {MAX_FILE} (256 KiB)")
-        return None
+        return UNREADABLE
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
         rep.add("refusal", "(file)", "is not UTF-8 text")
-        return None
+        return UNREADABLE
     try:
         raw = json.loads(text, object_pairs_hook=_pairs, parse_constant=_const)
     except _Dup as err:
         rep.add("refusal", str(err), "appears twice in one object")
-        return None
+        return UNREADABLE
     except RecursionError:
         rep.add("refusal", "(file)", "is nested too deeply")
-        return None
+        return UNREADABLE
     except ValueError as err:
         rep.add("refusal", "(file)", f"is not valid JSON ({str(err)[:120]})")
-        return None
+        return UNREADABLE
     return raw
 
 
@@ -736,7 +739,7 @@ def check_bytes(data: bytes) -> tuple[dict | None, Report]:
     """Check a pack file's bytes. The pack is returned only when the schema passed."""
     rep = Report(sha256=sha256(data))
     raw = parse(data, rep)
-    if raw is None:
+    if raw is UNREADABLE:
         return None, rep
     if not isinstance(raw, dict):
         rep.add("refusal", "(file)", "must hold one JSON object")
