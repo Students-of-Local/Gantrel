@@ -18,3 +18,8 @@ skill = "printers"
 name = "studio"
 description = "See and adjust the part in 3D"
 skill = "studio"
+
+[[commands]]
+name = "plan"
+description = "Plan a print: orientation, supports, time, filament and a settings check"
+skill = "print-plan"
