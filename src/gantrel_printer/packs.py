@@ -527,6 +527,12 @@ def gcode_policy(text: str, path: str, hotend_max: float | None, bed_max: float 
         if any(ord(c) > 126 or (ord(c) < 32 and c != "\t") for c in raw):
             rep.add("refusal", path, "G-code must be plain printable ASCII", n, raw)
             continue
+        if "\\" in raw:
+            # Gantrel hands G-code to the slicer with \n escapes, so a backslash here could start a line the
+            # policy never read (G28\nSAVE_CONFIG is one line here and two in the sliced file).
+            rep.add("refusal", path, "holds a backslash; the slicer can read one as a line break, so a pack's "
+                                     "G-code must not use any", n, raw)
+            continue
         body = _strip_comment(raw).strip()
         if not body:
             continue

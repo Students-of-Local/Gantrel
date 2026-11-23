@@ -295,3 +295,18 @@ def test_ci_step_fails_on_a_refused_pack(tmp_path, good):
     proc = subprocess.run([sys.executable, "-m", "gantrel_printer.cli", "pack", "check", str(bad)],
                           capture_output=True, text=True, timeout=120)
     assert proc.returncode == 1 and "REFUSED" in proc.stdout
+
+
+# A literal backslash-n reads as one line to the policy, but the slicer turns it into a second command.
+@pytest.mark.parametrize("field", ["start_gcode", "end_gcode"])
+@pytest.mark.parametrize("line", ["G28\\nSAVE_CONFIG", "M117 a\\nM500", "G28\\nRUN_SHELL_COMMAND CMD=x"])
+def test_backslash_in_gcode_is_refused_by_check_and_import(capsys, good, write, field, line):
+    good["printer"][field] += "\n" + line
+    n = good["printer"][field].count("\n") + 1
+    f = write(good)
+    sha = packs.sha256(f.read_bytes())
+    rc, text, _ = run(capsys, "pack", "check", f)
+    assert rc == 1 and f"REFUSAL printer.{field} line {n}: holds a backslash" in text, text
+    rc, _, err = run(capsys, "pack", "import", f, "--accept", sha[:12], "--accept-findings")
+    assert rc == 3 and "refused" in err and "backslash" in err
+    assert not (packs.packs_dir() / "test-k2").exists()
