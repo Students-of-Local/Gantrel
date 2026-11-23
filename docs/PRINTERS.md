@@ -509,7 +509,7 @@ separate. The code is `src/gantrel_printer/packs.py` and `pack_cli.py`; the skil
 | Command | What it does |
 |---|---|
 | `gantrel-printer pack check <file>...` | Runs every check below. Exit 1 on any refusal (and on findings with `--strict`). |
-| `gantrel-printer pack show <file>` | Everything a reviewer needs on one screen: the summary, every material row, every start and end G-code line with its findings marked, the sha256 and the accept code (its first 12 hex digits). |
+| `gantrel-printer pack show <file>` | Everything a reviewer needs on one screen: the summary, every material row, every start and end G-code line, whole, with its findings marked, the sha256 and the accept code (its first 12 hex digits). A pack the privacy scan refuses is not shown: see below. |
 | `gantrel-printer pack export <printer> [--id] [--name] [--author] [--notes] [--material ...] [--out]` | Builds a pack from a paired printer (or a profile key) and the material settings Gantrel uses for it, checks it, writes it, and prints the sha256. |
 | `gantrel-printer pack import <file> --accept <code> [--accept-findings] [--replace]` | Installs the reviewed file. |
 | `gantrel-printer pack list`, `pack remove <id>` | Installed packs. |
@@ -532,7 +532,7 @@ G-code block 8 KiB, `notes` 2000, `author` 64.
 | `printer.top_speed` | optional: the fastest the printer moves, 10 to 2000 mm/s, with `max_speed` <= `top_speed`; export writes it when Gantrel's profile has one |
 | `printer.hotend_max_c`, `bed_max_c`, `max_flow` | 150 to 500 C; 0 to 200 C; 1 to 200 mm3/s |
 | `printer.high_flow`, `hardened_nozzle`, `enclosed`, `chamber_heater`, `direct_drive` | true or false |
-| `printer.start_gcode`, `end_gcode` | printable ASCII G-code, line feeds only, under the policy below |
+| `printer.start_gcode`, `end_gcode` | printable ASCII G-code, line feeds only, no backslash, each line at most 200 characters, under the policy below |
 | `printer.orca_machine`, `default_ports` | optional: an OrcaSlicer machine profile name; up to 8 service names to ports 1 to 65535 |
 | `materials[]` | 1 to 32 of: `family` (a materials.json family), `brand`, `name`, `nozzle_c`, `first_layer_nozzle_c` (150 to 500), `bed_c`, `first_layer_bed_c` (0 to 200), `fan` [min, max] (0 to 100, min <= max), `max_flow` (0.5 to 200), `retraction_mm` (0 to 15), `retraction_speed` (5 to 150), optional `pressure_advance` (0 to 2) and `flow_ratio` (0.5 to 1.5), and `calibrated[]`: {`test`: first-layer, temp-tower, retraction or flow; `date`; `result` text} |
 | `proof[]` | {`kind`: print, calibration or slice; `date`; `note`}. What the author says was tested: shown, never trusted as proof |
@@ -559,6 +559,11 @@ capitals, small letters and digits, and `password:`, `token=`, `user:`, `ssid:` 
 style pairs. Invisible and control characters (bidi overrides, zero-width spaces, escape codes) are
 refused too, so a pack reads the same to a person as to a machine.
 
+`pack show` never prints a pack the scan refuses. It prints the sha256, the result and every
+refusal, finding and note, each with the private part hidden, and none of the pack's contents and no
+accept code; `--json` gives `"pack": null` and no `accept`. Any other result on a line that holds
+private data (a G-code finding, say) shows the same hidden line, in `pack check` too.
+
 ### G-code policy
 
 `start_gcode` and `end_gcode` are read line by line, after comments (`;` and `#`) are dropped.
@@ -572,9 +577,12 @@ refused too, so a pack reads the same to a person as to a machine.
 | a refused command anywhere on a line (not only first), except in `M117` and `M118` display text | refused |
 | a slicer expression with quotes (`{"SAVE" + "_CONFIG"}`): it builds text at slice time | refused |
 | non-ASCII or control characters | refused |
-| `G0` `G1` `G2` `G3` `G4` `G28` `G29` `G90` `G91` `G92`, `M82` `M83` `M84` `M104` `M105` `M106` `M107` `M109` `M140` `M190` `M141` `M191` `M204` `M205` `M220` `M221` `M400` `M117` `M73`, `T0` to `T15`, comments, blank lines | allowed |
+| a backslash anywhere on the line: Gantrel hands G-code to the slicer with `\n` escapes, so `G28\nSAVE_CONFIG` would reach the printer as two commands | refused |
+| a line over 200 characters, so `pack show` can print every line whole | refused |
+| `G0` `G1` `G2` `G3` `G4` `G28` `G29` `G90` `G91`, `G92 E` (an extruder reset, E only), `M82` `M83` `M84` `M104` `M105` `M106` `M107` `M109` `M140` `M190` `M141` `M191` `M204` `M205` `M220` `M221` `M400` `M117` `M73`, `T0` to `T15`, comments, blank lines | allowed |
 | Klipper macros `START_PRINT` `END_PRINT` `PRINT_START` `PRINT_END` `BED_MESH_CALIBRATE` `CLEAN_NOZZLE` `PAUSE` `RESUME` `CANCEL_PRINT` | allowed |
 | slicer placeholders `{name}`, `{name[0]}` or `[name]` from the known list: first_layer_temperature, first_layer_bed_temperature, temperature, bed_temperature, chamber_temperature, overall_chamber_temperature, nozzle_diameter, layer_height, first_layer_height, initial_layer_print_height, initial_extruder, current_extruder, initial_tool, filament_type, filament_diameter, nozzle_temperature, nozzle_temperature_initial_layer, bed_temperature_initial_layer, bed_temperature_initial_layer_single, hot_plate_temp, hot_plate_temp_initial_layer, textured_plate_temp, textured_plate_temp_initial_layer, print_bed_max, print_bed_min, first_layer_print_min, first_layer_print_max, first_layer_print_size, max_layer_z, layer_num, layer_z, total_layer_count, travel_speed, retract_length, retraction_length | allowed |
+| `G92` with `X`, `Y` or `Z`, or with nothing (Klipper then sets every axis to 0): it tells the printer the head is somewhere it may not be, so `G92 Z20` then `G1 Z0` drives the nozzle into the bed | a finding |
 | any other command, macro or placeholder | a finding: shown, and it needs the person's acceptance, because printers have their own macros |
 
 ### Review and import
@@ -586,7 +594,8 @@ refused too, so a pack reads the same to a person as to a machine.
    `pack show` is what gets installed.
 3. The file goes to `<config dir>/packs/<id>/<sha256>.json` (the folders 0700, the file 0600). A
    different file under the same id is never replaced without `--replace`. Accepted findings are
-   recorded next to it.
+   recorded next to it, in `<sha256>.findings-accepted.json`; importing the same file again changes
+   nothing.
 4. Each time an installed pack is used, its bytes are hashed and checked again: a file that changed
    after import, or a pack with findings no one accepted, is refused.
 
@@ -595,9 +604,13 @@ refused too, so a pack reads the same to a person as to a machine.
 `--printer pack:<id>` on `slice`, `plan` and `check` builds the printer profile from the pack and
 uses the pack's settings for the material named with `--material` (a family, or the material's
 name when a pack has two of one family). The output names the source as `pack <id> <hash12>`.
-The pack's `max_flow` for that material is the flow cap, used as is, like a vendor preset. Its
-retraction speed and flow ratio go to PrusaSlicer (`--retract-speed`, `--extrusion-multiplier`) and
-OrcaSlicer; pressure advance goes to OrcaSlicer only (PrusaSlicer has no such setting). The pack's
+The pack's `max_flow` for that material is the flow cap, used as is, like a vendor preset; slice
+holds both slicers to it (PrusaSlicer `--max-volumetric-speed`, OrcaSlicer
+`filament_max_volumetric_speed`). Its retraction speed and flow ratio go to PrusaSlicer
+(`--retract-speed`, `--extrusion-multiplier`) and OrcaSlicer; pressure advance goes to OrcaSlicer
+only (PrusaSlicer has no such setting). On OrcaSlicer the pack's start and end G-code replace the
+bundled machine profile's (`machine_start_gcode`, `machine_end_gcode`), exactly as reviewed. The
+sliced file is named `<part>_pack_<id>_<material>.gcode`, which `upload` takes as is. The pack's
 printer limits (`hotend_max_c`, `bed_max_c`, `max_flow`, `high_flow`, `hardened_nozzle`, `max_accel`,
 `chamber_heater`, and `top_speed` when given) are its author's values. They count as cited, with the
 source `pack <id> <hash12> (the pack author's values)`, so check and plan fail a rule past them as
