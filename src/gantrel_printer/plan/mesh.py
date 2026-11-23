@@ -1,7 +1,8 @@
 """Triangle meshes: read binary or ASCII STL and the first build object of a 3MF, check them, write binary STL.
 
 Every reader refuses oversized input before parsing it, drops degenerate facets, and reports (never
-fixes) a mesh that is not watertight. Units are millimeters throughout.
+fixes) a mesh that is not watertight. A watertight mesh whose facets all face inward is turned right way
+out, with a warning. Units are millimeters throughout.
 """
 
 from __future__ import annotations
@@ -498,6 +499,18 @@ def _model_part(zf: zipfile.ZipFile) -> str:
     return models[0]
 
 
+def inside_out(m: Mesh) -> Mesh:
+    """The same mesh with every facet's winding reversed, so every normal points the other way. Its welding
+    and edges carry over with the corners reordered (a, b, c -> a, c, b), so they are not worked out again."""
+    out = Mesh(m.tris[:, [0, 2, 1]], m.name, m.kind, list(m.warnings), m.removed_degenerate)
+    if "faces" in m.__dict__:
+        out.__dict__["faces"] = m.faces[:, [0, 2, 1]]
+    if "edges" in m.__dict__:
+        uniq, counts, fe = m.edges
+        out.__dict__["edges"] = (uniq, counts, fe[:, [2, 1, 0]])   # edge (a, c) was slot 2, (c, b) 1, (b, a) 0
+    return out
+
+
 def _finish(tris: np.ndarray, kind: str) -> Mesh:
     if not np.isfinite(tris).all():
         raise MeshError("the mesh has a vertex that is not a finite number", "Export the part again")
@@ -518,6 +531,10 @@ def _finish(tris: np.ndarray, kind: str) -> Mesh:
         m.warnings.append(f"the part is {biggest:.0f} mm across: it was probably drawn in microns or another unit. "
                           "Gantrel reads mesh files as millimeters; scale it before printing")
     wt = m.watertight()
+    if wt["watertight"] and m.volume < 0:
+        m = inside_out(m)
+        m.warnings.append("the mesh's facets faced inward (its volume came out negative), so Gantrel turned every "
+                          "facet around; if other programs show this part inside out, check the exporter")
     if not wt["watertight"]:
         m.warnings.append(f"the mesh is not watertight ({wt['open_edges']} open and {wt['nonmanifold_edges']} "
                           "non-manifold edges): volume, weight and supports are less reliable. Repair it in the "

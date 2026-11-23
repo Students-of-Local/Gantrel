@@ -280,6 +280,10 @@ or `slice`. The code is in `src/gantrel_printer/plan/` (Python and numpy only); 
 `skills/plugin/print-plan/`. Exit codes: 0 when every rule passes, 1 when a rule fails or the
 printer and filament cannot go together.
 
+A mesh that is not watertight is planned with a warning. A watertight mesh whose facets all face
+inward (some exporters write them so, and its volume comes out negative) is turned right way out,
+with a warning, because every overhang and support figure depends on which way the facets face.
+
 A 3MF is read as its first build object. Bambu Studio and OrcaSlicer save each mesh in its own
 part (`3D/Objects/object_N.model`) and give the root model only components that point at it; those
 are followed with their transforms, and the build item's transform is applied, so a part scaled
