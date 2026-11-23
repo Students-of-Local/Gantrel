@@ -41,6 +41,11 @@ class Brain:
         self.mtimes: dict[str, float] = {}
         self.current = ""
         self.events: list[str] = []
+        # Loaded filament (Moonraker fake only): Klipper's "box" object on a Creality K-series with a CFS,
+        # and Spoolman behind Moonraker: {"connected": bool, "spool_id": int | None, "spools": {id: spool}}.
+        self.box: dict | bytes | None = None
+        self.spoolman: dict | None = None
+        self.proxied: list[dict] = []  # what the Spoolman proxy was asked for
         self.lock = threading.Lock()
 
     def put(self, name: str, data: bytes) -> None:
@@ -156,7 +161,14 @@ def moonraker_routes(h: _Handler, method: str):
                                         "moonraker_version": "fake"}})
     if method == "GET" and url.path == "/printer/objects/list":
         return h._send(200, {"result": {"objects": ["print_stats", "virtual_sdcard", "extruder", "heater_bed",
-                                                    "temperature_sensor chamber_temp", "webhooks"]}})
+                                                    "temperature_sensor chamber_temp", "webhooks"]
+                                        + (["box"] if b.box is not None else [])}})
+    if method == "GET" and url.path == "/printer/objects/query" and "box" in q:
+        if isinstance(b.box, bytes):  # a raw reply, for size and shape tests
+            return h._send(200, b.box)
+        return h._send(200, {"result": {"eventtime": 1.0, "status": {} if b.box is None else {"box": b.box}}})
+    if url.path.startswith("/server/spoolman/"):
+        return spoolman_routes(h, method, url.path)
     if method == "GET" and url.path == "/printer/objects/query":
         st = {"print_stats": {"state": MOON_STATE[b.state], "filename": b.current, "print_duration": 12.0,
                               "message": "", "info": {"current_layer": 1, "total_layer": 10}},
@@ -188,6 +200,27 @@ def moonraker_routes(h: _Handler, method: str):
         if method == "POST" and url.path == path:
             b.act(act)
             return h._send(200, {"result": "ok"})
+    h._send(404, {"error": {"message": "not found"}})
+
+
+def spoolman_routes(h: _Handler, method: str, path: str):
+    """Moonraker's Spoolman endpoints. 404 when Spoolman is not set up, like Moonraker without the component."""
+    sm = h.brain.spoolman
+    if sm is None:
+        return h._send(404, {"error": {"message": "Not Found"}})
+    if method == "GET" and path == "/server/spoolman/status":
+        return h._send(200, {"result": {"spoolman_connected": sm["connected"], "pending_reports": [],
+                                        "spool_id": sm.get("spool_id")}})
+    if method == "GET" and path == "/server/spoolman/spool_id":
+        return h._send(200, {"result": {"spool_id": sm.get("spool_id")}})
+    if method == "POST" and path == "/server/spoolman/proxy":
+        req = json.loads(h._body() or b"{}")
+        h.brain.proxied.append(req)
+        m = re.fullmatch(r"/v1/spool/(\d+)", req.get("path", ""))
+        spool = sm["spools"].get(int(m.group(1))) if m and req.get("request_method") == "GET" else None
+        if spool is None:
+            return h._send(200, {"result": {"response": None, "error": {"status_code": 404, "message": "no spool"}}})
+        return h._send(200, {"result": {"response": spool, "error": None}})
     h._send(404, {"error": {"message": "not found"}})
 
 
@@ -444,6 +477,9 @@ class FakeBambu:
         # Report overrides for tests: print_error (None: the firmware's own value) and the HMS list.
         self.print_error: int | None = None
         self.hms: list[dict] = []
+        # Loaded filament for the report: the print.ams object and the external spool, when set.
+        self.ams: object = None
+        self.vt_tray: object = None
         self.mqtt = self._listen(self._mqtt_client)
         self.ftp = self._listen(self._ftp_client)
         self.cam = self._listen(self._cam_client)
@@ -479,7 +515,9 @@ class FakeBambu:
                           "mc_remaining_time": 10, "nozzle_temper": 215.0, "nozzle_target_temper": 215.0,
                           "bed_temper": 60.0, "bed_target_temper": 60.0, "chamber_temper": 30.0,
                           "subtask_name": b.current, "layer_num": 1, "total_layer_num": 10,
-                          "print_error": self._print_error(), "hms": self.hms, "command": "push_status"}}
+                          "print_error": self._print_error(), "hms": self.hms, "command": "push_status",
+                          **({"ams": self.ams} if self.ams is not None else {}),
+                          **({"vt_tray": self.vt_tray} if self.vt_tray is not None else {})}}
 
     def _print_error(self) -> int:
         if self.print_error is not None:
