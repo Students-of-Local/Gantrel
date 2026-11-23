@@ -59,6 +59,19 @@ Calibration prints (`gantrel-printer calibrate <printer> first-layer|temp-tower|
 | Timelapse MP4 | Fake frames checked with ffprobe; real: the K2 run's 5-frame H.264 MP4. Needs ffmpeg. |
 | Notices to ntfy or a JSON webhook | Fake ntfy topic and webhook on 127.0.0.1 only. No real ntfy server has been tried. A failed notice logs only `scheme://host:port`, never the URL's token parts (tested in the foreground and in `watch.log`). |
 
+### Loaded filament
+
+`gantrel-printer filaments <name> [--json]` lists each slot's material family, color, amount left and nozzle range, read-only. Details in [docs/PRINTERS.md](docs/PRINTERS.md#loaded-filament).
+
+| Part | Proven |
+|---|---|
+| Creality CFS parser (`box` object), through `--type moonraker` and `--type creality` | Recorded fixture and fake (`tests/printers/test_filaments.py`). Real: one read-only read on the owner's K2 (2026-11-22). The fixture is rebuilt from a summary of that reply, and the parser reproduces its four slots exactly. Only code 008001 (PLA) is known; every other Creality code shows as unknown. |
+| Creality single external spool (no CFS, or not connected) | Fake only. Reports one `ext` slot with material unknown. |
+| Moonraker with Spoolman (active spool through Moonraker's proxy) | Fake only. |
+| Moonraker without Spoolman | Fake only. One `ext` slot with material unknown. |
+| Bambu Lab AMS and external spool (`vt_tray`) | Fake only, from public protocol notes. |
+| Every other printer type | Says it does not report loaded filament (tested). |
+
 ## Not supported yet
 
 - Making a part through `/gantrel` on LFM2.5-8B-A1B or LFM2.5-24B-A2B. In 5 runs the 8B always ran `stone status` first, then lost the request: three times it asked the user what to make, once it ran `stone new` and then wandered through the job files, once it printed the NEXT line as text instead of running it. The 24B on parish1 (split across CPU and GPU) never sent a token within Eukhe's 300 and 600 s stream timeouts, in 2 runs straight to Ollama and 2 through the controller.
