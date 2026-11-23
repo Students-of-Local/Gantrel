@@ -36,4 +36,4 @@ build-backend = "hatchling.build"
 packages = ["src/gantrel_printer", "src/gantrel_studio", "src/gantrel_mcp"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests/printers", "tests/skills/printers", "tests/studio", "tests/plan", "tests/mcp"]
+testpaths = ["tests/printers", "tests/skills/printers", "tests/studio", "tests/plan", "tests/mcp", "tests/packs"]

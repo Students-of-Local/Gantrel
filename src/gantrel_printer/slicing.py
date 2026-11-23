@@ -77,6 +77,10 @@ class PrinterProfile:
     chamber_heater: bool = False
     cited: tuple[str, ...] = ()          # which of the limits above come from limits_source
     limits_source: str = ""
+    # Set only on a profile built from a printer pack (packs.py): the pack's own material settings,
+    # and where they came from ("pack <id> <first 12 hex of its sha256>").
+    pack_materials: tuple[Material, ...] = ()
+    source: str = ""
 
     def __post_init__(self):
         if not self.max_accel:
@@ -270,6 +274,12 @@ class Material:
     # The nozzle temperatures worth trying for this material, low to high (calibrate temp-tower).
     # Always inside the family's cited range in materials.json (tests/plan/test_materials.py checks it).
     nozzle_range: tuple[int, int] = (190, 230)
+    # Set only for a material from a printer pack (packs.py); Gantrel's own defaults leave them empty.
+    label: str = ""                       # brand and name, like "Generic PLA"
+    max_flow: float = 0.0                 # mm3/s this filament ran at on this printer
+    retract_speed: float = 0.0            # mm/s
+    pressure_advance: float | None = None
+    flow_ratio: float | None = None
 
     @property
     def family(self) -> materials.Filament:
@@ -319,6 +329,16 @@ def profile_for(model: str, type_name: str) -> PrinterProfile:
     return PRINTERS[key]
 
 
+def pack_material(printer: PrinterProfile, family: str) -> Material | None:
+    """The pack's own settings for this filament family, when the profile came from a pack."""
+    return next((m for m in printer.pack_materials if m.name == family), None)
+
+
+def pack_materials_family(printer: PrinterProfile) -> str | None:
+    """The filament family a pack profile was resolved for (its first material), or None for other profiles."""
+    return printer.pack_materials[0].name if printer.pack_materials else None
+
+
 def material(name: str) -> Material:
     m = MATERIALS.get(name.upper())
     if not m:
@@ -360,7 +380,26 @@ def settings(printer: PrinterProfile, mat: Material, quality: str = "standard", 
         "bed_mm": list(printer.bed), "max_height_mm": printer.height,
         "note": " ".join(n for n in (mat.note, printer.note) if n), "filament_mm": printer.filament_mm,
         **({"warning": "; ".join(warnings)} if warnings else {}),
+        **pack_settings(printer, mat),
     }
+
+
+def pack_settings(printer: PrinterProfile, mat: Material) -> dict:
+    """The extra numbers a pack material carries, and the pack named as their source. Empty otherwise."""
+    s: dict = {}
+    if printer.source:
+        s["source"] = printer.source
+    if mat.label:
+        s["material_label"] = mat.label
+    if mat.retract_speed:
+        s["retract_speed_mms"] = mat.retract_speed
+    if mat.flow_ratio is not None:
+        s["flow_ratio"] = mat.flow_ratio
+    if mat.pressure_advance is not None:
+        # PrusaSlicer has no pressure advance setting; OrcaSlicer gets it below. On Klipper it can also be set
+        # in printer.cfg ([extruder] pressure_advance), which the person does on the printer.
+        s["pressure_advance"] = mat.pressure_advance
+    return s
 
 
 def prusa_args(s: dict, printer: PrinterProfile) -> list[str]:
@@ -385,6 +424,10 @@ def prusa_args(s: dict, printer: PrinterProfile) -> list[str]:
     ]
     if printer.filament_mm != 1.75:
         a += ["--filament-diameter", str(printer.filament_mm)]
+    if "retract_speed_mms" in s:
+        a += ["--retract-speed", str(s["retract_speed_mms"])]
+    if "flow_ratio" in s:
+        a += ["--extrusion-multiplier", str(s["flow_ratio"])]
     if printer.flavor == "klipper":
         # Plain G1 E retracts, never G10/G11 firmware retraction: the retract_mm printed above is then
         # what the printer does, and a printer.cfg without [firmware_retraction] still retracts.
@@ -416,6 +459,13 @@ def orca_overrides(s: dict, printer: PrinterProfile) -> tuple[dict, dict, dict]:
                 "hot_plate_temp": [str(s["bed_c"])], "hot_plate_temp_initial_layer": [str(s["bed_first_layer_c"])],
                 "textured_plate_temp": [str(s["bed_c"])], "textured_plate_temp_initial_layer": [str(s["bed_first_layer_c"])],
                 "fan_min_speed": [str(s["fan_percent"][0])], "fan_max_speed": [str(s["fan_percent"][1])]}
+    if "retract_speed_mms" in s:
+        machine["retraction_speed"] = [str(s["retract_speed_mms"])]
+    if "flow_ratio" in s:
+        filament["filament_flow_ratio"] = [str(s["flow_ratio"])]
+    if "pressure_advance" in s:
+        filament["enable_pressure_advance"] = ["1"]
+        filament["pressure_advance"] = [str(s["pressure_advance"])]
     return machine, process, filament
 
 
