@@ -97,7 +97,7 @@ def settings_for(goal: str, printer: PrinterProfile, fil: materials.Filament, m:
     widths = {key: round(f * n, 3) for key, f in LINE.items()}
     walls = WALLS[goal] + (LOADED_EXTRA_WALLS if load_axis else 0)
     infill = LOADED_INFILL if load_axis else INFILL[goal]
-    base = slicing.MATERIALS.get(fil.name)
+    base = slicing.pack_material(printer, fil.name) or slicing.MATERIALS.get(fil.name)
     hot_hi = min(fil.nozzle_max_c, printer.hotend_max_c)
     bed_hi = min(fil.bed_max_c, printer.bed_max_c)
     mid_n = 5 * round((fil.nozzle_min_c + fil.nozzle_max_c) / 10)

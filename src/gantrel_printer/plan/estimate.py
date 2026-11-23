@@ -15,7 +15,7 @@ import re
 import numpy as np
 
 from .. import materials
-from ..slicing import PrinterProfile
+from ..slicing import PrinterProfile, pack_material
 from . import geometry
 from .mesh import Mesh
 
@@ -38,10 +38,15 @@ def line_width(s: dict, key: str = "line_width_mm") -> float:
 def flow_limit(printer: PrinterProfile, fil: materials.Filament) -> dict:
     """The volumetric flow (mm3/s) the plan may use, and where it came from.
 
+    A profile built from a printer pack uses the pack's own max_flow for the filament, as is.
     When the printer's vendor ships an OrcaSlicer preset for this filament family on this printer
     (data/printer_material_flow.json), its max volumetric speed is used as is: the vendor tuned it on
     that hotend. Otherwise Gantrel's rule: FLOW_MARGIN x the lower of the hotend and the material column.
     """
+    pm = pack_material(printer, fil.name)
+    if pm is not None and pm.max_flow:
+        # A printer pack's own number for this filament on this printer, used as is like a vendor preset.
+        return {"mm3s": float(pm.max_flow), "source": f"{printer.source}: {pm.label}"}
     v = materials.vendor_flow(printer.key, fil.name)
     if v:
         return {"mm3s": float(v["mm3s"]), "source": f"vendor preset {v['preset']}", "preset": v["preset"],

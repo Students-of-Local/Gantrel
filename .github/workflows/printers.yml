@@ -17,3 +17,6 @@ jobs:
       - run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg
         timeout-minutes: 12
       - run: uv run --python 3.12 pytest -v --durations=10 -o faulthandler_timeout=120
+      # Every shared printer pack must pass its check: a refusal fails the build; findings are printed for the
+      # reviewer, who compares them with the ones listed in the pull request (profiles/community/README.md).
+      - run: uv run --python 3.12 gantrel-printer pack check profiles/community/*.json

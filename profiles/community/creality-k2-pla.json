@@ -1,0 +1,58 @@
+{
+  "format": "gantrel-pack/1",
+  "id": "creality-k2-pla",
+  "name": "Creality K2, PLA (Gantrel's own K2 profile)",
+  "version": "1.0.0",
+  "author": "Gantrel",
+  "created": "2026-11-23",
+  "notes": "An example pack. Its numbers are Gantrel's own Creality K2 profile and PLA defaults, not a person's tuned setup, and it has not been printed as a pack yet.\n\nExported by gantrel-printer from its creality-k2 profile and its material defaults. Calibration: Gantrel does not record calibration results yet, so calibrated is empty. Gantrel defaults, not printer specs: high_flow.",
+  "printer": {
+    "model": "Creality K2",
+    "adapter": "creality",
+    "bed": [
+      260,
+      260
+    ],
+    "height": 260,
+    "nozzle": 0.4,
+    "flavor": "klipper",
+    "max_speed": 300,
+    "accel": 10000,
+    "max_accel": 20000,
+    "hotend_max_c": 300,
+    "bed_max_c": 100,
+    "max_flow": 23,
+    "high_flow": false,
+    "hardened_nozzle": true,
+    "enclosed": true,
+    "chamber_heater": false,
+    "direct_drive": true,
+    "filament_mm": 1.75,
+    "start_gcode": "START_PRINT EXTRUDER_TEMP={first_layer_temperature[0]} BED_TEMP={first_layer_bed_temperature[0]} CHAMBER_TEMP={chamber_temperature[0]}",
+    "end_gcode": "END_PRINT",
+    "orca_machine": "Creality K2 0.4 nozzle",
+    "default_ports": {
+      "creality": 9999
+    }
+  },
+  "materials": [
+    {
+      "family": "PLA",
+      "brand": "Generic",
+      "name": "PLA",
+      "nozzle_c": 215,
+      "first_layer_nozzle_c": 220,
+      "bed_c": 60,
+      "first_layer_bed_c": 65,
+      "fan": [
+        100,
+        100
+      ],
+      "max_flow": 14.0,
+      "retraction_mm": 0.8,
+      "retraction_speed": 40,
+      "calibrated": []
+    }
+  ],
+  "proof": []
+}

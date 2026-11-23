@@ -20,7 +20,8 @@ import sys
 import time
 from pathlib import Path
 
-from . import __version__, calibrate, config, discover as disc, guard as vguard, materials, monitor, notify, printlog, safety, slicing
+from . import __version__, calibrate, config, discover as disc, guard as vguard, materials, monitor, notify, \
+    pack_cli, packs, printlog, safety, slicing
 from .adapters import ADAPTERS, adapter_class, build
 from .errors import ConfigError, PrinterError, Refused, SafetyError
 from .model import clip, fmt_duration, material_family
@@ -228,9 +229,15 @@ def cmd_profiles(args):
 
 
 def cmd_slice(args):
-    cfg = config.get(args.printer)
-    printer = slicing.profile_for(cfg.model, cfg.type)
-    mat = slicing.material(args.material)
+    if args.printer.startswith("pack:"):
+        # A printer pack sets the profile and material numbers; it is not a paired printer.
+        printer, mat = packs.resolve(args.printer, args.material)
+        name = args.printer
+    else:
+        cfg = config.get(args.printer)
+        printer = slicing.profile_for(cfg.model, cfg.type)
+        mat = slicing.material(args.material)
+        name = cfg.name
     s = slicing.settings(printer, mat, args.quality, force=args.force)
     model = Path(args.model).expanduser().resolve()
     if not model.is_file():
@@ -240,16 +247,19 @@ def cmd_slice(args):
         gcode, used, _ = slicing.slice_model(model, out_dir, printer, s, prefer=args.slicer)
     except PrinterError:
         if not args.json:
-            print(f"Settings chosen for {cfg.name} ({printer.label}), {mat.name}, {args.quality}:")
+            print(f"Settings chosen for {name} ({printer.label}), {mat.name}, {args.quality}:")
             print("\n".join(f"  {k}: {v}" for k, v in s.items()))
         raise
     facts = slicing.gcode_facts(gcode)
-    lines = [f"Sliced {model.name} for {cfg.name} ({printer.label}) with {used}: {gcode}",
-             "Settings used:"] + [f"  {k}: {v}" for k, v in s.items()]
+    lines = [f"Sliced {model.name} for {name} ({printer.label}) with {used}: {gcode}"]
+    if printer.source:
+        lines.append(f"Profile and {mat.label or mat.name} settings from {printer.source}")
+    lines += ["Settings used:"] + [f"  {k}: {v}" for k, v in s.items()]
     if facts.get("est_seconds"):
         lines.append(f"Estimated print time: {fmt_duration(facts['est_seconds'])}")
     out(args, {"gcode": str(gcode), "slicer": used, "settings": s, **facts}, "\n".join(lines),
-        f"gantrel-printer upload {gcode} --printer {cfg.name} --material {mat.name}")
+        f"gantrel-printer upload {gcode} --printer {name if not printer.source else '<paired printer name>'} "
+        f"--material {mat.name}")
 
 
 def material_word_family(word: str) -> str | None:
@@ -399,8 +409,10 @@ def cmd_calibrate(args):
     out(args, data, "\n".join(lines), nxt)
 
 
-def _plan_printer(key: str):
-    """A paired printer's profile, or a profile key from gantrel-printer profiles."""
+def _plan_printer(key: str, material: str | None = None):
+    """A paired printer's profile, a profile key from gantrel-printer profiles, or pack:<id>."""
+    if key.startswith("pack:"):
+        return packs.resolve(key, material)[0]
     try:
         cfg = config.get(key)
         return slicing.profile_for(cfg.model, cfg.type)
@@ -424,10 +436,11 @@ def cmd_plan(args):
     import numpy as np
 
     from .plan import mesh as pmesh, optimize
-    printer = _plan_printer(args.printer)
+    printer = _plan_printer(args.printer, args.material)
+    material = slicing.pack_materials_family(printer) or args.material
     m = pmesh.load(args.model)
     try:
-        p = optimize.plan(m, printer, args.material, args.goal, args.load_axis)
+        p = optimize.plan(m, printer, material, args.goal, args.load_axis)
     except optimize.PlanRefused as err:
         data = {"refused": True, "refused_for": err.reasons, "reason": err.message, "fix": err.hint, **err.result}
         lines = [f"REFUSED: {err.message}."] + _rule_lines(err.result["check"])
@@ -453,6 +466,9 @@ def cmd_plan(args):
                         header=pmesh.ORIENTED_HEADER)
         p["oriented_stl"] = str(dest.resolve())
     lines = [f"Plan for {m.name or args.model} on {printer.label}, {p['material']}, goal {args.goal}:"]
+    if printer.source:
+        p["source"] = printer.source
+        lines.append(f"  printer and {printer.pack_materials[0].label} settings from {printer.source}")
     lines += [f"  part warning: {w}" for w in p["part"]["warnings"]]
     lines.append(f"Orientation: rotate X {best['rotate_xyz_deg'][0]}, Y {best['rotate_xyz_deg'][1]}, "
                  f"Z {best['rotate_xyz_deg'][2]} degrees ({best['reason']})")
@@ -498,8 +514,8 @@ def cmd_plan(args):
 def cmd_check(args):
     """Check a settings file against the printer, the filament and (with --model) the part."""
     from . import materials
-    _plan_printer(args.printer)   # a bad printer or filament fails before the file is read
-    materials.get(args.material)
+    printer = _plan_printer(args.printer, args.material)   # a bad printer or filament fails before the file is read
+    materials.get(slicing.pack_materials_family(printer) or args.material)
     path = Path(args.settings).expanduser()
     try:
         raw = json.loads(path.read_text())
@@ -534,8 +550,8 @@ def check_settings(s: dict, printer_key: str, material: str, model: str | None =
 
     from . import materials
     from .plan import check as pcheck, estimate as pest, mesh as pmesh, orient
-    printer = _plan_printer(printer_key)
-    fil = materials.get(material)
+    printer = _plan_printer(printer_key, material)
+    fil = materials.get(slicing.pack_materials_family(printer) or material)
     goal = goal or s.get("goal") or "balanced"
     part = None
     turned = None
@@ -880,6 +896,7 @@ def parser() -> argparse.ArgumentParser:
                         ("estop", cmd_estop, "emergency stop")):
         sp = add(name, fn, h)
         sp.add_argument("name")
+    pack_cli.register(sub, add)
     sp = add("watch", cmd_watch, "watch a running print: frames, status, failure guard, timelapse, notices")
     sp.add_argument("name")
     sp.add_argument("--interval", type=float, default=30.0, help="seconds between frames (default 30)")
