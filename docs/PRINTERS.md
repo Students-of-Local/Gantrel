@@ -288,6 +288,9 @@ nesting deeper than 16, more than 100000 components, more than 5000000 triangles
 than 200 MB of model XML uncompressed are refused. Modifier and negative volumes are not told
 apart from solid parts (Bambu Studio keeps that in its own config), so export such a part as STL.
 
+`plan` and `check --model` take parts of up to 100000 triangles. A bigger part is refused at once with
+the count; simplify it in the CAD program or slicer and plan again. Slicing the original still works.
+
 ### Where the numbers come from
 
 - Filament: `src/gantrel_printer/data/materials.json`, one entry per family (PLA, PLA-CF, PETG,

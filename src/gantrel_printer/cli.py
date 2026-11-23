@@ -442,6 +442,7 @@ def cmd_check(args):
     pcheck.require(s, pcheck.MODEL_REQUIRED if args.model else pcheck.REQUIRED)
     if args.model:
         m = pmesh.load(args.model)
+        pmesh.fits_planner(m)
         rot = _plan_rotation(raw)
         if rot is None:
             turned = "as drawn (z up): the settings hold no plan orientation"

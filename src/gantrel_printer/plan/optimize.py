@@ -18,7 +18,7 @@ from ..slicing import PrinterProfile
 from . import check as checks
 from . import estimate as est
 from . import orient
-from .mesh import Mesh
+from .mesh import Mesh, fits_planner
 
 LAYER_HEIGHT = {"quality": 0.16, "balanced": 0.20, "speed": 0.28}   # mm on a 0.4 mm nozzle
 FINE_LAYER = 0.12              # quality goal on parts with many shallow slopes, where layer steps show
@@ -176,6 +176,7 @@ def baseline(cand: orient.Candidate, printer: PrinterProfile, fil: materials.Fil
 
 def plan(m: Mesh, printer: PrinterProfile, material: str, goal: str = "quality", load_axis: str | None = None) -> dict:
     """Orientation, supports, settings, estimate and check for one part on one printer and filament."""
+    fits_planner(m)
     if printer.resin:
         raise ConfigError(f"Gantrel does not plan resin prints like the {printer.label}",
                           "Plan and slice it in CHITUBOX or VOXELDANCE TANGO")

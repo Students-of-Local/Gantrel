@@ -21,6 +21,7 @@ from ..errors import ConfigError
 
 MAX_BYTES = 200 * 1024 * 1024      # refuse files (or a 3MF's model part, uncompressed) larger than this
 MAX_TRIANGLES = 5_000_000          # and meshes with more triangles than this
+PLAN_MAX_TRIANGLES = 100_000       # the planner and check --model take parts up to this many triangles
 DEGENERATE_AREA_MM2 = 1e-9         # facets smaller than this have no usable normal
 WELD_MM = 1e-4                     # vertices closer than this are the same vertex for edge matching
 SMALL_PART_MM = 2.0                # a part this small was probably drawn in meters or inches
@@ -117,6 +118,15 @@ class Mesh:
         return {"triangles": int(len(self.tris)), "size_mm": [round(float(v), 3) for v in hi - lo],
                 "volume_mm3": round(abs(self.volume), 3), "surface_mm2": round(self.surface_area, 3),
                 "removed_degenerate": self.removed_degenerate, **self.watertight()}
+
+
+def fits_planner(m: "Mesh") -> None:
+    """Refuse a part with more triangles than the planner handles in reasonable time and memory."""
+    n = int(len(m.tris))
+    if n > PLAN_MAX_TRIANGLES:
+        raise MeshError(f"the part has {n} triangles; the planner takes up to {PLAN_MAX_TRIANGLES}",
+                        f"Simplify the mesh to under {PLAN_MAX_TRIANGLES} triangles (decimate it in the CAD program "
+                        "or slicer) and plan again; slicing the original still works")
 
 
 # ---------------------------------------------------------------- reading

@@ -2,6 +2,7 @@
 
 import json
 
+import numpy as np
 import pytest
 
 import shapes
@@ -180,3 +181,20 @@ def test_plan_next_line_only_sends_slice_what_slice_can_do(capsys, stl, fam):
         slicing.material(fam)                                   # the command it names works
     else:
         assert "gantrel-printer slice <file>" not in nxt and "OrcaSlicer" in nxt and fam in nxt
+
+
+def test_plan_and_check_refuse_a_part_over_the_planner_limit(capsys, stl, tmp_path):
+    # Review r2 first-F1: a 1M-triangle part ran for minutes and ran out of memory. Until the planner is faster it
+    # refuses a part over PLAN_MAX_TRIANGLES at once, with what to do, and slicing the original still works.
+    cube = shapes.cube()
+    reps = mesh.PLAN_MAX_TRIANGLES // len(cube.tris) + 1
+    big = mesh.Mesh(np.tile(cube.tris, (reps, 1, 1)))
+    assert len(big.tris) > mesh.PLAN_MAX_TRIANGLES
+    path = stl(big, "big.stl")
+    rc, _, err = run(capsys, "plan", path, "--printer", "creality-k2", "--material", "PLA")
+    assert rc == 1 and "ERROR (mesh)" in err and f"up to {mesh.PLAN_MAX_TRIANGLES}" in err and "Simplify" in err
+    settings = tmp_path / "s.json"
+    rc, out, _ = run(capsys, "plan", stl(cube, "c.stl"), "--printer", "creality-k2", "--material", "PLA", "--json")
+    settings.write_text(json.dumps(json.loads(out)["settings"]))
+    rc, _, err = run(capsys, "check", str(settings), "--printer", "creality-k2", "--material", "PLA", "--model", path)
+    assert rc == 1 and f"up to {mesh.PLAN_MAX_TRIANGLES}" in err
