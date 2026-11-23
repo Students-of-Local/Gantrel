@@ -630,7 +630,8 @@ printer limits (`hotend_max_c`, `bed_max_c`, `max_flow`, `high_flow`, `hardened_
 source `pack <id> <hash12> (the pack author's values)`, so check and plan fail a rule past them as
 they do past a vendor's cited limit; speed and acceleration still only warn. A pack without
 `top_speed` has no top speed, so the speed rules fall back to its `max_speed`. Uploading still goes
-to a paired printer.
+to a paired printer. `upload --material` takes any family in `materials.json`, so a pack material
+Gantrel has no slicing defaults for, such as PLA-CF, uploads with the NEXT line `slice` prints.
 
 ### Export
 

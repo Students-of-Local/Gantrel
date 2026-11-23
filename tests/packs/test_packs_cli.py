@@ -461,6 +461,41 @@ def test_show_withholds_a_pack_that_holds_private_data(capsys, good, write, wher
     assert rc == 1 and secret not in text + err
 
 
+def test_a_pack_material_outside_gantrels_defaults_slices_and_uploads_by_its_next_line(capsys, tmp_path, good, write,
+                                                                                      fake_slicer):
+    # PLA-CF has cited ranges in materials.json but no slicing default; a hardened K2 pack may carry it.
+    good["materials"][0].update(family="PLA-CF", name="CF PLA", nozzle_c=225, first_layer_nozzle_c=230, bed_c=55,
+                                first_layer_bed_c=60, max_flow=10)
+    f = write(good)
+    sha = packs.sha256(f.read_bytes())
+    rc, _, err = run(capsys, "pack", "import", f, "--accept", sha[:12])
+    assert rc == 0, err
+    model = tmp_path / "part.stl"
+    model.write_bytes(STL)
+    rc, text, err = run(capsys, "slice", model, "--printer", "pack:test-k2", "--material", "PLA-CF", "--json")
+    assert rc == 0, err
+    d = json.loads(text)
+    assert d["settings"]["material"] == "PLA-CF" and d["settings"]["nozzle_c"] == 225
+    argv = json.loads(fake_slicer.read_text())
+    assert argv[argv.index("--filament-type") + 1] == "PLA-CF"
+    nxt = shlex.split(d["next"].replace("<paired printer name>", "fake-k2"))
+    assert nxt[:2] == ["gantrel-printer", "upload"] and "--material" in nxt, nxt
+    brain = fakes.Brain(secret=None)
+    srv = fakes.serve_http(brain, fakes.moonraker_routes)
+    try:
+        rc, _, err = run(capsys, "pair", "fake-k2", "--type", "moonraker", "--host", "127.0.0.1", "--port",
+                         srv.server_address[1], "--model", "creality-k2")
+        assert rc == 0, err
+        rc, text, err = run(capsys, *nxt[1:], "--json")
+        assert rc == 0, err
+    finally:
+        srv.shutdown()
+    job = json.loads(text)["job"]
+    rc, text, err = run(capsys, "jobs", "--json")
+    assert rc == 0, err
+    assert [j["material"] for j in json.loads(text)["jobs"] if j["id"] == job] == ["PLA-CF"], text
+
+
 def _set_start(gcode):
     def change(p):
         p["printer"]["start_gcode"] = gcode
