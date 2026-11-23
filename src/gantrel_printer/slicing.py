@@ -364,6 +364,10 @@ def settings(printer: PrinterProfile, mat: Material, quality: str = "standard", 
                                        "accepts the risk, they can ask for --force")
     q = QUALITY[quality]
     speed = min(printer.max_speed, mat.max_speed)
+    from .plan import estimate   # plan imports this module, so not at the top
+    # The volumetric flow cap the planner uses for this filament on this printer: a pack's own max_flow when the
+    # profile came from a pack, else the vendor preset or Gantrel's default. Both slicers are held to it.
+    flow = round(estimate.flow_cap(printer, mat.family), 2)
     return {
         "printer": printer.label, "material": mat.name, "quality": quality, "nozzle_mm": printer.nozzle,
         "layer_height_mm": q["layer_height"], "first_layer_height_mm": 0.2 if q["layer_height"] <= 0.2 else 0.25,
@@ -375,7 +379,8 @@ def settings(printer: PrinterProfile, mat: Material, quality: str = "standard", 
         "fan_percent": [mat.fan_min, mat.fan_max],
         "outer_wall_speed_mms": min(speed, 150) if mat.name != "TPU" else speed,
         "inner_wall_speed_mms": min(speed, 250), "infill_speed_mms": speed, "first_layer_speed_mms": min(speed, 30),
-        "travel_speed_mms": printer.max_speed, "accel_mms2": printer.accel, "retract_mm": mat.retract_mm,
+        "travel_speed_mms": printer.max_speed, "accel_mms2": printer.accel, "max_flow_mm3s": flow,
+        "retract_mm": mat.retract_mm,
         "supports": "auto, for overhangs flatter than 50 degrees from horizontal", "brim": "auto for small footprints",
         "bed_mm": list(printer.bed), "max_height_mm": printer.height,
         "note": " ".join(n for n in (mat.note, printer.note) if n), "filament_mm": printer.filament_mm,
@@ -417,7 +422,8 @@ def prusa_args(s: dict, printer: PrinterProfile) -> list[str]:
         "--external-perimeter-speed", str(s["outer_wall_speed_mms"]),
         "--perimeter-speed", str(s["inner_wall_speed_mms"]), "--infill-speed", str(s["infill_speed_mms"]),
         "--solid-infill-speed", str(s["infill_speed_mms"]), "--first-layer-speed", str(s["first_layer_speed_mms"]),
-        "--travel-speed", str(s["travel_speed_mms"]), "--retract-length", str(s["retract_mm"]),
+        "--travel-speed", str(s["travel_speed_mms"]), "--max-volumetric-speed", str(s["max_flow_mm3s"]),
+        "--retract-length", str(s["retract_mm"]),
         "--filament-type", s["material"], "--support-material", "--support-material-auto",
         "--support-material-threshold", "50", "--brim-width", "0", "--skirts", "1",
         "--center", f"{w // 2},{d // 2}", "--ensure-on-bed",
@@ -458,7 +464,8 @@ def orca_overrides(s: dict, printer: PrinterProfile) -> tuple[dict, dict, dict]:
                 "nozzle_temperature": [str(s["nozzle_c"])], "nozzle_temperature_initial_layer": [str(s["nozzle_first_layer_c"])],
                 "hot_plate_temp": [str(s["bed_c"])], "hot_plate_temp_initial_layer": [str(s["bed_first_layer_c"])],
                 "textured_plate_temp": [str(s["bed_c"])], "textured_plate_temp_initial_layer": [str(s["bed_first_layer_c"])],
-                "fan_min_speed": [str(s["fan_percent"][0])], "fan_max_speed": [str(s["fan_percent"][1])]}
+                "fan_min_speed": [str(s["fan_percent"][0])], "fan_max_speed": [str(s["fan_percent"][1])],
+                "filament_max_volumetric_speed": [str(s["max_flow_mm3s"])]}
     if "retract_speed_mms" in s:
         machine["retraction_speed"] = [str(s["retract_speed_mms"])]
     if "flow_ratio" in s:

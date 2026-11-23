@@ -310,3 +310,34 @@ def test_backslash_in_gcode_is_refused_by_check_and_import(capsys, good, write, 
     rc, _, err = run(capsys, "pack", "import", f, "--accept", sha[:12], "--accept-findings")
     assert rc == 3 and "refused" in err and "backslash" in err
     assert not (packs.packs_dir() / "test-k2").exists()
+
+
+def import_example(capsys) -> str:
+    f = COMMUNITY / "creality-k2-pla.json"
+    sha = packs.sha256(f.read_bytes())
+    rc, _, err = run(capsys, "pack", "import", f, "--accept", sha[:12])
+    assert rc == 0, err
+    return sha
+
+
+def test_material_max_flow_reaches_both_slicers(capsys, tmp_path, fake_slicer, fake_orca):
+    import_example(capsys)
+    model = tmp_path / "part.stl"
+    model.write_bytes(STL)
+    rc, text, err = run(capsys, "slice", model, "--printer", "pack:creality-k2-pla", "--material", "PLA", "--json")
+    assert rc == 0, err
+    assert json.loads(text)["settings"]["max_flow_mm3s"] == 14
+    argv = json.loads(fake_slicer.read_text())
+    assert float(argv[argv.index("--max-volumetric-speed") + 1]) == 14
+    rc, text, err = run(capsys, "slice", model, "--printer", "pack:creality-k2-pla", "--material", "PLA",
+                        "--slicer", "orcaslicer", "--json")
+    assert rc == 0, err
+    fil = json.loads(fake_orca.read_text())["filament"]
+    assert [float(v) for v in fil["filament_max_volumetric_speed"]] == [14]
+    # A built-in profile carries the flow cap the planner uses for it (here Creality's Generic PLA @K2-all).
+    from gantrel_printer import materials, slicing
+    from gantrel_printer.plan import estimate
+    k2 = slicing.PRINTERS["creality-k2"]
+    s = slicing.settings(k2, slicing.material("PLA"))
+    assert s["max_flow_mm3s"] == estimate.flow_cap(k2, materials.get("PLA"))
+    assert float(slicing.orca_overrides(s, k2)[2]["filament_max_volumetric_speed"][0]) == s["max_flow_mm3s"]

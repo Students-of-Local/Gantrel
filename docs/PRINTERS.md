@@ -490,8 +490,9 @@ does spoil a print, is its own rule and fails.
 
 slicing.py's own standard settings fail the flow rule on many printers: it asks for up to 300
 mm/s of infill, which at 0.2 x 0.45 mm is 27 mm3/s. That is over every PLA preset Creality ships for
-the K2 (Generic PLA 14 mm3/s, Hyper PLA 23). OrcaSlicer slows such moves to its filament preset's
-limit; PrusaSlicer, as slicing.py calls it, sets no volumetric limit, so they would under-extrude.
+the K2 (Generic PLA 14 mm3/s, Hyper PLA 23). slice passes the planner's flow cap for the filament (a
+pack's own max_flow when the profile is a pack) to both slicers, as PrusaSlicer's
+`--max-volumetric-speed` and OrcaSlicer's `filament_max_volumetric_speed`, so both slow such moves to it.
 `plan` reports this next to its time-saved figure, with the requested flow, the cap and its source,
 and only when the standard settings are over the cap. Its Bowden retraction (0.8 mm) is under the Bowden
 range and warns.
