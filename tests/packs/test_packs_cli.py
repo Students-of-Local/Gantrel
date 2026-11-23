@@ -17,6 +17,8 @@ from gantrel_printer import cli, config, packs
 ROOT = Path(__file__).resolve().parents[2]
 STL = b"solid t\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 10 0 0\nvertex 0 10 0\nendloop\nendfacet\nendsolid t\n"
 sys.path.insert(0, str(ROOT / "tests" / "plan"))
+sys.path.insert(0, str(ROOT / "tests" / "printers"))
+import fakes  # noqa: E402
 import shapes  # noqa: E402
 from gantrel_printer.plan import mesh  # noqa: E402
 
@@ -141,6 +143,21 @@ def test_round_trip_export_check_show_import_slice_plan(capsys, tmp_path, paired
     assert argv[argv.index("--temperature") + 1] == "223" and argv[argv.index("--retract-speed") + 1] == "35"
     assert argv[argv.index("--extrusion-multiplier") + 1] == "0.96"
     assert "<paired printer name>" in d["next"]
+    # The sliced file uploads under its own name (no --name), as the slice NEXT line and the skill say.
+    gcode = Path(d["gcode"])
+    assert gcode.name == "part_pack_my-k2_PLA.gcode", gcode.name
+    brain = fakes.Brain(secret=None)
+    srv = fakes.serve_http(brain, fakes.moonraker_routes)
+    try:
+        rc, _, err = run(capsys, "pair", "fake-k2", "--type", "moonraker", "--host", "127.0.0.1", "--port",
+                         srv.server_address[1], "--model", "creality-k2")
+        assert rc == 0, err
+        rc, text, err = run(capsys, "upload", gcode, "--printer", "fake-k2", "--json")
+        assert rc == 0, err
+    finally:
+        srv.shutdown()
+    remote = json.loads(text)["remote_name"]
+    assert remote.startswith("part_pack_my-k2_PLA-") and brain.files[remote] == gcode.read_bytes()
 
     rc, text, _ = run(capsys, "slice", model, "--printer", "pack:my-k2", "--material", "Matte PLA")
     assert rc == 0 and f"settings from pack my-k2 {sha[:12]}" in text

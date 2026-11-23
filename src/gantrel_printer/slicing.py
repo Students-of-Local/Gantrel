@@ -570,9 +570,11 @@ def slice_model(model_path: Path, out_dir: Path, printer: PrinterProfile, s: dic
     if kind is None:
         raise Unsupported(f"{prefer} is not installed", f"Installed: {', '.join(found)}")
     out_dir.mkdir(parents=True, exist_ok=True)
-    stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", model_path.stem)
+    # Every part of the name gets the same cleaning, so it is a safe file and printer name (a pack's key is
+    # pack:<id>, and upload refuses a colon).
+    stem, key, mat = (re.sub(r"[^A-Za-z0-9_.-]+", "_", t) for t in (model_path.stem, printer.key, s["material"]))
     ext = ".bgcode" if kind == "prusaslicer" and printer.upload_ext == ".bgcode" else ".gcode"
-    final = out_dir / f"{stem}_{printer.key}_{s['material']}{ext}"
+    final = out_dir / f"{stem}_{key}_{mat}{ext}"
     if kind == "orcaslicer" and not printer.orca_machine:
         raise Unsupported(f"OrcaSlicer has no system profile mapped for {printer.label}",
                           "Install PrusaSlicer, or pair with a model that has an Orca profile")
