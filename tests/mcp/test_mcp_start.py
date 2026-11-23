@@ -633,6 +633,19 @@ def test_a_file_sliced_for_a_family_outside_the_slicer_defaults_keeps_its_own_ma
     assert len(printer.files) == 2 and sorted(j.material for j in safety.list_jobs()) == ["PA-CF", "PLA-CF"]
 
 
+def test_a_file_word_that_names_no_family_leaves_the_material_argument_standing(printer, tmp_path):
+    """PrusaSlicer's flexible profiles write FLEX. A word Gantrel can't map to a family is neither
+    compared with the argument nor recorded, so a FLEX file uploads as TPU, and without an argument
+    the job records no material rather than the raw word."""
+    f = tmp_path / "flex.gcode"
+    f.write_bytes(GCODE.replace(b"filament_type = PLA", b"filament_type = FLEX"))
+    assert call("upload", {"path": str(f), "printer": "moon", "material": "TPU"}).data["material"] == "TPU"
+    g = tmp_path / "flex2.gcode"
+    g.write_bytes(GCODE.replace(b"filament_type = PLA", b"filament_type = FLEX"))
+    assert call("upload", {"path": str(g), "printer": "moon"}).data["material"] != "FLEX"
+    assert sorted(str(j.material) for j in safety.list_jobs()) != ["FLEX", "TPU"]
+
+
 # ---------------------------------------------------------------- resume
 
 

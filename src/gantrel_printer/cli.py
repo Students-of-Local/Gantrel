@@ -302,10 +302,11 @@ def upload_file(printer: str, path: Path, name: str | None = None, material_name
     facts = slicing.gcode_facts(path)
     # The file's own filament_type wins: it is what the G-code heats for. Compared by family, so PLA-CF
     # is not PLA and PA6-CF is PA-CF. A material argument that disagrees is refused, and the argument is
-    # used only when the file names no material. A word that names no known family is kept as written.
+    # used only when the file names no material. A word that names no known family (PrusaSlicer writes FLEX for
+    # TPU) is neither compared nor recorded: the argument stands, as before.
     said = clip(str(facts.get("material", "")), 32).upper()
-    if said:
-        sliced_for = material_word_family(said) or said
+    sliced_for = material_word_family(said) if said else None
+    if sliced_for:
         if material and material != sliced_for:
             raise ConfigError(f"{path.name} was sliced for {sliced_for}, not {material}",
                               f"Upload it without a material, or slice it again for {material}")
