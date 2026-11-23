@@ -12,10 +12,10 @@ from pathlib import Path
 
 import pytest
 
-from conftest import STL
 from gantrel_printer import cli, config, packs
 
 ROOT = Path(__file__).resolve().parents[2]
+STL = b"solid t\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 10 0 0\nvertex 0 10 0\nendloop\nendfacet\nendsolid t\n"
 sys.path.insert(0, str(ROOT / "tests" / "plan"))
 import shapes  # noqa: E402
 from gantrel_printer.plan import mesh  # noqa: E402
