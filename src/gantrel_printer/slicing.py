@@ -14,6 +14,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -466,8 +467,34 @@ MISSING_HELP = ("Gantrel uses PrusaSlicer or OrcaSlicer from the command line (f
                 "OrcaSlicer from https://github.com/SoftFever/OrcaSlicer/releases. Then run slice again")
 
 
+class SliceTimeout(PrinterError):
+    """The slicer ran past its time limit and was stopped."""
+
+    code = "timeout"
+
+
+def run_slicer(argv: list[str], timeout: float) -> tuple[int, str, str]:
+    """Run a slicer in its own process group. On a timeout, kill the whole group (a flatpak or AppImage
+    slicer runs as a child of what we start) and raise SliceTimeout. Returns (exit code, stdout, stderr)."""
+    proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL,
+                            text=True, start_new_session=True)
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except BaseException:
+        # Killed before the leader is reaped, so its pid still names this group and no other.
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.wait()
+        for pipe in (proc.stdout, proc.stderr):
+            pipe.close()  # never wait on a child that left the group and still holds the pipe
+        raise
+    return proc.returncode, out, err
+
+
 def slice_model(model_path: Path, out_dir: Path, printer: PrinterProfile, s: dict,
-                prefer: str | None = None, timeout: int = 900) -> tuple[Path, str, list[str]]:
+                prefer: str | None = None, timeout: float = 900) -> tuple[Path, str, list[str]]:
     """Run the slicer. Return (output file, slicer used, argv)."""
     found = find_slicers()
     if not found:
@@ -507,12 +534,13 @@ def slice_model(model_path: Path, out_dir: Path, printer: PrinterProfile, s: dic
             argv = found[kind] + ["--slice", "0", "--load-settings", f"{files[0]};{files[1]}", "--load-filaments",
                                   files[2], "--outputdir", str(outdir), str(model_path)]
         try:
-            proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+            code, stdout, stderr = run_slicer(argv, timeout)
         except subprocess.TimeoutExpired:
-            raise PrinterError(f"{kind} took longer than {timeout}s", "Try a smaller model or the draft quality") from None
-        if proc.returncode != 0:
-            tail = (proc.stderr or proc.stdout).strip().splitlines()[-5:]
-            raise PrinterError(f"{kind} failed (exit {proc.returncode})", " | ".join(tail)[:400])
+            raise SliceTimeout(f"{kind} took longer than {timeout:g}s and was stopped",
+                               "Try a smaller model or the draft quality") from None
+        if code != 0:
+            tail = (stderr or stdout).strip().splitlines()[-5:]
+            raise PrinterError(f"{kind} failed (exit {code})", " | ".join(tail)[:400])
         if kind == "orcaslicer":
             made = sorted(outdir.glob("*.gcode"))
             if len(made) != 1:

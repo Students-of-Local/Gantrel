@@ -90,6 +90,12 @@ class Adapter(ABC):
     # refuses before any card, and the person starts it on the printer.
     network_start: bool = True
 
+    def upload_seconds(self, local_path: Path, limit: float) -> float | None:
+        """About how long sending local_path takes, for links slow enough to matter (USB serial); None
+        when the adapter has no estimate (network uploads). It may stop counting once past limit, and
+        it never touches the printer."""
+        return None
+
     def identity(self) -> str:
         """Which physical printer this is: type, host, port, serial, TLS pin. Tokens bind to this."""
         c = self.cfg

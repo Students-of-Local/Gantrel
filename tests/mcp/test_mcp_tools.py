@@ -119,6 +119,131 @@ def test_slice_then_upload_never_starts(printer, block, tmp_path, monkeypatch):
     assert r.is_error and "quality must be one of" in r.text
 
 
+SLOW_SLICER = """#!{py}
+import os, subprocess, sys, time
+# A slicer that runs a helper (as flatpak and AppImage slicers do) and never finishes in time.
+helper = subprocess.Popen(["sleep", "30"])
+open({pids!r}, "w").write(f"{{os.getpid()}} {{helper.pid}}")
+time.sleep(20)
+sys.exit(1)
+"""
+
+
+def alive(pid: int) -> bool:
+    try:
+        with open(f"/proc/{pid}/stat") as fh:
+            return fh.read().rsplit(")", 1)[1].split()[0] != "Z"
+    except FileNotFoundError:
+        return False
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="reads /proc")
+def test_a_slow_slicer_is_killed_and_the_slice_refused(printer, block, tmp_path, monkeypatch):
+    """second-F7: a slice must end inside the MCP call. A slicer still running at the limit is killed,
+    with its helpers, and the tool refuses with a sentence that says to slice in the slicer app."""
+    import time
+
+    from gantrel_mcp import server
+
+    pids = tmp_path / "pids"
+    exe = tmp_path / "prusa-slicer"
+    exe.write_text(SLOW_SLICER.format(py=sys.executable, pids=str(pids)))
+    exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("GANTREL_PRUSASLICER", str(exe))
+    monkeypatch.setattr(server, "SLICE_S", 2.0, raising=False)  # raising=False: the old code ran with no limit
+    t0 = time.monotonic()
+    r = call("slice", {"path": str(block), "printer": "moon", "material": "PLA"})
+    took = time.monotonic() - t0
+    assert r.is_error and "took longer than 2 s, so Gantrel stopped the slicer" in r.text
+    assert "slice it in their slicer app" in r.text
+    assert took < 10, f"the call took {took:.1f} s"
+    slicer, helper = map(int, pids.read_text().split())
+    deadline = time.monotonic() + 3
+    while (alive(slicer) or alive(helper)) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not alive(slicer) and not alive(helper)
+    assert not list(tmp_path.glob("*.gcode"))
+
+
+@pytest.fixture
+def marlin(monkeypatch):
+    """A fake Marlin board with an SD card on a pty, paired as "ender", and every serial port opening seen."""
+    from gantrel_printer import config
+    from gantrel_printer.adapters import usb_serial
+    from gantrel_printer.config import PrinterConfig
+
+    brain = fakes.Brain()
+    fm = fakes.FakeMarlin(brain)
+    config.save_all({"ender": PrinterConfig(name="ender", type="serial", host=fm.path, port=115200,
+                                            model="generic-marlin-220")})
+    opened = []
+    real = usb_serial._Link
+
+    def link(*args, **kwargs):
+        opened.append(args[0])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(usb_serial, "_Link", link)
+    yield brain, opened
+    fm.close()
+
+
+def test_a_serial_upload_too_big_for_one_call_is_refused_before_the_port_opens(marlin, tmp_path):
+    """second-F7: over USB serial a few-MB file takes minutes. The MCP upload refuses a file that can't
+    be sent within its time budget at the serial link's rate, before opening the port."""
+    brain, opened = marlin
+    big = tmp_path / "big.gcode"
+    big.write_bytes(b"; filament_type = PLA\nG28\n" + b"G1 X100.25 Y100.25 E0.04512\n" * 20000)
+    r = call("upload", {"path": str(big), "printer": "ender"})
+    assert r.is_error and "longer than the 35 s one tool call allows, so nothing was sent" in r.text
+    assert "SD card" in r.text
+    assert opened == [] and brain.files == {} and safety.list_jobs() == []
+    # A small file still goes through the same port.
+    small = tmp_path / "small.gcode"
+    small.write_bytes(GCODE)
+    u = call("upload", {"path": str(small), "printer": "ender"}).data
+    assert u["started"] is False and opened and len(brain.files) == 1
+
+
+def test_a_second_upload_to_a_printer_mid_upload_is_refused(printer, tmp_path, monkeypatch):
+    """second-F7: a retry after a client timeout starts a second upload while the first still runs.
+    One upload at a time per printer: the second is refused and sends nothing."""
+    import threading
+
+    from gantrel_printer.adapters.moonraker import MoonrakerAdapter
+
+    entered, release = threading.Event(), threading.Event()
+    real = MoonrakerAdapter.upload
+    calls = []
+
+    def slow(self, local_path, remote_name):
+        calls.append(remote_name)
+        if len(calls) == 1:
+            entered.set()
+            release.wait(10)
+        return real(self, local_path, remote_name)
+
+    monkeypatch.setattr(MoonrakerAdapter, "upload", slow)
+    a, b = tmp_path / "a.gcode", tmp_path / "b.gcode"
+    a.write_bytes(GCODE)
+    b.write_bytes(GCODE + b"; b\n")
+    first = {}
+    t = threading.Thread(target=lambda: first.update(r=call("upload", {"path": str(a), "printer": "moon"})))
+    t.start()
+    try:
+        assert entered.wait(10), "the first upload never reached the printer"
+        r = call("upload", {"path": str(b), "printer": "moon"})
+    finally:
+        release.set()
+        t.join(15)
+    assert r.is_error and "another upload, start or resume on moon is still running" in r.text
+    assert len(calls) == 1 and list(printer.files) == [first["r"].data["remote_name"]]
+    assert [j.remote_name for j in safety.list_jobs()] == list(printer.files)
+    # Once the first is done, the printer takes the next one.
+    assert call("upload", {"path": str(b), "printer": "moon"}).data["started"] is False
+    assert len(printer.files) == 2
+
+
 # ---------------------------------------------------------------- file path rules
 
 

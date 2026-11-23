@@ -22,7 +22,7 @@ from pathlib import Path
 
 from . import __version__, calibrate, config, discover as disc, guard as vguard, materials, monitor, notify, printlog, safety, slicing
 from .adapters import ADAPTERS, adapter_class, build
-from .errors import ConfigError, PrinterError, SafetyError
+from .errors import ConfigError, PrinterError, Refused, SafetyError
 from .model import clip, fmt_duration, material_family
 
 EXIT_ERROR, EXIT_USAGE, EXIT_SAFETY = 1, 2, 3
@@ -264,11 +264,13 @@ def material_word_family(word: str) -> str | None:
 
 
 def upload_file(printer: str, path: Path, name: str | None = None, material_name: str | None = None,
-                plan: dict | None = None, record_slot: bool = False):
+                plan: dict | None = None, record_slot: bool = False, max_transfer_s: float | None = None):
     """Send a file to a paired printer and record the job. Never starts it. Returns (job, adapter).
 
     plan: a summary from safety.load_plan, kept on the job for the Local Studio card. record_slot: also
     ask the printer which slot holds the material, and record it when exactly one loaded slot matches.
+    max_transfer_s: refuse, before contacting the printer, a file the adapter can't send in that long
+    (a slow link such as USB serial; the MCP tool's time budget).
     """
     if not path.is_file():
         raise ConfigError(f"no file at {path}")
@@ -289,6 +291,13 @@ def upload_file(printer: str, path: Path, name: str | None = None, material_name
     if ext.lower() in RESIN_EXT and not getattr(adapter, "accepts_resin", False):
         raise ConfigError(f"{printer} is not a resin printer Gantrel can send .{ext} files to",
                           "Send .ctb or .goo files only to an Elegoo resin printer paired with a resin --model")
+    if max_transfer_s is not None:
+        need = adapter.upload_seconds(path, max_transfer_s)
+        if need is not None and need > max_transfer_s:
+            raise Refused(f"{path.name} takes about {need:.0f} s or more to send to {printer} ({adapter.label}), "
+                          f"longer than the {max_transfer_s:.0f} s one tool call allows, so nothing was sent",
+                          "Ask the person to copy it to the printer's SD card, or to run gantrel-printer upload "
+                          "in a terminal, which has no time limit")
     before = snapshot_cfg(adapter)
     facts = slicing.gcode_facts(path)
     # The file's own filament_type wins: it is what the G-code heats for. Compared by family, so PLA-CF

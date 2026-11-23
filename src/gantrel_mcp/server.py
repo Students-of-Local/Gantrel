@@ -22,11 +22,16 @@ from mcp_types import ToolAnnotations
 
 from gantrel_printer import cli, config, safety, slicing
 from gantrel_printer.adapters import adapter_class
-from gantrel_printer.errors import PrinterError, SafetyError
+from gantrel_printer.errors import PrinterError, Refused, SafetyError
 
-from . import __version__, files, start
+from . import __version__, files, printerlock, start
 
 SNAPSHOT_MAX = 8 * 1024 * 1024
+# An MCP call gets 60 s. A slice longer than SLICE_S is stopped, so the slicer never runs on after the
+# client gives up. An upload over a slow link (USB serial) that can't send its file in UPLOAD_SEND_S is
+# refused before the printer is touched; the rest of the call is kept for connecting and reading back.
+SLICE_S = 45.0
+UPLOAD_SEND_S = 35.0
 GOALS = ("quality", "balanced", "speed")
 
 INSTRUCTIONS = """Gantrel: plan, slice, upload and watch 3D prints on the person's paired printers.
@@ -194,7 +199,8 @@ def build() -> MCPServer:
 
     @tool(WRITE)
     def slice(path: str, printer: str, material: str = "PLA", quality: str = "standard") -> str:
-        """Slice an STL or 3MF for a paired printer with its profile. Writes the G-code next to the model."""
+        """Slice an STL or 3MF for a paired printer with its profile. Writes the G-code next to the model.
+        A slice that takes longer than 45 s is stopped and refused: the person slices it in their slicer app."""
         if quality not in slicing.QUALITY:
             raise ValueError(f"quality must be one of {', '.join(slicing.QUALITY)}")
         model = files.checked(path, "model")
@@ -202,7 +208,12 @@ def build() -> MCPServer:
         prof = slicing.profile_for(cfg.model, cfg.type)
         mat = slicing.material(material)
         s = slicing.settings(prof, mat, quality)
-        gcode, used, _ = slicing.slice_model(model, model.parent, prof, s)
+        try:
+            gcode, used, _ = slicing.slice_model(model, model.parent, prof, s, timeout=SLICE_S)
+        except slicing.SliceTimeout:
+            raise Refused(f"slicing {model.name} took longer than {SLICE_S:.0f} s, so Gantrel stopped the slicer",
+                          "Ask the person to slice it in their slicer app (PrusaSlicer or OrcaSlicer) and save the "
+                          "G-code, then upload that file") from None
         facts = slicing.gcode_facts(gcode)
         return dumps({"gcode": str(gcode), "slicer": used, "settings": s, **facts,
                       "next": f"upload {gcode} to {cfg.name} (add the plan_id if you planned it)"})
@@ -213,11 +224,24 @@ def build() -> MCPServer:
 
         material: the filament it was sliced for, used only if the file doesn't say. When the file names its
         filament, a different material here is refused. plan_id: from the plan tool, so the person's start
-        card shows the plan.
+        card shows the plan. One upload at a time per printer; over USB serial, a file too big to send in
+        35 s is refused.
         """
         gcode = files.checked(path, "gcode")
         summary = safety.load_plan(plan_id) if plan_id else None
-        job, adapter = cli.upload_file(printer, gcode, None, material, plan=summary, record_slot=True)
+        name = config.get(printer).name
+        # One upload, start or resume at a time per printer, across every Gantrel server on this computer:
+        # a retry after a client timeout must not open the printer while the first upload still runs.
+        try:
+            lock = printerlock.acquire(name)
+        except printerlock.Busy:
+            raise Refused(f"another upload, start or resume on {name} is still running, so nothing was sent",
+                          "Wait for it to finish, then call jobs to see whether the file is already there") from None
+        try:
+            job, adapter = cli.upload_file(name, gcode, None, material, plan=summary, record_slot=True,
+                                           max_transfer_s=UPLOAD_SEND_S)
+        finally:
+            printerlock.release(lock)
         return dumps({"job": job.id, "printer": job.printer, "remote_name": job.remote_name,
                       "sha256": job.sha256, "material": job.material, "slot": job.slot, "plan": job.plan,
                       "started": False,

@@ -23,8 +23,8 @@ anything else.
 | `camera_snapshot` | `printer` | One camera frame, as an image (8 MB cap). Read-only. |
 | `plan` | `path`, `printer`, `material`, `goal`, `load_axis` | Orientation, supports, settings, time, filament and check for an STL or 3MF. Returns a `plan_id`. Contacts no printer. |
 | `check` | `settings`, `printer`, `material`, `model_path`, `goal` | Checks a settings object against the printer, filament and part. Pass the whole `plan` result to check the part turned the plan's way. Contacts no printer. |
-| `slice` | `path`, `printer`, `material`, `quality` | Slices with the printer's profile; writes the G-code next to the model. |
-| `upload` | `path`, `printer`, `material`, `plan_id` | Sends a sliced file and records the job. Never starts it. The file's own `; filament_type` is the job's material; a `material` of another family (PLA-CF is not PLA) is refused, and `material` is used only when the file names none. With `plan_id`, the job keeps that plan's summary. |
+| `slice` | `path`, `printer`, `material`, `quality` | Slices with the printer's profile; writes the G-code next to the model. A slice still running after 45 s is stopped (the slicer and every process it started) and refused: the person slices it in their slicer app. |
+| `upload` | `path`, `printer`, `material`, `plan_id` | Sends a sliced file and records the job. Never starts it. The file's own `; filament_type` is the job's material; a `material` of another family (PLA-CF is not PLA) is refused, and `material` is used only when the file names none. With `plan_id`, the job keeps that plan's summary. It holds the printer's lock (step 6 below) for the whole upload, so a second upload, start or resume on that printer is refused meanwhile. Over USB serial, a file whose G-code lines can't be sent in 35 s, at a quarter of the baud rate, is refused before the port opens. |
 | `pause` | `printer` | Pauses now. Needs no permission. |
 | `cancel` | `printer` | Cancels the current print. |
 | `emergency_stop` | `printer` | The strongest stop the printer offers over the network. |
