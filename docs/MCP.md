@@ -53,14 +53,18 @@ A link inside home that points outside it is refused. Models are capped at 200 M
    plan. Control characters are removed and each field is capped. It ends "Check the bed is clear and
    the right filament is loaded." The choices are exactly Start print and Don't start.
 4. Connect to Local Studio's ask socket, check that the process serving it is `LOCAL_STUDIO_ASK_PID`
-   (SO_PEERCRED on Linux, LOCAL_PEERPID on macOS) before sending anything, send the question, and wait
-   at most 55 seconds, under the 60 seconds an MCP call gets. On a timeout the connection closes, which
-   takes the card away.
+   (SO_PEERCRED on Linux, LOCAL_PEERPID on macOS) before sending anything, send the question, and wait.
+   One 50 second budget covers the whole call, under the 60 seconds an MCP call gets: the wait gets
+   what is left after the step 1 checks, minus 15 seconds kept for the checks and the start after the
+   answer. If the step 1 checks leave no time to wait, no card is shown. On a timeout the connection
+   closes, which takes the card away.
 5. Only the exact answer Start print goes on. Typed text, Don't start, Stop (cancelled), a refusal, a
    different process on the socket, or no answer: nothing starts.
-6. Check step 1 again, because the printer may have changed while the card was open. Then mint a
-   single-use token in this process, bound to this job, its file's SHA-256 and the printer's
-   identity, and spend it at once on the start. The token is never returned, printed or logged.
+6. Check step 1 again, because the printer may have changed while the card was open. The start
+   repeats those checks, so if the re-check took longer than what is left of the budget, nothing
+   starts and the outcome is `timeout`. Then mint a single-use token in this process, bound to this
+   job, its file's SHA-256 and the printer's identity, and spend it at once on the start. The token
+   is never returned, printed or logged.
 7. Append one line to `prints.log`.
 
 `print_resume(printer)` is the same flow for a paused print. The printer must be paused on a file

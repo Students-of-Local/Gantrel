@@ -95,7 +95,10 @@ class FakeAsk:
                 if conn.recv(1) == b"":
                     self.withdrawn.set()
                 return
-            conn.sendall((json.dumps(self.reply) + "\n").encode())
+            try:
+                conn.sendall((json.dumps(self.reply) + "\n").encode())
+            except BrokenPipeError:  # the answer came after the client withdrew the card
+                self.withdrawn.set()
 
     def env(self, monkeypatch, pid: int | None = None, caller: str | None = "local:1000"):
         monkeypatch.setenv("LOCAL_STUDIO_ASK", self.path)

@@ -11,8 +11,10 @@ The flow (docs/MCP.md, "How a print starts"):
    on the printer, the first 12 hex of the file's SHA-256, the job's material and slot, and its plan
    summary. No tool argument reaches the card.
 4. Ask through Local Studio's socket (gantrel_mcp.ask), which checks the peer pid before it sends.
+   One budget (BUDGET_S) covers the whole call: the wait gets what is left minus RESERVE_S.
 5. Only on the exact answer "Start print" ("Resume print" for a resume): check step 1 again, mint a
-   token in this process and spend it at once. The token is never returned or logged.
+   token in this process and spend it at once. The token is never returned or logged. If the
+   re-check leaves too little of the budget for the start, which repeats it, nothing starts.
 6. Log the attempt to prints.log (gantrel_printer.printlog), whatever the outcome.
 """
 
@@ -20,6 +22,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 
 from gantrel_printer import config, printlog, safety, slicing
 from gantrel_printer.adapters.base import resume_binding
@@ -36,6 +39,11 @@ CARD_MAX = 2000
 LABEL_MAX, FILE_MAX, SHORT_MAX = 64, 120, 32
 NOT_IN_LOCAL_STUDIO = "not confirmed: Gantrel starts a print only after the person confirms it in Local Studio"
 TIMEOUT = "not confirmed (no answer in time); ask again when the person is ready"
+TIME_UP = "not started: the printer's checks took too long to start it within one call; ask again"
+# One print_start or print_resume call, from its first check to the printer's reply, under the 60 s an
+# MCP call gets. The card's wait gets what is left minus RESERVE_S, kept for the checks and the start.
+BUDGET_S = 50.0
+RESERVE_S = 15.0
 
 # One start or resume at a time in this server, from the re-check to the printer's reply, so two cards
 # answered together can't both pass the "printer is idle" check.
@@ -122,11 +130,14 @@ def paused_job(adapter) -> safety.Job:
     return safety.job_for_print(adapter.cfg.name, adapter.identity(), st.file)
 
 
-def confirm(text: str, choices: list[str]) -> None:
+def confirm(text: str, choices: list[str], deadline: float) -> None:
     """Steps 2 and 4. Returns only when the person chose choices[0]; raises Declined otherwise."""
     if not ask.in_local_studio():
         raise Declined("not_in_local_studio", NOT_IN_LOCAL_STUDIO)
-    res = ask.ask(text, choices)
+    wait = deadline - time.monotonic() - RESERVE_S
+    if wait <= 0:
+        raise Declined("timeout", TIME_UP)
+    res = ask.ask(text, choices, wait)
     status = res.get("status")
     if status == "answered" and res.get("answer") == choices[0]:
         return
@@ -137,6 +148,14 @@ def confirm(text: str, choices: list[str]) -> None:
     if status == "timeout":
         raise Declined("timeout", TIMEOUT)
     raise Declined("refused", "not confirmed: " + field(res.get("error") or "Local Studio refused the question", 200))
+
+
+def in_time(since: float, deadline: float) -> None:
+    """After the answer: the start repeats the checks begun at since, so it needs about as long again.
+    Raises Declined when that would run past the deadline."""
+    now = time.monotonic()
+    if now + (now - since) > deadline:
+        raise Declined("timeout", TIME_UP)
 
 
 def caller() -> str | None:
@@ -157,6 +176,7 @@ def print_start(job_id) -> dict:
     Returns a result dict for "started" and every "not confirmed" outcome. Raises PrinterError for a
     refusal (the printer is busy, the file changed, no such job), after logging it.
     """
+    deadline = time.monotonic() + BUDGET_S
     rec = {"job": _shown_id(job_id), "printer": "", "sha": ""}
     adapter = job = None
     try:
@@ -164,9 +184,11 @@ def print_start(job_id) -> dict:
         rec.update(job=job.id, printer=job.printer, sha=job.sha256)
         adapter = open_printer(job.printer)
         ready_to_start(adapter, job)
-        confirm(card("start", adapter, job), START_CHOICES)
+        confirm(card("start", adapter, job), START_CHOICES, deadline)
         with _act:
+            since = time.monotonic()
             ready_to_start(adapter, job)  # the printer may have changed while the card was open
+            in_time(since, deadline)
             adapter.start(job, safety.mint_token("start", job.printer, job.id, job.sha256, adapter.identity()))
     except Declined as d:
         _log("start", d.outcome, rec["job"], rec["printer"], rec["sha"], d.message)
@@ -196,6 +218,7 @@ def print_resume(printer) -> dict:
 
     Only a print uploaded with Gantrel (one with a job record) can be resumed here.
     """
+    deadline = time.monotonic() + BUDGET_S
     name = printer if isinstance(printer, str) and config.NAME_RE.match(printer) else "(not a printer name)"
     rec = {"job": "", "printer": name, "sha": ""}
     adapter = job = None
@@ -204,8 +227,9 @@ def print_resume(printer) -> dict:
         adapter = open_printer(cfg.name)
         job = paused_job(adapter)
         rec.update(job=job.id, sha=job.sha256)
-        confirm(card("resume", adapter, job), RESUME_CHOICES)
+        confirm(card("resume", adapter, job), RESUME_CHOICES, deadline)
         with _act:
+            since = time.monotonic()
             st = adapter.status()
             if st.state != "paused":
                 raise Refused(f"{cfg.name} is {st.state} now, not paused", "Nothing was resumed")
@@ -213,6 +237,7 @@ def print_resume(printer) -> dict:
             if binding != ("resume:" + job.id, job.sha256):
                 raise SafetyError(f"{cfg.name} is paused on a different print than the one the person confirmed",
                                   "Ask again")
+            in_time(since, deadline)
             adapter.resume(safety.mint_token("resume", cfg.name, *binding, adapter.identity()))
     except Declined as d:
         _log("resume", d.outcome, rec["job"], rec["printer"], rec["sha"], d.message)

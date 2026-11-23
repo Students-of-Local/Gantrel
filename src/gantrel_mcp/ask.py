@@ -3,8 +3,8 @@
 
 Before anything is sent, the process at the other end of the socket must be LOCAL_STUDIO_ASK_PID:
 SO_PEERCRED on Linux, LOCAL_PEERPID on macOS. On a mismatch the connection closes with nothing sent.
-The wait is capped at ASK_TIMEOUT_S, under the 60 s an MCP call gets; closing the connection on a
-timeout withdraws the card.
+The wait is the timeout the caller passes: start.py gives it what is left of one call's budget, under
+the 60 s an MCP call gets. Closing the connection on a timeout withdraws the card.
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ import sys
 import time
 
 ENV = ("LOCAL_STUDIO_ASK", "LOCAL_STUDIO_ASK_TOKEN", "LOCAL_STUDIO_ASK_PID")
-ASK_TIMEOUT_S = 55.0
 CONNECT_TIMEOUT_S = 5.0
 REPLY_MAX = 64 * 1024
 
@@ -35,13 +34,12 @@ def peer_pid(conn: socket.socket) -> int | None:
     return None
 
 
-def ask(text: str, choices: list[str], timeout: float | None = None) -> dict:
+def ask(text: str, choices: list[str], timeout: float) -> dict:
     """{"status": "answered", "answer": ...}, {"status": "cancelled"}, {"status": "timeout"} or
     {"status": "refused", "error": ...}. The ask token is sent only to a socket Local Studio serves."""
     path, token, pid = (os.environ.get(n) for n in ENV)
     if not (path and token and pid and pid.isdigit()):
         return {"status": "refused", "error": "not running under Local Studio"}
-    wait = ASK_TIMEOUT_S if timeout is None else timeout
     conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
         conn.settimeout(CONNECT_TIMEOUT_S)
@@ -56,7 +54,7 @@ def ask(text: str, choices: list[str], timeout: float | None = None) -> dict:
         if thread:
             request["thread"] = thread
         conn.sendall((json.dumps(request) + "\n").encode())
-        deadline = time.monotonic() + wait
+        deadline = time.monotonic() + timeout
         reply = b""
         while not reply.endswith(b"\n"):
             left = deadline - time.monotonic()

@@ -144,7 +144,8 @@ def test_anything_but_the_exact_answer_does_not_start(printer, tmp_path, card, m
 
 
 def test_no_answer_in_time_withdraws_the_card(printer, tmp_path, card, mints, monkeypatch):
-    monkeypatch.setattr(ask, "ASK_TIMEOUT_S", 0.5)
+    monkeypatch.setattr(start, "BUDGET_S", 1.5)
+    monkeypatch.setattr(start, "RESERVE_S", 1.0)
     job = upload(tmp_path)
     fake = card(None)  # Local Studio holds the card open; the person never answers
     t0 = time.monotonic()
@@ -157,8 +158,43 @@ def test_no_answer_in_time_withdraws_the_card(printer, tmp_path, card, mints, mo
     assert [x["outcome"] for x in log()] == ["timeout"]
 
 
-def test_the_real_wait_stays_under_the_60_second_mcp_call_timeout():
-    assert ask.ASK_TIMEOUT_S == 55.0
+def test_the_real_budget_stays_under_the_60_second_mcp_call_timeout():
+    assert start.BUDGET_S == 50.0 and 0 < start.RESERVE_S < start.BUDGET_S
+
+
+@pytest.mark.parametrize("answer_after,slow_after", [(3.0, 0.3), (0.2, 2.0)], ids=["late-answer", "slow-recheck"])
+def test_one_budget_covers_the_whole_call_and_nothing_starts_late(printer, tmp_path, card, mints, monkeypatch,
+                                                                    answer_after, slow_after):
+    """The checks, the wait and the start share one budget (50 s under the client's 60 s; scaled here to
+    4 s under 4.8 s). When the answer comes too late, or the checks after it run too slowly to leave time
+    for the start, the call returns timeout and nothing starts, so the model is never told "not started"
+    about a print that then starts."""
+    from gantrel_printer.adapters.moonraker import MoonrakerAdapter
+
+    monkeypatch.setattr(start, "BUDGET_S", 4.0)
+    monkeypatch.setattr(start, "RESERVE_S", 1.0)
+    client_limit = start.BUDGET_S * 60 / 50
+    job = upload(tmp_path)
+    delay = {"s": 0.3}
+    real = MoonrakerAdapter.status
+
+    def slow_status(self):
+        time.sleep(delay["s"])
+        return real(self)
+
+    def late_answer(_req):
+        time.sleep(answer_after)
+        delay["s"] = slow_after
+
+    monkeypatch.setattr(MoonrakerAdapter, "status", slow_status)
+    fake = card(answered("Start print"), on_question=late_answer)
+    t0 = time.monotonic()
+    out = call("print_start", {"job_id": job["job"]}).data
+    assert time.monotonic() - t0 < client_limit
+    assert out["outcome"] == "timeout" and out["started"] is False
+    assert len(fake.questions) == 1
+    assert not printer.started and printer.events == [] and mints == []
+    assert [x["outcome"] for x in log()] == ["timeout"]
 
 
 def test_socket_served_by_another_process_gets_nothing(printer, tmp_path, card, mints):
