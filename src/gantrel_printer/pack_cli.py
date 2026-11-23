@@ -58,7 +58,15 @@ def cmd_show(args):
         flag = " --accept-findings" if rep.findings else ""
         nxt = (f"Tell the person what this pack sets{' and read them every FINDING' if rep.findings else ''}. "
                f"Import it only with their yes: gantrel-printer pack import {args.file} --accept {rep.sha256[:12]}{flag}")
-    _out(args, {"pack": pack, **rep.to_dict()}, "\n".join(lines), nxt)
+    data = {"pack": pack, **rep.to_dict()}
+    if rep.private:
+        # Private data is withheld: none of the pack's strings, and no accept code for a file no one may import.
+        data["pack"] = None
+        data["withheld"] = "the pack holds private data; see refusals"
+        del data["accept"]
+        nxt = ("Do not import or share it, and do not open the file to read it out. Tell the person each REFUSED "
+               "line (the private part is hidden) so they can take it out")
+    _out(args, data, "\n".join(lines), nxt)
     return EXIT_REFUSED if rep.result == "refused" else 0
 
 

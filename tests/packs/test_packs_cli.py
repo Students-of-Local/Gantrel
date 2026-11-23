@@ -379,3 +379,27 @@ def test_orca_writes_the_packs_reviewed_start_and_end_gcode(capsys, tmp_path, go
     k2 = slicing.PRINTERS["creality-k2"]
     machine, _, _ = slicing.orca_overrides(slicing.settings(k2, slicing.material("PLA")), k2)
     assert "machine_start_gcode" not in machine and "machine_end_gcode" not in machine
+
+
+@pytest.mark.parametrize("where, before, secret", [
+    ("notes", "Questions to ", "maker@example.com"),
+    ("notes", "printer password: ", "Hunter2Secret"),
+    ("notes", "my key ", "ghp_A1b2C3d4E5f6G7h8I9j0K1l2"),
+    ("start_gcode", "LOAD_MATERIAL ; host ", "10.0.0.7"),
+])
+def test_show_withholds_a_pack_that_holds_private_data(capsys, good, write, where, before, secret):
+    if where == "notes":
+        good["notes"] += f"\n{before}{secret}"
+    else:
+        good["printer"]["start_gcode"] += f"\n{before}{secret}"
+    f = write(good)
+    rc, text, err = run(capsys, "pack", "show", f)
+    assert rc == 1 and secret not in text + err
+    assert "REFUSAL" in text and "withheld" in text and "accept code" not in text and "--accept" not in text
+    assert "Tuned on a K2" not in text   # none of the pack's contents, not only the private line
+    rc, text, err = run(capsys, "pack", "show", f, "--json")
+    d = json.loads(text)
+    assert rc == 1 and secret not in text + err
+    assert d["pack"] is None and "accept" not in d and d["refusals"]
+    rc, text, err = run(capsys, "pack", "check", f, "--json")
+    assert rc == 1 and secret not in text + err

@@ -95,6 +95,11 @@ class Report:
         return self.of("note")
 
     @property
+    def private(self) -> list[Item]:
+        """Refusals for private data. A pack with any is never shown: its strings are withheld."""
+        return [i for i in self.refusals if PRIVATE_WHY in i.reason]
+
+    @property
     def result(self) -> str:
         return "refused" if self.refusals else ("findings" if self.findings else "pass")
 
@@ -310,6 +315,7 @@ def _validate(v, spec: S, path: str, rep: Report) -> bool:
 # ---------------------------------------------------------------- privacy
 
 
+PRIVATE_WHY = "packs must not identify a person, machine or network"
 IPV4_RE = re.compile(r"(?<![\d.])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?!\.?\d)")
 IPV6_RE = re.compile(r"(?i)(?<![0-9a-f:])(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?![0-9a-f:])")
 MAC_RE = re.compile(r"(?i)(?<![0-9a-f:-])[0-9a-f]{2}([:-])(?:[0-9a-f]{2}\1){4}[0-9a-f]{2}(?![0-9a-f:-])")
@@ -407,7 +413,7 @@ def scan_string(s: str, path: str, rep: Report, multiline: bool) -> None:
             for m in rx.finditer(line):
                 hits.append((m.start(), m.end(), why))
         for why in dict.fromkeys(h[2] for h in hits):
-            rep.add("refusal", path, f"holds {why}; packs must not identify a person, machine or network", ln,
+            rep.add("refusal", path, f"holds {why}; {PRIVATE_WHY}", ln,
                     _mask(line, [(a, b) for a, b, _ in hits]))
     if not multiline and len(lines) > 1:
         rep.add("refusal", path, "must be one line")
@@ -743,7 +749,16 @@ def check_bytes(data: bytes) -> tuple[dict | None, Report]:
     for key in ("start_gcode", "end_gcode"):
         gcode_policy(p[key], f"printer.{key}", p["hotend_max_c"], p["bed_max_c"], rep)
     material_rules(raw, rep)
+    _mask_private_lines(rep)
     return raw, rep
+
+
+def _mask_private_lines(rep: Report) -> None:
+    """Every result on a line that holds private data shows the masked line, never the raw one."""
+    masked = {(i.path, i.line): i.text for i in rep.private}
+    for i in rep.items:
+        if i.text and (i.path, i.line) in masked:
+            i.text = masked[(i.path, i.line)]
 
 
 def check_file(path: str | Path) -> tuple[dict | None, Report, bytes]:
@@ -1050,8 +1065,11 @@ def show_lines(pack: dict | None, rep: Report, data: bytes) -> list[str]:
         marks.setdefault((i.path, i.line), []).append(i)
     verdict = {"pass": "PASS", "findings": f"{len(rep.findings)} FINDING(S) need the person's acceptance",
                "refused": f"REFUSED ({len(rep.refusals)} refusal(s), {len(rep.findings)} finding(s))"}[rep.result]
-    if pack is None:
+    if pack is None or rep.private:
         lines += [f"Pack file (sha256 {sha})", f"Result: {verdict}"]
+        if pack is not None:
+            lines.append("Contents withheld: the pack holds private data (the refusals below say where, with it "
+                         "hidden). Nothing else in it is shown until that is taken out.")
     else:
         p = pack["printer"]
         yn = {True: "yes", False: "no"}
@@ -1106,8 +1124,8 @@ def show_lines(pack: dict | None, rep: Report, data: bytes) -> list[str]:
         lines.append("Proof (what the author says was tested; shown, not checked):")
         lines += [f"  {pr['date']} {pr['kind']}: {shown(pr['note'], 300)}" for pr in pack["proof"]] or ["  none given"]
     shown_paths = {("printer.start_gcode",), ("printer.end_gcode",)}
-    rest = [i for i in rep.items if not (pack is not None and (i.path.startswith("materials[") or
-                                                               (i.path,) in shown_paths))]
+    listed = pack is not None and not rep.private
+    rest = [i for i in rep.items if not (listed and (i.path.startswith("materials[") or (i.path,) in shown_paths))]
     if rest:
         lines.append("Other results:")
         lines += [f"  {i.level.upper()} {i.where()}: {i.reason}" + (f"  [{i.text}]" if i.text else "") for i in rest]
