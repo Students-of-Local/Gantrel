@@ -111,6 +111,20 @@ Calibration prints (`gantrel-printer calibrate <printer> first-layer|temp-tower|
 
 Not checked yet: a real Local Studio thread showing the card and a person clicking it; any MCP start on a real printer; the server under Claude Code, Codex or Grok Bot.
 
+### Printer packs
+
+`gantrel-printer pack check|show|export|import|list|remove`, and `slice`, `plan` and `check` with `--printer pack:<id>`. Details in [docs/PRINTERS.md](docs/PRINTERS.md#sharing-a-printer-setup). Everything here is tested with fixtures only (`tests/packs/`): no pack has been made from a real printer's tuned settings, printed with, or shared through a real pull request yet.
+
+| Part | Proven |
+|---|---|
+| Schema, ranges and filament rules | Fixtures only: unknown keys at every level, missing and wrong types, out of range numbers, oversize file, strings and G-code, duplicate keys, and materials that break the check rules (temperatures, enclosure, hardened nozzle, direct drive, fan, retraction, flow) are each refused with the field path. |
+| Privacy scan | Fixtures only: one test per pattern (IPv4, IPv6, MAC, email, credential URL, three kinds of home path, serial, access code, token, hex, camera URL, local host name, Wi-Fi name, user name), each refused with its field path and the match hidden; ordinary text passes. A pattern scan can miss private data written in other shapes, so reviewers still read `pack show`. |
+| G-code policy | Fixtures only: every refused command, refused temperatures above the pack's limits, every allowed command, and findings for other commands, each with its line number. |
+| Export, show, import, list, remove | Fixtures only: export from a fake paired K2 holds none of its private fields and never touches the keyring; import refuses a missing or wrong accept code, refusals, unaccepted findings and a different file under the same id; an installed file that changed is refused. |
+| Slicing and planning with `pack:<id>` | Fixtures only: a fake slicer gets the pack's temperatures, retraction speed and flow ratio; plan uses the pack's flow cap and speed limit. No real slicer run, no real print. |
+| `profiles/community/creality-k2-pla.json` | Built from Gantrel's own K2 profile and PLA defaults; passes `pack check` (also in CI). Not printed as a pack. |
+| `/setup-printer` skill | Its commands and flags match the CLI (test). Not yet run by a local model. |
+
 ## Not supported yet
 
 - Making a part through `/gantrel` on LFM2.5-8B-A1B or LFM2.5-24B-A2B. In 5 runs the 8B always ran `stone status` first, then lost the request: three times it asked the user what to make, once it ran `stone new` and then wandered through the job files, once it printed the NEXT line as text instead of running it. The 24B on parish1 (split across CPU and GPU) never sent a token within Eukhe's 300 and 600 s stream timeouts, in 2 runs straight to Ollama and 2 through the controller.

@@ -496,6 +496,126 @@ limit; PrusaSlicer, as slicing.py calls it, sets no volumetric limit, so they wo
 and only when the standard settings are over the cap. Its Bowden retraction (0.8 mm) is under the Bowden
 range and warns.
 
+## Sharing a printer setup
+
+Once a printer works, its setup can be saved as a printer pack and shared with other owners of the
+same model. A pack is data only: the printer's size and limits, its start and end G-code, and the
+filament settings that printed well. It never holds code, and never anything that identifies the
+person's machine or network. A pack never pairs with or contacts a printer; network pairing stays
+separate. The code is `src/gantrel_printer/packs.py` and `pack_cli.py`; the skill is
+`skills/plugin/printer-setup/` (`/setup-printer`).
+
+| Command | What it does |
+|---|---|
+| `gantrel-printer pack check <file>...` | Runs every check below. Exit 1 on any refusal (and on findings with `--strict`). |
+| `gantrel-printer pack show <file>` | Everything a reviewer needs on one screen: the summary, every material row, every start and end G-code line with its findings marked, the sha256 and the accept code (its first 12 hex digits). |
+| `gantrel-printer pack export <printer> [--id] [--name] [--author] [--notes] [--material ...] [--out]` | Builds a pack from a paired printer (or a profile key) and the material settings Gantrel uses for it, checks it, writes it, and prints the sha256. |
+| `gantrel-printer pack import <file> --accept <code> [--accept-findings] [--replace]` | Installs the reviewed file. |
+| `gantrel-printer pack list`, `pack remove <id>` | Installed packs. |
+| `slice`, `plan`, `check` with `--printer pack:<id>` | Use an installed pack's printer profile and material numbers. |
+
+### The format
+
+JSON, `"format": "gantrel-pack/1"`. Unknown keys are refused at every level, a key may appear only
+once, and NaN or Infinity are refused. Limits: the file 256 KiB, any string 4096 characters, each
+G-code block 8 KiB, `notes` 2000, `author` 64.
+
+| Field | Rule |
+|---|---|
+| `id` | 3 to 64 lowercase letters, digits and hyphens, not starting or ending with a hyphen |
+| `name`, `version`, `author`, `created`, `notes` | text up to 120; semver like `1.0.0`; text up to 64; a real date `YYYY-MM-DD`; text up to 2000 |
+| `printer.model`, `adapter`, `flavor` | a label; one of Gantrel's adapter types; klipper, marlin, marlin2, reprapfirmware, repetier or smoothie |
+| `printer.bed`, `height` | whole mm, 50 to 2000 |
+| `printer.nozzle`, `filament_mm` | 0.1 to 2.0 mm; 1.75, 2.85 or 3.0 mm |
+| `printer.max_speed`, `accel`, `max_accel` | 10 to 2000 mm/s; 100 to 100000 mm/s2 each, with `accel` <= `max_accel` |
+| `printer.hotend_max_c`, `bed_max_c`, `max_flow` | 150 to 500 C; 0 to 200 C; 1 to 200 mm3/s |
+| `printer.high_flow`, `hardened_nozzle`, `enclosed`, `chamber_heater`, `direct_drive` | true or false |
+| `printer.start_gcode`, `end_gcode` | printable ASCII G-code, line feeds only, under the policy below |
+| `printer.orca_machine`, `default_ports` | optional: an OrcaSlicer machine profile name; up to 8 service names to ports 1 to 65535 |
+| `materials[]` | 1 to 32 of: `family` (a materials.json family), `brand`, `name`, `nozzle_c`, `first_layer_nozzle_c` (150 to 500), `bed_c`, `first_layer_bed_c` (0 to 200), `fan` [min, max] (0 to 100, min <= max), `max_flow` (0.5 to 200), `retraction_mm` (0 to 15), `retraction_speed` (5 to 150), optional `pressure_advance` (0 to 2) and `flow_ratio` (0.5 to 1.5), and `calibrated[]`: {`test`: first-layer, temp-tower, retraction or flow; `date`; `result` text} |
+| `proof[]` | {`kind`: print, calibration or slice; `date`; `note`}. What the author says was tested: shown, never trusted as proof |
+
+Each material also goes through plan/check.py's rules against the pack's own printer: nozzle, first
+layer nozzle, bed and first layer bed inside the family's range and under `hotend_max_c` and
+`bed_max_c`; the fan inside the family's range; retraction inside the direct drive or Bowden range;
+an enclosure for materials that need one; a hardened nozzle for abrasive filaments; direct drive
+for flexible ones; and `max_flow` no higher than the printer's. Two materials may not share a brand
+and name. A rule check.py only warns about (an enclosed printer with PLA: open the lid) is shown as
+a note.
+
+### Privacy scan
+
+Every string in the file, keys included, is scanned whatever the schema says. Any of these refuses
+the pack, with the field path and the line, and the match hidden in the output: IPv4 and IPv6
+addresses, MAC addresses, emails, URLs with a user or password, home folder paths (`/home/`,
+`/Users/`, `C:\Users`), local host names (`.local`, `.lan`, `.home`, `.internal`, `.ts.net`,
+`localhost`), camera and stream URLs (rtsp, rtmp, webrtc, or a path with webcam, snapshot, stream,
+mjpg or camera), URLs with a port, things shaped like printer serials (12 to 20 capitals and digits
+with at least 3 digits), 8 character codes with a digit within 30 characters of the word code,
+access, passcode or pin, hex strings of 20 or more, token-shaped strings of 20 or more that mix
+capitals, small letters and digits, and `password:`, `token=`, `user:`, `ssid:` or `serial:`
+style pairs. Invisible and control characters (bidi overrides, zero-width spaces, escape codes) are
+refused too, so a pack reads the same to a person as to a machine.
+
+### G-code policy
+
+`start_gcode` and `end_gcode` are read line by line, after comments (`;` and `#`) are dropped.
+
+| Line | Result |
+|---|---|
+| `M500` `M501` `M502` `M504` (EEPROM), `M997` (firmware update), `M999` (firmware restart), `M303` (PID autotune) | refused |
+| `M92` `M201` `M203` `M206` `M301` `M304` `M851` `M906` `M913` (machine settings), `M302` (cold extrusion), `M211 S0` (soft endstops off) | refused |
+| `SAVE_CONFIG`, `FIRMWARE_RESTART`, `RESTART`, `RUN_SHELL_COMMAND`, `SET_KINEMATIC_POSITION`, `SDCARD_PRINT_FILE`, `SET_STEPPER_ENABLE` | refused |
+| any heater temperature literal above the pack's limit: `M104`/`M109` S or R over `hotend_max_c`, `M140`/`M190` over `bed_max_c`, macro parameters such as `EXTRUDER_TEMP=`, `BED_TEMP=`, `SET_HEATER_TEMPERATURE ... TARGET=` | refused |
+| a refused command anywhere on a line (not only first), except in `M117` and `M118` display text | refused |
+| a slicer expression with quotes (`{"SAVE" + "_CONFIG"}`): it builds text at slice time | refused |
+| non-ASCII or control characters | refused |
+| `G0` `G1` `G2` `G3` `G4` `G28` `G29` `G90` `G91` `G92`, `M82` `M83` `M84` `M104` `M105` `M106` `M107` `M109` `M140` `M190` `M141` `M191` `M204` `M205` `M220` `M221` `M400` `M117` `M73`, `T0` to `T15`, comments, blank lines | allowed |
+| Klipper macros `START_PRINT` `END_PRINT` `PRINT_START` `PRINT_END` `BED_MESH_CALIBRATE` `CLEAN_NOZZLE` `PAUSE` `RESUME` `CANCEL_PRINT` | allowed |
+| slicer placeholders `{name}`, `{name[0]}` or `[name]` from the known list: first_layer_temperature, first_layer_bed_temperature, temperature, bed_temperature, chamber_temperature, overall_chamber_temperature, nozzle_diameter, layer_height, first_layer_height, initial_layer_print_height, initial_extruder, current_extruder, initial_tool, filament_type, filament_diameter, nozzle_temperature, nozzle_temperature_initial_layer, bed_temperature_initial_layer, bed_temperature_initial_layer_single, hot_plate_temp, hot_plate_temp_initial_layer, textured_plate_temp, textured_plate_temp_initial_layer, print_bed_max, print_bed_min, first_layer_print_min, first_layer_print_max, first_layer_print_size, max_layer_z, layer_num, layer_z, total_layer_count, travel_speed, retract_length, retraction_length | allowed |
+| any other command, macro or placeholder | a finding: shown, and it needs the person's acceptance, because printers have their own macros |
+
+### Review and import
+
+1. `pack show <file>` prints the sha256 and its first 12 hex digits, the accept code.
+2. `pack import <file> --accept <code>` reads the file once, hashes those bytes, checks them, and
+   installs exactly them. It refuses without `--accept`, when the code does not match the file,
+   on any refusal, and on findings unless `--accept-findings` is given. So what the person read in
+   `pack show` is what gets installed.
+3. The file goes to `<config dir>/packs/<id>/<sha256>.json` (the folders 0700, the file 0600). A
+   different file under the same id is never replaced without `--replace`. Accepted findings are
+   recorded next to it.
+4. Each time an installed pack is used, its bytes are hashed and checked again: a file that changed
+   after import, or a pack with findings no one accepted, is refused.
+
+### Using a pack
+
+`--printer pack:<id>` on `slice`, `plan` and `check` builds the printer profile from the pack and
+uses the pack's settings for the material named with `--material` (a family, or the material's
+name when a pack has two of one family). The output names the source as `pack <id> <hash12>`.
+The pack's `max_flow` for that material is the flow cap, used as is, like a vendor preset. Its
+retraction speed and flow ratio go to PrusaSlicer (`--retract-speed`, `--extrusion-multiplier`) and
+OrcaSlicer; pressure advance goes to OrcaSlicer only (PrusaSlicer has no such setting). The pack's
+printer limits are its author's values, and plan says so. Uploading still goes to a paired printer.
+
+### Export
+
+`pack export` reads only the adapter type and model of the paired printer from `printers.json`. It
+never reads the OS keyring or emits the host, port, serial, fingerprint, camera URLs or the
+printer's name. Materials are Gantrel's own defaults (PLA, PETG, ABS, ASA, TPU) that pass on that
+printer; the rest are left out with the reason. The flow is the cap plan uses for that printer and
+filament. Gantrel's PETG fan (30 to 60 percent) is below the cited PETG range (40 to 90), so the
+pack gets 40 to 60, as plan does, and export says so. Gantrel does not record calibration results,
+so every `calibrated` list is empty and export says so; the retraction speed is PrusaSlicer's
+default, 40 mm/s, because Gantrel's profiles do not set one.
+
+### Sharing
+
+Shared packs live in `profiles/community/` in this repository. The way in is a pull request: the
+author exports, runs `pack check` and `pack show`, and opens a pull request listing every finding;
+reviewers read the file with `pack show`; CI runs `pack check` on every file in the folder and fails
+on any refusal. See [profiles/community/README.md](../profiles/community/README.md).
+
 ## Agent-written adapters
 
 An agent can write a new adapter by reading a device's docs or API reference. Before it is used:
