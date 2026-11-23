@@ -8,8 +8,16 @@ import numpy as np
 import pytest
 
 import shapes
-from gantrel_printer.plan import mesh
+from gantrel_printer import materials, slicing
+from gantrel_printer.plan import mesh, orient
 from gantrel_printer.plan.mesh import MeshError
+
+UP = np.array([0.0, 0.0, -1.0])   # the file's own bottom faces the bed
+MUSHROOM_MM3 = 10 * 10 * 20 + 30 * 30 * 5
+
+
+def _upright_support(m):
+    return orient.evaluate(m, UP, slicing.PRINTERS["creality-k2"], materials.get("PLA"))
 
 
 def test_binary_round_trip(tmp_path):
@@ -88,6 +96,24 @@ def test_degenerate_facets_dropped_and_open_mesh_reported():
     opened = mesh.read_stl(mesh.stl_bytes(t[:-1]))
     assert not opened.watertight()["watertight"]
     assert any("not watertight" in w for w in opened.warnings)
+
+
+def test_inward_winding_is_turned_right_way_out():
+    """Some exporters wind every facet inward: the part is watertight but its volume is negative and every
+    normal points in, so an upright mushroom's cap would read as facing up and need no supports."""
+    m = mesh.read_stl(mesh.stl_bytes(shapes.mushroom().tris[:, [0, 2, 1]]))
+    assert m.volume == pytest.approx(MUSHROOM_MM3)
+    assert any("volume came out negative" in w for w in m.warnings)
+    fresh = mesh.Mesh(m.tris.copy())    # the welding and edges carried over match ones worked out again
+    assert np.array_equal(m.faces, fresh.faces)
+    assert all(np.array_equal(a, b) for a, b in zip(m.edges, fresh.edges))
+    c = _upright_support(m)
+    assert c.needs_support
+    assert c.support_volume_mm3 == pytest.approx(shapes.MUSHROOM_UPRIGHT_SUPPORT_MM3, rel=0.15)
+    # A mesh already facing out is left alone, and an open one is not judged by its volume.
+    assert not any("volume came out negative" in w for w in mesh.read_stl(mesh.stl_bytes(shapes.mushroom().tris)).warnings)
+    opened = mesh.read_stl(mesh.stl_bytes(shapes.mushroom().tris[:-1, [0, 2, 1]]))
+    assert not any("volume came out negative" in w for w in opened.warnings)
 
 
 def test_unit_warnings():
@@ -263,3 +289,29 @@ def test_plan_reads_a_bambu_style_3mf(tmp_path):
                    {"3D/Objects/object_1.model": _mesh_object(1, shapes.mushroom())})
     p = optimize.plan(mesh.load(f), slicing.PRINTERS["bambu-x1c"], "PLA")
     assert p["check"]["ok"] and p["part"]["volume_mm3"] == pytest.approx(abs(shapes.mushroom().volume), rel=1e-6)
+
+
+def test_3mf_mirrored_parts_keep_their_facets_facing_out(tmp_path):
+    """A part mirrored in Bambu Studio or OrcaSlicer has a transform with a negative determinant. Mirroring
+    flips which way every facet winds, so the reader must turn them back. Here only the mushroom is mirrored
+    and the cube beside it is bigger, so the total volume stays positive and a whole-mesh check would miss it."""
+    root = ('<object id="3" type="model"><components>'
+            '<component p:path="/3D/Objects/object_1.model" objectid="1" transform="-1 0 0 0 1 0 0 0 1 30 0 0"/>'
+            '<component p:path="/3D/Objects/object_2.model" objectid="2" transform="1 0 0 0 1 0 0 0 1 60 0 0"/>'
+            '</components></object>')
+    f = _bambu_3mf(tmp_path / "mirrored.3mf", root, '<item objectid="3"/>',
+                   {"3D/Objects/object_1.model": _mesh_object(1, shapes.mushroom()),
+                    "3D/Objects/object_2.model": _mesh_object(2, shapes.cube(40.0))})
+    m = mesh.load(f)
+    assert m.volume == pytest.approx(40.0 ** 3 + MUSHROOM_MM3)
+    c = _upright_support(m)
+    assert c.support_volume_mm3 == pytest.approx(shapes.MUSHROOM_UPRIGHT_SUPPORT_MM3, rel=0.15)
+    # The whole build item mirrored (x and y: a determinant of +1 is a turn, not a mirror; x alone is).
+    one = _bambu_3mf(tmp_path / "item.3mf", '<object id="3" type="model"><components>'
+                     '<component p:path="/3D/Objects/object_1.model" objectid="1"/></components></object>',
+                     '<item objectid="3" transform="-1 0 0 0 1 0 0 0 1 128 128 0"/>',
+                     {"3D/Objects/object_1.model": _mesh_object(1, shapes.mushroom())})
+    m = mesh.load(one)
+    assert m.volume == pytest.approx(MUSHROOM_MM3)
+    assert not any("volume came out negative" in w for w in m.warnings)
+    assert _upright_support(m).support_volume_mm3 == pytest.approx(shapes.MUSHROOM_UPRIGHT_SUPPORT_MM3, rel=0.15)

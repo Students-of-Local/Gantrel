@@ -101,3 +101,39 @@ def cylinder(radius: float = 10.0, height: float = 20.0, sides: int = 64) -> Mes
         tris.append([(p[0], p[1], 0), (q[0], q[1], 0), (q[0], q[1], height)])
         tris.append([(p[0], p[1], 0), (q[0], q[1], height), (p[0], p[1], height)])
     return Mesh(np.array(tris, float), name="cylinder", kind="test")
+
+
+TERRAIN_BED_DOWN = (-0.2962, 0.5, -0.8138)   # where terrain()'s flat bottom faces after its tilt
+
+
+def terrain_tris(n: int, w: float = 80.0, d: float = 60.0, h: float = 12.0, amp: float = 3.0) -> np.ndarray:
+    """A closed block, w x d, with a flat bottom and a wavy top up to h + amp, both faces cut into an n x n
+    grid (4 n^2 + 8 n triangles: n = 500 gives about a million). It is tilted 30 degrees about X and 20 about
+    Y, so the side that should face the bed (the bottom, TERRAIN_BED_DOWN) is on no axis. Its volume is
+    w x d x h exactly: the waves average out."""
+    xs, ys = np.linspace(0, w, n + 1), np.linspace(0, d, n + 1)
+    gx, gy = np.meshgrid(xs, ys, indexing="ij")
+    top = np.stack([gx, gy, h + amp * np.sin(gx / w * 3 * np.pi) * np.cos(gy / d * 2 * np.pi)], -1)
+    bottom = np.stack([gx, gy, np.zeros_like(gx)], -1)
+
+    def grid(p, up):
+        a, b, c, e = p[:-1, :-1], p[1:, :-1], p[1:, 1:], p[:-1, 1:]
+        pair = ((a, b, c), (a, c, e)) if up else ((a, c, b), (a, e, c))
+        return np.concatenate([np.stack(t, -2).reshape(-1, 3, 3) for t in pair])
+
+    def wall(t, b, out):
+        a, c, e, f = b[:-1], b[1:], t[1:], t[:-1]
+        pair = ((a, c, e), (a, e, f)) if out else ((a, e, c), (a, f, e))
+        return np.concatenate([np.stack(q, 1) for q in pair])
+
+    tris = np.concatenate([grid(top, True), grid(bottom, False),
+                           wall(top[:, 0], bottom[:, 0], True), wall(top[:, -1], bottom[:, -1], False),
+                           wall(top[0, :], bottom[0, :], False), wall(top[-1, :], bottom[-1, :], True)])
+    rx, ry = math.radians(30), math.radians(20)
+    turn_x = np.array([[1, 0, 0], [0, math.cos(rx), -math.sin(rx)], [0, math.sin(rx), math.cos(rx)]])
+    turn_y = np.array([[math.cos(ry), 0, math.sin(ry)], [0, 1, 0], [-math.sin(ry), 0, math.cos(ry)]])
+    return tris @ (turn_y @ turn_x).T
+
+
+def terrain(n: int = 20) -> Mesh:
+    return Mesh(terrain_tris(n), name=f"terrain-{n}", kind="test")

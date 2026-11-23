@@ -366,10 +366,20 @@ def cmd_plan(args):
     try:
         p = optimize.plan(m, printer, args.material, args.goal, args.load_axis)
     except optimize.PlanRefused as err:
-        data = {"refused": True, "reason": err.message, "fix": err.hint, **err.result}
+        data = {"refused": True, "refused_for": err.reasons, "reason": err.message, "fix": err.hint, **err.result}
         lines = [f"REFUSED: {err.message}."] + _rule_lines(err.result["check"])
-        out(args, data, "\n".join(lines), "Tell the person this printer and filament do not go together, and why; "
-                                           "offer a filament or printer that does")
+        if err.reasons == [optimize.TOO_BIG]:
+            nxt = ("Tell the person the part is bigger than this printer can build, with the sizes above; offer to "
+                   "scale it down, split it into pieces, or use a printer with a bigger build volume. Another "
+                   "filament will not help")
+        elif optimize.TOO_BIG in err.reasons:
+            nxt = ("Tell the person both problems: the part is bigger than this printer can build, and this printer "
+                   "and filament do not go together; offer a printer with a bigger build volume that suits the "
+                   "filament, or a smaller or split part on a printer that suits it")
+        else:
+            nxt = ("Tell the person this printer and filament do not go together, and why; offer a filament or "
+                   "printer that does")
+        out(args, data, "\n".join(lines), nxt)
         return EXIT_ERROR
     best = p["orientations"][0]
     e, s, c = p["estimate"], p["settings"], p["check"]
@@ -386,6 +396,10 @@ def cmd_plan(args):
     for alt in p["orientations"][1:]:
         lines.append(f"  also: X {alt['rotate_xyz_deg'][0]}, Y {alt['rotate_xyz_deg'][1]}, Z {alt['rotate_xyz_deg'][2]}: "
                      f"{alt['reason']}")
+    if p["orientation_scoring"].get("note"):
+        lines.append(f"  Note: {p['orientation_scoring']['note']}")
+    if p.get("thin_wall_note"):
+        lines.append(f"  Note: {p['thin_wall_note']}")
     lines.append(f"Supports: {s['supports']}" + (f" (about {best['support_volume_mm3']:.0f} mm3 to hold up "
                                                    f"{best['overhang_mm2']:.0f} mm2)" if s["supports"] != "off" else ""))
     lines.append(f"Time: about {fmt_duration(e['seconds'])} (between {fmt_duration(e['low_seconds'])} and "
@@ -452,10 +466,11 @@ def cmd_check(args):
             m = m.transformed(rot)
             turned = "turned the plan's way (its orientations[0].rotation_matrix)"
         cand = orient.evaluate(m, np.array([0.0, 0.0, -1.0]), printer, fil)
-        e = pest.estimate(cand.mesh, s, printer, fil, cand.support_volume_mm3, cand.support_contact_mm2)
+        placed = cand.mesh
+        e = pest.estimate(placed, s, printer, fil, cand.support_volume_mm3, cand.support_contact_mm2)
         part = {"fits": cand.fits, "size_mm": [round(v, 2) for v in (*cand.footprint_mm, cand.height_mm)],
                 "bed_mm": list(printer.bed), "max_height_mm": printer.height, "overhang_mm2": cand.overhang_mm2,
-                "bridges": cand.bridges, "thinnest_wall_mm": orient.thinnest_wall(cand.mesh),
+                "bridges": cand.bridges, "thinnest_wall_mm": orient.thinnest_wall(placed),
                 "smallest_layer_seconds": e["smallest_layer_seconds"],
                 "layers_below_min_layer_time": e["layers_below_min_layer_time"]}
         part["orientation"] = turned
