@@ -66,15 +66,40 @@ def test_k2_limits_are_cited():
         assert "creality.com" in p.limits_source and "OrcaSlicer" in p.limits_source
 
 
-def test_other_printers_use_marked_defaults():
+# What each vendor publishes (the profile comments in slicing.py name the page and its words).
+CITED = {
+    "bambu-x1c": {"hotend_max_c": 300, "bed_max_c": 120, "hardened_nozzle": True},
+    "bambu-p1s": {"hotend_max_c": 300, "bed_max_c": 100, "hardened_nozzle": False},
+    "bambu-p1p": {"hotend_max_c": 300, "bed_max_c": 100, "hardened_nozzle": False},
+    "bambu-a1": {"hotend_max_c": 300, "bed_max_c": 100, "hardened_nozzle": False},
+    "bambu-a1-mini": {"hotend_max_c": 300, "bed_max_c": 80, "hardened_nozzle": False},
+    "creality-k1-max": {"hotend_max_c": 300, "hardened_nozzle": True},
+    "creality-ender3-v3": {"hotend_max_c": 300, "bed_max_c": 110, "hardened_nozzle": True},
+    "prusa-mk4": {"hotend_max_c": 290, "bed_max_c": 120, "hardened_nozzle": False},
+}
+DEFAULTS = {"hotend_max_c": slicing.DEFAULT_HOTEND_MAX_C, "bed_max_c": slicing.DEFAULT_BED_MAX_C,
+            "max_flow": slicing.DEFAULT_MAX_FLOW, "hardened_nozzle": False, "chamber_heater": False, "high_flow": False}
+
+
+@pytest.mark.parametrize("key", sorted(CITED))
+def test_vendor_limits_are_cited(key):
+    p = slicing.PRINTERS[key]
+    for k, v in CITED[key].items():
+        assert getattr(p, k) == v and p.is_cited(k), (key, k)
+    assert p.limits_source.startswith("https://")
+
+
+def test_uncited_limits_are_marked_defaults():
+    """A value not in `cited` is Gantrel's default, and only a cited value may differ from it."""
     for p in slicing.PRINTERS.values():
-        if p.key.startswith("creality-k2"):
-            continue
-        assert not p.is_cited("hotend_max_c") and p.hotend_max_c == slicing.DEFAULT_HOTEND_MAX_C
-        assert not p.is_cited("max_flow") and p.max_flow == slicing.DEFAULT_MAX_FLOW
-        assert not p.hardened_nozzle and not p.chamber_heater
+        for k, default in DEFAULTS.items():
+            if not p.is_cited(k):
+                assert getattr(p, k) == default, (p.key, k)
         if p.cited:
-            assert p.limits_source
+            assert p.limits_source, p.key
+    # A printer named in no vendor source keeps every default.
+    for key in ("generic-marlin", "generic-klipper", "creality-k1", "prusa-mk3", "elegoo-centauri-carbon"):
+        assert not {"hotend_max_c", "bed_max_c", "hardened_nozzle"} & set(slicing.PRINTERS[key].cited), key
 
 
 def test_printer_profile_is_backward_compatible():

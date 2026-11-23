@@ -3,7 +3,8 @@
 The goal sets the quality floor (layer height, outer wall speed, walls). Everything that does not
 show on the surface (inner walls, infill, supports) then runs at the highest speed the flow cap,
 the printer's top speed and acceleration allow. The result always passes check(); a printer and
-filament pair that cannot pass is refused with the rules that failed.
+filament pair that cannot pass is refused with the rules that failed. Only a cited printer limit refuses:
+past one of Gantrel's defaults the plan carries a warning instead.
 """
 
 from __future__ import annotations
@@ -35,7 +36,9 @@ RETRACT_DEFAULT = {True: 0.8, False: 4.0}   # direct drive, Bowden: when slicing
 BRIM_ASPECT = 3.0              # height / smallest footprint side above this gets a brim
 BRIM_MM = 5
 FLAT_OVERHANG_Z = -0.99        # overhangs this flat suit grid supports; anything else gets tree supports
-# Rules a plan cannot fix by changing settings: the printer and filament do not go together.
+# Rules a plan cannot fix by changing settings: the printer and filament do not go together. The hardened nozzle
+# rule, like the hotend and bed rules below, fails only on a limit the printer's profile cites; past one of
+# Gantrel's defaults it warns, so the plan goes ahead and tells the person what to check.
 REFUSE = ("enclosure", "hardened nozzle", "direct drive for flexible", "part fits the printer")
 
 

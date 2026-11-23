@@ -70,7 +70,7 @@ def test_check_round_trip(capsys, stl, tmp_path):
     assert rc == 0 and "pass" in out
     s = json.loads(plan_json.read_text())["settings"]
     s["infill_speed_mms"] = 249
-    s["nozzle_c"] = 300
+    s["nozzle_c"] = 310                      # over PLA's range and over the A1's cited 300 C hotend
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps(s))
     rc, out, _ = run(capsys, "check", str(bad), "--printer", "bambu-a1", "--material", "PLA", "--json")

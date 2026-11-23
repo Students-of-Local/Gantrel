@@ -76,14 +76,22 @@ def test_settings_rule_passes_then_breaks(name, change, bad):
 
 
 def test_hotend_and_bed_heater_limits():
+    """Past a cited limit the rule fails; past one of Gantrel's defaults it warns and says to check."""
     s = good()
     assert status(s, "nozzle temperature within the hotend") == "pass"
+    assert A1.is_cited("hotend_max_c") and A1.is_cited("bed_max_c")
     cold = dataclasses.replace(A1, hotend_max_c=210)
     assert status(s, "nozzle temperature within the hotend", printer=cold) == "fail"
     r = rule(C.check(s, cold, PLA, PART), "nozzle temperature within the hotend")
-    assert "Gantrel's default, not a spec" in r["fix"] and r["values"]["cited"] is False
+    assert r["values"]["cited"] is True and "limited to 210 C" in r["fix"]
+    guess = dataclasses.replace(A1, hotend_max_c=210, cited=())
+    r = rule(C.check(s, guess, PLA, PART), "nozzle temperature within the hotend")
+    assert r["status"] == "warn" and r["values"]["cited"] is False
+    assert "Gantrel's default hotend max of 210 C, not a printer spec" in r["fix"]
     assert status(s, "bed temperature within the bed heater") == "pass"
     assert status(s, "bed temperature within the bed heater", printer=dataclasses.replace(A1, bed_max_c=50)) == "fail"
+    assert status(s, "bed temperature within the bed heater",
+                  printer=dataclasses.replace(A1, bed_max_c=50, cited=())) == "warn"
 
 
 def test_outer_wall_cap_depends_on_the_goal():
@@ -114,7 +122,9 @@ def test_hardened_nozzle():
     cf = materials.get("PLA-CF")
     s = good(K2, cf)
     assert status(s, "hardened nozzle", printer=K2, fil=cf) == "pass"
-    assert status(s, "hardened nozzle", printer=A1, fil=cf) == "fail"
+    assert status(s, "hardened nozzle", printer=A1, fil=cf) == "fail"            # cited: stainless steel
+    assert status(s, "hardened nozzle", printer=X1C, fil=cf) == "pass"           # cited: hardened steel
+    assert status(s, "hardened nozzle", printer=MARLIN, fil=cf) == "warn"        # Gantrel's brass default
 
 
 def test_flexible_needs_direct_drive():

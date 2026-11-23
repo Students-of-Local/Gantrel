@@ -3,6 +3,10 @@
 Every rule returns its name, pass, warn, fail or skip, the formula it used, the numbers it put in,
 and what to change. A fail means the print is likely to fail or damage something; a warn means it
 will likely print but worse than it could. Every limit is a named constant below.
+
+A printer limit can fail a rule only when the printer's profile cites it (PrinterProfile.cited). Past a limit
+that is Gantrel's default, not a spec, the rule warns and names the assumption, so the person checks their
+printer instead of being told it cannot print something it can.
 """
 
 from __future__ import annotations
@@ -40,6 +44,11 @@ REQUIRED = ("nozzle_c", "bed_c", "layer_height_mm", "first_layer_height_mm", "pe
 
 def _r(rule, status, formula, values, fix=""):
     return {"rule": rule, "status": status, "formula": formula, "values": values, "fix": fix if status != "pass" else ""}
+
+
+def _limit(ok: bool, cited: bool) -> str:
+    """pass, or fail past a cited printer limit, or warn past one of Gantrel's defaults."""
+    return "pass" if ok else ("fail" if cited else "warn")
 
 
 def _width(s: dict, key: str, nozzle: float) -> float:
@@ -80,12 +89,14 @@ def _temps(s, printer, fil):
         out.append(_r(f"{label} temperature in the {fil.name} range", "pass" if ok else "fail",
                       "nozzle_min <= T <= nozzle_max", {"T": t, "nozzle_min": fil.nozzle_min_c, "nozzle_max": fil.nozzle_max_c},
                       f"Set {key} between {fil.nozzle_min_c} and {fil.nozzle_max_c} C"))
+        cited = printer.is_cited("hotend_max_c")
         ok = t <= printer.hotend_max_c
-        out.append(_r(f"{label} temperature within the hotend", "pass" if ok else "fail", "T <= hotend_max",
-                      {"T": t, "hotend_max": printer.hotend_max_c, "cited": printer.is_cited("hotend_max_c")},
-                      f"{printer.label}'s hotend is limited to {printer.hotend_max_c} C"
-                      + ("" if printer.is_cited("hotend_max_c") else " (Gantrel's default, not a spec)")
-                      + f": {fil.name} cannot print on it"))
+        out.append(_r(f"{label} temperature within the hotend", _limit(ok, cited), "T <= hotend_max",
+                      {"T": t, "hotend_max": printer.hotend_max_c, "cited": cited},
+                      f"{printer.label}'s hotend is limited to {printer.hotend_max_c} C: lower {key} to "
+                      f"{printer.hotend_max_c} C or less, or print {fil.name} on a hotter printer" if cited else
+                      f"{t:g} C is over Gantrel's default hotend max of {printer.hotend_max_c} C, not a printer spec: "
+                      f"check that your {printer.label}'s hotend reaches {t:g} C before printing {fil.name}"))
     for key, label in (("bed_c", "bed"), ("bed_first_layer_c", "first layer bed")):
         if key not in s:
             continue
@@ -94,11 +105,14 @@ def _temps(s, printer, fil):
         out.append(_r(f"{label} temperature in the {fil.name} range", "pass" if ok else "fail",
                       "bed_min <= T <= bed_max", {"T": t, "bed_min": fil.bed_min_c, "bed_max": fil.bed_max_c},
                       f"Set {key} between {fil.bed_min_c} and {fil.bed_max_c} C"))
+        cited = printer.is_cited("bed_max_c")
         ok = t <= printer.bed_max_c
-        out.append(_r(f"{label} temperature within the bed heater", "pass" if ok else "fail", "T <= bed_heater_max",
-                      {"T": t, "bed_heater_max": printer.bed_max_c, "cited": printer.is_cited("bed_max_c")},
-                      f"{printer.label}'s bed reaches {printer.bed_max_c} C"
-                      + ("" if printer.is_cited("bed_max_c") else " (Gantrel's default, not a spec)")))
+        out.append(_r(f"{label} temperature within the bed heater", _limit(ok, cited), "T <= bed_heater_max",
+                      {"T": t, "bed_heater_max": printer.bed_max_c, "cited": cited},
+                      f"{printer.label}'s bed reaches {printer.bed_max_c} C: lower {key} to {printer.bed_max_c} C "
+                      "or less" if cited else
+                      f"{t:g} C is over Gantrel's default bed max of {printer.bed_max_c} C, not a printer spec: "
+                      f"check that your {printer.label}'s bed reaches {t:g} C"))
     return out
 
 
@@ -195,11 +209,14 @@ def _material_fit(s, printer, fil):
                       f"Keep the chamber at or under {fil.max_chamber_c} C" if ch > fil.max_chamber_c
                       else f"{printer.label} has no chamber heater: the chamber only warms from the bed"))
     if fil.abrasive:
-        out.append(_r("hardened nozzle", "pass" if printer.hardened_nozzle else "fail",
+        cited = printer.is_cited("hardened_nozzle")
+        out.append(_r("hardened nozzle", _limit(printer.hardened_nozzle, cited),
                       "abrasive material -> hardened nozzle",
-                      {"abrasive": True, "hardened_nozzle": printer.hardened_nozzle,
-                       "cited": printer.is_cited("hardened_nozzle")},
-                      f"{fil.name} wears a brass nozzle out within hours: fit a hardened steel nozzle"))
+                      {"abrasive": True, "hardened_nozzle": printer.hardened_nozzle, "cited": cited},
+                      f"{fil.name} wears a brass or stainless nozzle out within hours, and {printer.label}'s "
+                      "stock nozzle is not hardened: fit a hardened steel nozzle" if cited else
+                      "Gantrel assumes a brass nozzle by default, not a printer spec: check that your "
+                      f"{printer.label} has a hardened steel nozzle, because {fil.name} wears brass out within hours"))
     if fil.flexible:
         out.append(_r("direct drive for flexible", "pass" if printer.direct_drive else "fail",
                       "flexible material -> direct drive", {"flexible": True, "direct_drive": printer.direct_drive},

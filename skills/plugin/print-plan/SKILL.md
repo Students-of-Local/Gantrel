@@ -54,7 +54,10 @@ Planning only reads files. It never talks to a printer, and it never starts a pr
    - Supports: the `Supports:` line.
    - Time: the `Time:` line. Say it is Gantrel's estimate, and the slicer's number is better.
    - Filament: the `Filament:` line.
-   - Every `WARN:` line, in plain words, with its advice.
+   - Every `WARN:` line, in plain words, with its advice. A warning that says "Gantrel's default"
+     and "not a printer spec" means Gantrel does not know that limit for this printer: ask the
+     person to check it (the hotend's top temperature, whether the nozzle is hardened steel). It
+     is not a reason to stop.
    Then follow the `NEXT:` line.
 5. Tell the person every `FAIL:` line, in plain words. Suggest the fix the line gives (another
    filament, or a printer with an enclosure or a hardened nozzle). Do not use `--force` or any
@@ -77,8 +80,9 @@ least one `FAIL:` line: tell the person each one and its fix. Say the warnings t
 - Never start or resume a print. A person starts it on the printer.
 - Every rule the check uses has its formula and numbers in `--json` output. When the person asks
   why, quote the `formula` and `values` of that rule.
-- A limit marked "Gantrel default, not a spec" was not published for that printer. Say so when
-  it decides the answer.
+- Only a limit the printer's maker publishes (cited in Gantrel's profile) can fail a rule or
+  refuse a plan. A limit marked "Gantrel default, not a spec" was not published for that printer:
+  the rule warns instead, and you tell the person what to check. Never call that a refusal.
 
 ## Sources
 

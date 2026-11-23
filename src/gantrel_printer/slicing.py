@@ -24,13 +24,23 @@ from .errors import ConfigError, PrinterError, Unsupported
 
 # Printer limits the planner's math needs (gantrel_printer/plan). A profile that does not cite a value
 # gets these defaults. They are Gantrel's conservative guesses, not printer specs, and the planner
-# says so whenever it uses one (see PrinterProfile.cited).
+# says so whenever it uses one (see PrinterProfile.cited). Only a cited limit can fail a check or refuse a
+# plan; a setting past a default limit is a warning that tells the person to check their printer.
 DEFAULT_HOTEND_MAX_C = 250   # hotends with a PTFE-lined heat break are commonly limited to about 240-250 C
 DEFAULT_BED_MAX_C = 100
 DEFAULT_MAX_FLOW = 12.0      # mm3/s: OrcaSlicer's Generic PLA cap for a standard direct drive hotend
 
 CREALITY_K2_SPECS = "https://www.creality.com/products/k2-series-3d-printer"
 ORCA_PROFILES = "https://github.com/OrcaSlicer/OrcaSlicer/tree/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles"
+# Vendor spec pages read for the limits below (fetched 2026-11-23). Each profile's comment names the value and
+# the words on the page it came from.
+BAMBU_X1_SPECS = "https://bambulab.com/en/x1"
+BAMBU_P1_SPECS = "https://us.store.bambulab.com/products/p1s"     # the P1P and P1S comparison table
+BAMBU_A1_SPECS = "https://bambulab.com/en/a1/tech-specs"
+BAMBU_A1_MINI_SPECS = "https://bambulab.com/en/a1-mini/tech-specs"
+CREALITY_K1_MAX_SPECS = "https://www.creality.com/products/creality-k1-max-3d-printer"
+CREALITY_ENDER3_V3_SPECS = "https://www.creality.com/products/creality-ender-3-v3"
+PRUSA_MK4S_SPECS = "https://www.prusa3d.com/product/original-prusa-mk4s-3d-printer-5/"
 
 
 @dataclass(frozen=True)
@@ -108,32 +118,71 @@ PRINTERS: dict[str, PrinterProfile] = {p.key: p for p in (
                    enclosed=True, start_gcode=KLIPPER_START, end_gcode="END_PRINT",
                    orca_machine="Creality K1C 0.4 nozzle", max_accel=20000, cited=("max_accel",),
                    limits_source=f"{ORCA_PROFILES}/Creality/machine/Creality%20K1C%200.4%20nozzle.json"),
+    # K1 Max limits: Creality's K1 Max page ("a hardened steel nozzle, working well in up to 300 C") and Orca's
+    # K1 Max machine profile (machine_max_acceleration_x 20000). Orca's nozzle_type there says brass; the vendor's
+    # page wins. The page gives no bed maximum, so bed_max_c stays Gantrel's default.
     PrinterProfile("creality-k1-max", "Creality K1 Max", (300, 300), 300, "klipper", max_speed=300, accel=8000,
                    enclosed=True, start_gcode=KLIPPER_START, end_gcode="END_PRINT",
-                   orca_machine="Creality K1 Max (0.4 nozzle)", max_accel=20000, cited=("max_accel",),
-                   limits_source=f"{ORCA_PROFILES}/Creality/machine/Creality%20K1%20Max%20(0.4%20nozzle).json"),
+                   orca_machine="Creality K1 Max (0.4 nozzle)", hotend_max_c=300, hardened_nozzle=True,
+                   max_accel=20000, cited=("hotend_max_c", "hardened_nozzle", "max_accel"),
+                   limits_source=f"{CREALITY_K1_MAX_SPECS} ; "
+                                 f"{ORCA_PROFILES}/Creality/machine/Creality%20K1%20Max%20(0.4%20nozzle).json"),
+    # Ender-3 V3 limits: Creality's Ender-3 V3 page ("Nozzle Temperature <=300 C", "Heatbed Temperature <=110 C",
+    # "Quick-swap nozzle (hardened steel tip)", PLA-CF and PETG-CF supported) and Orca's machine profile
+    # (nozzle_type hardened_steel, machine_max_acceleration_x 20000).
     PrinterProfile("creality-ender3-v3", "Creality Ender-3 V3", (220, 220), 250, "klipper", max_speed=250,
                    accel=6000, start_gcode=KLIPPER_START, end_gcode="END_PRINT",
-                   orca_machine="Creality Ender-3 V3 0.4 nozzle", max_accel=20000, cited=("max_accel",),
-                   limits_source=f"{ORCA_PROFILES}/Creality/machine/Creality%20Ender-3%20V3%200.4%20nozzle.json"),
+                   orca_machine="Creality Ender-3 V3 0.4 nozzle", hotend_max_c=300, bed_max_c=110,
+                   hardened_nozzle=True, max_accel=20000,
+                   cited=("hotend_max_c", "bed_max_c", "hardened_nozzle", "max_accel"),
+                   limits_source=f"{CREALITY_ENDER3_V3_SPECS} ; "
+                                 f"{ORCA_PROFILES}/Creality/machine/Creality%20Ender-3%20V3%200.4%20nozzle.json"),
+    # X1 Carbon limits: Bambu Lab's X1 page ("All-Metal Hotend 300 C", "Hardened Steel Nozzle 50 HRC",
+    # "Hotbed 120 C"; its spec table lists the X1C nozzle as hardened steel and PA, PC and carbon or glass fibre
+    # filled filament as Ideal) and Orca's X1C machine profile (machine_max_acceleration_x 20000). Orca's Bambu
+    # machine profiles set no nozzle_type.
     PrinterProfile("bambu-x1c", "Bambu Lab X1 Carbon", (256, 256), 256, "marlin2", max_speed=300, accel=10000,
-                   enclosed=True, orca_machine="Bambu Lab X1 Carbon 0.4 nozzle", max_accel=20000, cited=("max_accel",),
-                   limits_source=f"{ORCA_PROFILES}/BBL/machine/Bambu%20Lab%20X1%20Carbon%200.4%20nozzle.json"),
+                   enclosed=True, orca_machine="Bambu Lab X1 Carbon 0.4 nozzle", hotend_max_c=300, bed_max_c=120,
+                   hardened_nozzle=True, max_accel=20000,
+                   cited=("hotend_max_c", "bed_max_c", "hardened_nozzle", "max_accel"),
+                   limits_source=f"{BAMBU_X1_SPECS} ; "
+                                 f"{ORCA_PROFILES}/BBL/machine/Bambu%20Lab%20X1%20Carbon%200.4%20nozzle.json"),
+    # P1S and P1P limits: the P1P and P1S comparison table on Bambu Lab's P1S store page ("Nozzle 0.4 mm Stainless
+    # Steel", "Max Hot End Temperature 300 C", "Max Build Plate Temperature 100 C"); stainless steel is not a
+    # hardened nozzle, and Bambu's P1 page says not to print fibre filled filament before a hotend upgrade.
+    # Orca's machine profiles: machine_max_acceleration_x 20000.
     PrinterProfile("bambu-p1s", "Bambu Lab P1S", (256, 256), 256, "marlin2", max_speed=300, accel=10000,
-                   enclosed=True, orca_machine="Bambu Lab P1S 0.4 nozzle", max_accel=20000, cited=("max_accel",),
-                   limits_source=f"{ORCA_PROFILES}/BBL/machine/Bambu%20Lab%20P1S%200.4%20nozzle.json"),
+                   enclosed=True, orca_machine="Bambu Lab P1S 0.4 nozzle", hotend_max_c=300, bed_max_c=100,
+                   max_accel=20000, cited=("hotend_max_c", "bed_max_c", "hardened_nozzle", "max_accel"),
+                   limits_source=f"{BAMBU_P1_SPECS} ; "
+                                 f"{ORCA_PROFILES}/BBL/machine/Bambu%20Lab%20P1S%200.4%20nozzle.json"),
     PrinterProfile("bambu-p1p", "Bambu Lab P1P", (256, 256), 256, "marlin2", max_speed=300, accel=10000,
-                   orca_machine="Bambu Lab P1P 0.4 nozzle", max_accel=20000, cited=("max_accel",),
-                   limits_source=f"{ORCA_PROFILES}/BBL/machine/Bambu%20Lab%20P1P%200.4%20nozzle.json"),
+                   orca_machine="Bambu Lab P1P 0.4 nozzle", hotend_max_c=300, bed_max_c=100, max_accel=20000,
+                   cited=("hotend_max_c", "bed_max_c", "hardened_nozzle", "max_accel"),
+                   limits_source=f"{BAMBU_P1_SPECS} ; "
+                                 f"{ORCA_PROFILES}/BBL/machine/Bambu%20Lab%20P1P%200.4%20nozzle.json"),
+    # A1 limits: Bambu Lab's A1 tech specs ("Nozzle: Stainless Steel", "Max Hot End Temperature: 300 C",
+    # "Max Build Plate Temperature: 100 C"; carbon or glass fibre filled filament "Not Recommended") and Orca's A1
+    # machine profile (machine_max_acceleration_x 12000; the spec page says 10000 mm/s^2).
     PrinterProfile("bambu-a1", "Bambu Lab A1", (256, 256), 256, "marlin2", max_speed=250, accel=10000,
-                   orca_machine="Bambu Lab A1 0.4 nozzle", max_accel=12000, cited=("max_accel",),
-                   limits_source=f"{ORCA_PROFILES}/BBL/machine/Bambu%20Lab%20A1%200.4%20nozzle.json"),
+                   orca_machine="Bambu Lab A1 0.4 nozzle", hotend_max_c=300, bed_max_c=100, max_accel=12000,
+                   cited=("hotend_max_c", "bed_max_c", "hardened_nozzle", "max_accel"),
+                   limits_source=f"{BAMBU_A1_SPECS} ; "
+                                 f"{ORCA_PROFILES}/BBL/machine/Bambu%20Lab%20A1%200.4%20nozzle.json"),
+    # A1 mini limits: Bambu Lab's A1 mini tech specs ("Nozzle: Stainless Steel", "Max Hot End Temperature: 300 C",
+    # "Max Build Plate Temperature: 80 C"; fibre filled filament "Not Recommended").
     PrinterProfile("bambu-a1-mini", "Bambu Lab A1 mini", (180, 180), 180, "marlin2", max_speed=250, accel=10000,
-                   orca_machine="Bambu Lab A1 mini 0.4 nozzle"),
+                   orca_machine="Bambu Lab A1 mini 0.4 nozzle", hotend_max_c=300, bed_max_c=80,
+                   cited=("hotend_max_c", "bed_max_c", "hardened_nozzle"), limits_source=BAMBU_A1_MINI_SPECS),
+    # MK4 and MK4S limits: Prusa's MK4S page ("Max nozzle temperature 290 C", "Max heatbed temperature 120 C",
+    # "High-flow Prusa Nozzle brass CHT"; its comparison table gives 290 C / 120 C and a brass nozzle for every
+    # column) and Orca's MK4 machine profile (machine_max_acceleration_x 4000). Orca's nozzle_type there says
+    # hardened_steel; the vendor's page wins.
     PrinterProfile("prusa-mk4", "Original Prusa MK4/MK4S", (250, 210), 220, "marlin2", max_speed=200, accel=4000,
                    orca_machine="Prusa MK4 0.4 nozzle", start_gcode=MARLIN_START, end_gcode=MARLIN_END,
-                   upload_ext=".bgcode", max_accel=4000, cited=("max_accel",),
-                   limits_source=f"{ORCA_PROFILES}/Prusa/machine/Prusa%20MK4%200.4%20nozzle.json"),
+                   upload_ext=".bgcode", hotend_max_c=290, bed_max_c=120, max_accel=4000,
+                   cited=("hotend_max_c", "bed_max_c", "hardened_nozzle", "max_accel"),
+                   limits_source=f"{PRUSA_MK4S_SPECS} ; {ORCA_PROFILES}/Prusa/machine/Prusa%20MK4%200.4%20nozzle.json"),
     PrinterProfile("prusa-mk3", "Original Prusa MK3S+", (250, 210), 210, "marlin2", max_speed=150, accel=1250,
                    direct_drive=True, orca_machine="Prusa MK3S 0.4 nozzle", start_gcode=MARLIN_START,
                    end_gcode=MARLIN_END),

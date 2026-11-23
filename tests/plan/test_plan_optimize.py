@@ -1,5 +1,7 @@
 """The optimizer passes its own check for every printer, filament and goal, or refuses with the reason."""
 
+import dataclasses
+
 import numpy as np
 import pytest
 
@@ -23,13 +25,22 @@ def test_sweep_every_material_and_goal(printer):
                 fails = err.result["check"]["fails"]
                 assert fails, (printer.key, fam, goal)
                 assert all(f in optimize.REFUSE or "temperature within" in f for f in fails), fails
-                # The refusal is for a real reason, worked out from the table and the profile.
-                cannot = ((fil.needs_enclosure and not printer.enclosed) or (fil.abrasive and not printer.hardened_nozzle)
-                          or (fil.flexible and not printer.direct_drive) or fil.nozzle_min_c > printer.hotend_max_c
-                          or fil.bed_min_c > printer.bed_max_c)
+                # The refusal is for a real reason, worked out from the table and the profile. A printer limit
+                # refuses only when the profile cites it.
+                cited = printer.is_cited
+                cannot = ((fil.needs_enclosure and not printer.enclosed)
+                          or (fil.abrasive and not printer.hardened_nozzle and cited("hardened_nozzle"))
+                          or (fil.flexible and not printer.direct_drive)
+                          or (fil.nozzle_min_c > printer.hotend_max_c and cited("hotend_max_c"))
+                          or (fil.bed_min_c > printer.bed_max_c and cited("bed_max_c")))
                 assert cannot, (printer.key, fam, goal, fails)
                 continue
             assert p["check"]["ok"], (printer.key, fam, goal, p["check"]["fails"])
+            # Past one of Gantrel's defaults the plan goes ahead with a warning that names the assumption.
+            if fil.abrasive and not printer.hardened_nozzle:
+                assert "hardened nozzle" in p["check"]["warns"], (printer.key, fam)
+            if fil.nozzle_min_c > printer.hotend_max_c:
+                assert "nozzle temperature within the hotend" in p["check"]["warns"], (printer.key, fam)
             again = C.check(p["settings"], printer, fil, None, goal)
             assert again["ok"], again["fails"]
             s = p["settings"]
@@ -40,14 +51,51 @@ def test_sweep_every_material_and_goal(printer):
 
 
 def test_known_refusals():
+    """Every refusal rests on a cited limit or on what the profile is (open frame, Bowden)."""
     cases = [("generic-marlin", "ABS", "enclosure"), ("bambu-a1", "PLA-CF", "hardened nozzle"),
-             ("generic-marlin", "TPU", "direct drive for flexible"),
-             ("bambu-x1c", "PC", "nozzle temperature within the hotend")]
+             ("prusa-mk4", "PA-CF", "hardened nozzle"), ("generic-marlin", "TPU", "direct drive for flexible"),
+             ("bambu-a1-mini", "PLA-CF", "hardened nozzle")]
     for key, fam, why in cases:
         with pytest.raises(optimize.PlanRefused) as err:
             optimize.plan(CUBE, slicing.PRINTERS[key], fam)
         assert why in err.value.result["check"]["fails"]
         assert err.value.code == "plan_refused"
+        r = next(x for x in err.value.result["check"]["rules"] if x["rule"] == why)
+        assert r["values"].get("cited", True) is True
+
+
+@pytest.mark.parametrize("fam", ["PC", "PA", "PA-CF", "PLA-CF", "PETG-CF"])
+def test_x1c_plans_engineering_and_fibre_filaments(fam):
+    """The X1 Carbon has a cited 300 C hotend and hardened steel nozzle: PC and PA-CF are what it is built for."""
+    x1c = slicing.PRINTERS["bambu-x1c"]
+    p = optimize.plan(CUBE, x1c, fam)
+    c = p["check"]
+    assert c["ok"] and not any("hotend" in w or "nozzle" in w for w in c["warns"]), c["warns"]
+    hot = next(r for r in c["rules"] if r["rule"] == "nozzle temperature within the hotend")
+    assert hot["status"] == "pass" and hot["values"]["cited"] is True
+    if materials.get(fam).abrasive:
+        hard = next(r for r in c["rules"] if r["rule"] == "hardened nozzle")
+        assert hard["status"] == "pass" and hard["values"]["cited"] is True
+    assert p["printer_limits"]["hotend_max_c"] == {"value": 300, "source": "cited"}
+
+
+def test_an_uncited_default_warns_and_does_not_refuse():
+    """creality-k1 covers the K1 (brass nozzle) and K1C (hardened), and no page read gives its hotend max."""
+    k1 = slicing.PRINTERS["creality-k1"]
+    assert not k1.is_cited("hotend_max_c") and not k1.is_cited("hardened_nozzle")
+    p = optimize.plan(CUBE, k1, "PA-CF")
+    c = p["check"]
+    assert c["ok"]
+    assert {"hardened nozzle", "nozzle temperature within the hotend"} <= set(c["warns"])
+    hot = next(r for r in c["rules"] if r["rule"] == "nozzle temperature within the hotend")
+    assert hot["values"]["cited"] is False
+    assert "Gantrel's default hotend max of 250 C, not a printer spec" in hot["fix"] and "check" in hot["fix"]
+    hard = next(r for r in c["rules"] if r["rule"] == "hardened nozzle")
+    assert "not a printer spec" in hard["fix"] and "check that your" in hard["fix"]
+    # The same settings on the same printer with that limit cited do refuse.
+    cited = dataclasses.replace(k1, cited=k1.cited + ("hotend_max_c", "hardened_nozzle"))
+    with pytest.raises(optimize.PlanRefused):
+        optimize.plan(CUBE, cited, "PA-CF")
 
 
 def test_speed_is_faster_than_quality_and_quality_is_finer():

@@ -288,11 +288,33 @@ printer and filament cannot go together.
   source gives a DSC value (TPU, PVA, HIPS), and HIPS has no drying figure.
 - Printers: `PrinterProfile` in `slicing.py` gained `hotend_max_c`, `bed_max_c`, `max_flow`,
   `high_flow`, `hardened_nozzle`, `max_accel` and `chamber_heater`. A value is cited only when its
-  name is in the profile's `cited` list, with the sources in `limits_source`; every other value is
-  Gantrel's default (250 C hotend, 100 C bed, 12 mm3/s, brass nozzle, no chamber heater) and the
-  planner labels it "Gantrel default, not a spec". The Creality K2 and K2 Plus limits are cited from
-  Creality's product pages and OrcaSlicer's machine and filament profiles; several other printers
-  cite `max_accel` from OrcaSlicer's machine profiles.
+  name is in the profile's `cited` list, with the sources in `limits_source` and the page's own words
+  in the comment above the profile; every other value is Gantrel's default (250 C hotend, 100 C bed,
+  12 mm3/s, brass nozzle, no chamber heater) and the planner labels it "Gantrel default, not a spec".
+- Only a cited limit can fail a check or refuse a plan. Past one of Gantrel's defaults the rule is a
+  warning that names the assumption, for example "260 C is over Gantrel's default hotend max of
+  250 C, not a printer spec: check that your Creality K1 / K1C's hotend reaches 260 C". It means
+  "check your printer", not "stop".
+- Cited hotend, bed and nozzle limits (vendor pages read 2026-11-23):
+
+  | Printer | Hotend | Bed | Nozzle | Source |
+  |---|---|---|---|---|
+  | Creality K2 | 300 C | 100 C | hardened steel | Creality K2 series page, Orca machine profile |
+  | Creality K2 Plus | 350 C | 120 C | hardened steel | Creality K2 Plus page, Orca machine profile |
+  | Creality K1 Max | 300 C | default | hardened steel | Creality K1 Max page |
+  | Creality Ender-3 V3 | 300 C | 110 C | hardened steel tip | Creality Ender-3 V3 page |
+  | Bambu Lab X1 Carbon | 300 C | 120 C | hardened steel | Bambu Lab X1 page and its spec table |
+  | Bambu Lab P1S, P1P | 300 C | 100 C | stainless steel | Bambu Lab P1S store page (P1P and P1S table) |
+  | Bambu Lab A1 | 300 C | 100 C | stainless steel | Bambu Lab A1 tech specs |
+  | Bambu Lab A1 mini | 300 C | 80 C | stainless steel | Bambu Lab A1 mini tech specs |
+  | Original Prusa MK4/MK4S | 290 C | 120 C | brass | Prusa MK4S page |
+
+  Stainless steel and brass count as not hardened: Bambu Lab lists carbon and glass fibre filament
+  as "Not Recommended" on those printers. OrcaSlicer's machine profiles set `nozzle_type`, but the
+  value disagrees with the vendor for the Prusa MK4 (Orca: hardened steel, Prusa: brass) and the K1
+  Max (Orca: brass, Creality: hardened steel), so a nozzle is cited only from the vendor. The
+  `creality-k1` profile covers the K1 (brass) and the K1C (hardened steel) and keeps the defaults.
+  Several printers also cite `max_accel` from OrcaSlicer's machine profiles.
 - Flow by printer and filament: `src/gantrel_printer/data/printer_material_flow.json` holds the
   `filament_max_volumetric_speed` of each printer vendor's own Generic filament preset in OrcaSlicer
   (pinned commit a31c95e), with the preset name, its file and URL, and the file the value is
@@ -363,7 +385,8 @@ Quality is held first; speed is then taken wherever it does not cost quality.
 
 The plan is then checked. A failed rule that settings cannot fix (enclosure, hardened nozzle,
 flexible filament on Bowden, part does not fit, hotend or bed too cold for the filament) refuses the
-plan with the reasons. Any other failure is a planner bug and raises; the tests sweep every printer,
+plan with the reasons. The hardened nozzle, hotend and bed rules fail only on a cited limit; past a
+Gantrel default they warn, and the plan goes ahead with temperatures inside the filament's range. Any other failure is a planner bug and raises; the tests sweep every printer,
 filament and goal to keep that from happening.
 
 ### Time and filament estimate
@@ -396,8 +419,8 @@ limit is a named constant in `plan/check.py`.
 
 | Rule | Formula | Result when broken |
 |---|---|---|
-| Nozzle and first layer temperature | material min <= T <= material max, and T <= hotend max | fail |
-| Bed and first layer bed temperature | material min <= T <= material max, and T <= bed heater max | fail |
+| Nozzle and first layer temperature | material min <= T <= material max, and T <= hotend max | fail (past a default hotend max: warn) |
+| Bed and first layer bed temperature | material min <= T <= material max, and T <= bed heater max | fail (past a default bed max: warn) |
 | Layer height | 0.25 <= layer / nozzle <= 0.75 (warn outside 0.3 to 0.7) | fail |
 | First layer | 0.5 x nozzle <= first layer <= 0.75 x nozzle | fail |
 | Line widths | 0.9 <= width / nozzle <= 1.6 (warn outside 1.0 to 1.5) | fail |
@@ -409,7 +432,7 @@ limit is a named constant in `plan/check.py`.
 | Enclosure | material needs one -> printer enclosed | fail |
 | Enclosure heat | material softens below 50 C on an enclosed printer | warn (open the lid) |
 | Chamber | chamber <= material max chamber; heater present to reach it | fail, or warn without a heater |
-| Hardened nozzle | abrasive -> hardened nozzle | fail |
+| Hardened nozzle | abrasive -> hardened nozzle | fail when the nozzle is cited, warn on the brass default |
 | Flexible | flexible -> direct drive | fail |
 | Retraction | direct drive 0.2 to 2 mm, Bowden 2 to 7 mm | fail over, warn under |
 | Part fan | material fan min <= fan <= material fan max | warn |
