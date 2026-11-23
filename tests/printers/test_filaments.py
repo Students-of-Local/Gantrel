@@ -300,6 +300,13 @@ def test_bambu_two_ams_units_and_the_external_spool(bambu):
     assert bambu.fake.ignored == [] and bambu.brain.events == []
 
 
+def test_bambu_waits_past_a_partial_push_for_the_ams(bambu):
+    bambu.fake.ams, bambu.fake.vt_tray = copy.deepcopy(AMS), copy.deepcopy(VT_TRAY)
+    bambu.fake.partial_first = True
+    slots = bambu.adapter().filaments()
+    assert slots[0].slot == "A1" and slots[0].family == "PLA" and slots[-1].slot == "ext"
+
+
 def test_bambu_report_without_ams_is_one_unknown_slot(bambu):
     [slot] = bambu.adapter().filaments()
     assert (slot.slot, slot.family, slot.source) == ("ext", "unknown", "bambu: no ams or vt_tray in the report")

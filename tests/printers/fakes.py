@@ -480,6 +480,8 @@ class FakeBambu:
         # Loaded filament for the report: the print.ams object and the external spool, when set.
         self.ams: object = None
         self.vt_tray: object = None
+        # A P1 can answer pushall with a partial push (state only) before the full report.
+        self.partial_first = False
         self.mqtt = self._listen(self._mqtt_client)
         self.ftp = self._listen(self._ftp_client)
         self.cam = self._listen(self._cam_client)
@@ -569,6 +571,10 @@ class FakeBambu:
                 if "pushing" in payload:
                     if subscribed:
                         t = f"device/{self.serial}/report".encode()
+                        if self.partial_first:
+                            part = {"print": {"gcode_state": self.report()["print"]["gcode_state"], "command": "push_status"}}
+                            s.sendall(_mqtt_packet(0x30, struct.pack(">H", len(t)) + t + json.dumps(part).encode()))
+                            time.sleep(0.3)
                         s.sendall(_mqtt_packet(0x30, struct.pack(">H", len(t)) + t + json.dumps(self.report()).encode()))
                     continue
                 cmd = payload.get("print", {})

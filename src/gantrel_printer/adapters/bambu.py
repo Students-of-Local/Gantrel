@@ -157,7 +157,8 @@ class BambuAdapter(Adapter):
 
     # ------------------------------------------------------------ MQTT
 
-    def _mqtt(self, publish: list[dict], want_report: bool, wait: float = 6.0) -> dict:
+    def _mqtt(self, publish: list[dict], want_report: bool, wait: float = 6.0,
+              until: tuple[str, ...] = ("gcode_state",)) -> dict:
         import paho.mqtt.client as mqtt
 
         self._require()
@@ -181,7 +182,7 @@ class BambuAdapter(Adapter):
             p = data.get("print") if isinstance(data, dict) else None
             if isinstance(p, dict):
                 state["print"].update(p)
-                if "gcode_state" in state["print"]:
+                if any(key in state["print"] for key in until):
                     got.set()
 
         c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"gantrel-{time.time_ns() % 10**9}",
@@ -206,7 +207,9 @@ class BambuAdapter(Adapter):
                 c.subscribe(report_topic, qos=0)
             for msg in publish:
                 c.publish(req_topic, json.dumps(msg), qos=0).wait_for_publish(5)
-            if want_report and not got.wait(wait):
+            # A report that never carried a key in `until` still counts when the printer answered with its
+            # state: a P1 can send a partial push before the full pushall, and a printer with no AMS never sends one.
+            if want_report and not got.wait(wait) and "gcode_state" not in state["print"]:
                 raise ProtocolError(f"{self.cfg.name} sent no status report", DEV_MODE_HINT)
             if not want_report:
                 time.sleep(0.2)
@@ -282,7 +285,9 @@ class BambuAdapter(Adapter):
 
     def filaments(self) -> list[Slot]:
         """Read-only: the AMS trays and the external spool from the same pushall report status reads."""
-        p = self._mqtt([{"pushing": {"sequence_id": "0", "command": "pushall"}}], want_report=True)
+        # Wait for the AMS or the external spool, not just any state: a P1 sends partial pushes too.
+        p = self._mqtt([{"pushing": {"sequence_id": "0", "command": "pushall"}}], want_report=True,
+                       until=("ams", "vt_tray"))
         return ams_slots(p, self.cfg.name)
 
     def _ftp(self, work):
