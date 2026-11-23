@@ -19,7 +19,18 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import materials
 from .errors import ConfigError, PrinterError, Unsupported
+
+# Printer limits the planner's math needs (gantrel_printer/plan). A profile that does not cite a value
+# gets these defaults. They are Gantrel's conservative guesses, not printer specs, and the planner
+# says so whenever it uses one (see PrinterProfile.cited).
+DEFAULT_HOTEND_MAX_C = 250   # hotends with a PTFE-lined heat break are commonly limited to about 240-250 C
+DEFAULT_BED_MAX_C = 100
+DEFAULT_MAX_FLOW = 12.0      # mm3/s: OrcaSlicer's Generic PLA cap for a standard direct drive hotend
+
+CREALITY_K2_SPECS = "https://www.creality.com/products/k2-series-3d-printer"
+ORCA_PROFILES = "https://github.com/OrcaSlicer/OrcaSlicer/tree/a31c95e273d3423abf185a444d70beae4941c697/resources/profiles"
 
 
 @dataclass(frozen=True)
@@ -41,6 +52,24 @@ class PrinterProfile:
     filament_mm: float = 1.75
     resin: bool = False    # resin printers: Gantrel never slices, it only uploads a pre-sliced .ctb or .goo
     note: str = ""
+    # Hardware limits for the planner. max_speed and accel above are Gantrel's chosen caps; these are what
+    # the printer itself can do. Unless a field is named in `cited`, its value is a default, not a spec.
+    hotend_max_c: int = DEFAULT_HOTEND_MAX_C
+    bed_max_c: int = DEFAULT_BED_MAX_C
+    max_flow: float = DEFAULT_MAX_FLOW   # hotend volumetric limit, mm3/s
+    high_flow: bool = False              # use the materials' high-flow hotend column
+    hardened_nozzle: bool = False        # abrasive filaments (CF, GF) need one
+    max_accel: int = 0                   # mm/s^2; 0 means the same as accel
+    chamber_heater: bool = False
+    cited: tuple[str, ...] = ()          # which of the limits above come from limits_source
+    limits_source: str = ""
+
+    def __post_init__(self):
+        if not self.max_accel:
+            object.__setattr__(self, "max_accel", self.accel)
+
+    def is_cited(self, name: str) -> bool:
+        return name in self.cited
 
 
 KLIPPER_START = "START_PRINT EXTRUDER_TEMP={first_layer_temperature[0]} BED_TEMP={first_layer_bed_temperature[0]}"
@@ -52,34 +81,59 @@ MARLIN_START = ("M140 S{first_layer_bed_temperature[0]}\\nM104 S150\\nG28\\nM190
 MARLIN_END = "M104 S0\\nM140 S0\\nG91\\nG1 Z10 F600\\nG90\\nM107\\nM84"
 
 PRINTERS: dict[str, PrinterProfile] = {p.key: p for p in (
+    # K2 limits: Creality's K2 series comparison table (300 C nozzle, 100 C bed, no chamber heater, 20000 mm/s^2,
+    # hardened steel nozzle) and Orca's Creality K2 machine profile (20000 mm/s^2, hardened_steel). Creality rates
+    # the 40 mm3/s hotend with the K2 Plus's 100 W heater; the K2 has 70 W, so its flow is the highest flow
+    # Creality's own K2 filament presets use (Hyper PLA @K2-all: 23 mm3/s), not a hotend rating.
     PrinterProfile("creality-k2", "Creality K2", (260, 260), 260, "klipper", max_speed=300, accel=10000,
                    enclosed=True, start_gcode=CREALITY_K_START, end_gcode="END_PRINT",
-                   orca_machine="Creality K2 0.4 nozzle"),
+                   orca_machine="Creality K2 0.4 nozzle",
+                   hotend_max_c=300, bed_max_c=100, max_flow=23, hardened_nozzle=True, max_accel=20000,
+                   cited=("hotend_max_c", "bed_max_c", "max_flow", "hardened_nozzle", "max_accel", "chamber_heater"),
+                   limits_source=f"{CREALITY_K2_SPECS} ; {ORCA_PROFILES}/Creality/machine/Creality%20K2%200.4%20nozzle.json"
+                                 f" ; {ORCA_PROFILES}/Creality/filament/Hyper%20PLA%20%40K2-all.json"),
+    # K2 Plus limits: Creality's K2 Plus page and K2 series table (350 C nozzle, 120 C bed, actively heated chamber
+    # to 60 C, 30000 mm/s^2, "40 mm3/s high-flow hotend" tested with ABS at 280 C) and Orca's K2 Plus machine
+    # profile (30000 mm/s^2, hardened_steel, support_chamber_temp_control 1).
     PrinterProfile("creality-k2-plus", "Creality K2 Plus", (350, 350), 350, "klipper", max_speed=300, accel=10000,
                    enclosed=True, start_gcode=CREALITY_K_START, end_gcode="END_PRINT",
-                   orca_machine="Creality K2 Plus 0.4 nozzle"),
+                   orca_machine="Creality K2 Plus 0.4 nozzle",
+                   hotend_max_c=350, bed_max_c=120, max_flow=40, high_flow=True, hardened_nozzle=True,
+                   max_accel=30000, chamber_heater=True,
+                   cited=("hotend_max_c", "bed_max_c", "max_flow", "high_flow", "hardened_nozzle", "max_accel",
+                          "chamber_heater"),
+                   limits_source=f"https://www.creality.com/products/creality-k2-plus-cfs-combo ; {CREALITY_K2_SPECS}"
+                                 f" ; {ORCA_PROFILES}/Creality/machine/Creality%20K2%20Plus%200.4%20nozzle.json"),
     PrinterProfile("creality-k1", "Creality K1 / K1C", (220, 220), 250, "klipper", max_speed=300, accel=8000,
                    enclosed=True, start_gcode=KLIPPER_START, end_gcode="END_PRINT",
-                   orca_machine="Creality K1C 0.4 nozzle"),
+                   orca_machine="Creality K1C 0.4 nozzle", max_accel=20000, cited=("max_accel",),
+                   limits_source=f"{ORCA_PROFILES}/Creality/machine/Creality%20K1C%200.4%20nozzle.json"),
     PrinterProfile("creality-k1-max", "Creality K1 Max", (300, 300), 300, "klipper", max_speed=300, accel=8000,
                    enclosed=True, start_gcode=KLIPPER_START, end_gcode="END_PRINT",
-                   orca_machine="Creality K1 Max (0.4 nozzle)"),
+                   orca_machine="Creality K1 Max (0.4 nozzle)", max_accel=20000, cited=("max_accel",),
+                   limits_source=f"{ORCA_PROFILES}/Creality/machine/Creality%20K1%20Max%20(0.4%20nozzle).json"),
     PrinterProfile("creality-ender3-v3", "Creality Ender-3 V3", (220, 220), 250, "klipper", max_speed=250,
                    accel=6000, start_gcode=KLIPPER_START, end_gcode="END_PRINT",
-                   orca_machine="Creality Ender-3 V3 0.4 nozzle"),
+                   orca_machine="Creality Ender-3 V3 0.4 nozzle", max_accel=20000, cited=("max_accel",),
+                   limits_source=f"{ORCA_PROFILES}/Creality/machine/Creality%20Ender-3%20V3%200.4%20nozzle.json"),
     PrinterProfile("bambu-x1c", "Bambu Lab X1 Carbon", (256, 256), 256, "marlin2", max_speed=300, accel=10000,
-                   enclosed=True, orca_machine="Bambu Lab X1 Carbon 0.4 nozzle"),
+                   enclosed=True, orca_machine="Bambu Lab X1 Carbon 0.4 nozzle", max_accel=20000, cited=("max_accel",),
+                   limits_source=f"{ORCA_PROFILES}/BBL/machine/Bambu%20Lab%20X1%20Carbon%200.4%20nozzle.json"),
     PrinterProfile("bambu-p1s", "Bambu Lab P1S", (256, 256), 256, "marlin2", max_speed=300, accel=10000,
-                   enclosed=True, orca_machine="Bambu Lab P1S 0.4 nozzle"),
+                   enclosed=True, orca_machine="Bambu Lab P1S 0.4 nozzle", max_accel=20000, cited=("max_accel",),
+                   limits_source=f"{ORCA_PROFILES}/BBL/machine/Bambu%20Lab%20P1S%200.4%20nozzle.json"),
     PrinterProfile("bambu-p1p", "Bambu Lab P1P", (256, 256), 256, "marlin2", max_speed=300, accel=10000,
-                   orca_machine="Bambu Lab P1P 0.4 nozzle"),
+                   orca_machine="Bambu Lab P1P 0.4 nozzle", max_accel=20000, cited=("max_accel",),
+                   limits_source=f"{ORCA_PROFILES}/BBL/machine/Bambu%20Lab%20P1P%200.4%20nozzle.json"),
     PrinterProfile("bambu-a1", "Bambu Lab A1", (256, 256), 256, "marlin2", max_speed=250, accel=10000,
-                   orca_machine="Bambu Lab A1 0.4 nozzle"),
+                   orca_machine="Bambu Lab A1 0.4 nozzle", max_accel=12000, cited=("max_accel",),
+                   limits_source=f"{ORCA_PROFILES}/BBL/machine/Bambu%20Lab%20A1%200.4%20nozzle.json"),
     PrinterProfile("bambu-a1-mini", "Bambu Lab A1 mini", (180, 180), 180, "marlin2", max_speed=250, accel=10000,
                    orca_machine="Bambu Lab A1 mini 0.4 nozzle"),
     PrinterProfile("prusa-mk4", "Original Prusa MK4/MK4S", (250, 210), 220, "marlin2", max_speed=200, accel=4000,
                    orca_machine="Prusa MK4 0.4 nozzle", start_gcode=MARLIN_START, end_gcode=MARLIN_END,
-                   upload_ext=".bgcode"),
+                   upload_ext=".bgcode", max_accel=4000, cited=("max_accel",),
+                   limits_source=f"{ORCA_PROFILES}/Prusa/machine/Prusa%20MK4%200.4%20nozzle.json"),
     PrinterProfile("prusa-mk3", "Original Prusa MK3S+", (250, 210), 210, "marlin2", max_speed=150, accel=1250,
                    direct_drive=True, orca_machine="Prusa MK3S 0.4 nozzle", start_gcode=MARLIN_START,
                    end_gcode=MARLIN_END),
@@ -138,20 +192,35 @@ class Material:
     fan_max: int
     max_speed: int        # mm/s cap for outer walls and the material's flow limit
     chamber: int = 0
-    needs_enclosure: bool = False
     retract_mm: float = 0.8
     note: str = ""
     # The nozzle temperatures worth trying for this material, low to high (calibrate temp-tower).
+    # Always inside the family's cited range in materials.json (tests/plan/test_materials.py checks it).
     nozzle_range: tuple[int, int] = (190, 230)
+
+    @property
+    def family(self) -> materials.Filament:
+        """The cited property table entry: the one source of truth for facts both modules hold."""
+        return materials.get(self.name)
+
+    @property
+    def needs_enclosure(self) -> bool:
+        return self.family.needs_enclosure
+
+    @property
+    def flexible(self) -> bool:
+        return self.family.flexible
 
 
 MATERIALS: dict[str, Material] = {m.name: m for m in (
     Material("PLA", 215, 220, 60, 65, 100, 100, 300, note="Easiest. Keep the lid or door open on enclosed printers."),
-    Material("PETG", 240, 245, 75, 80, 30, 60, 200, retract_mm=1.0, nozzle_range=(220, 255),
+    # PETG and ABS temp-tower ranges started at 220 and 235 C, below the cited family minimum of 240 C
+    # (materials.json); they now start at 240 C.
+    Material("PETG", 240, 245, 75, 80, 30, 60, 200, retract_mm=1.0, nozzle_range=(240, 255),
              note="Strings a little. Use a textured or PEI bed; glue on smooth PEI so it doesn't bond too hard."),
-    Material("ABS", 255, 260, 100, 100, 0, 20, 200, chamber=45, needs_enclosure=True, nozzle_range=(235, 265),
+    Material("ABS", 255, 260, 100, 100, 0, 20, 200, chamber=45, nozzle_range=(240, 265),
              note="Needs an enclosed printer and good ventilation; fumes."),
-    Material("ASA", 260, 265, 100, 100, 0, 30, 200, chamber=45, needs_enclosure=True, nozzle_range=(240, 270),
+    Material("ASA", 260, 265, 100, 100, 0, 30, 200, chamber=45, nozzle_range=(240, 270),
              note="UV resistant ABS. Needs an enclosure and ventilation."),
     Material("TPU", 225, 225, 45, 45, 60, 100, 30, retract_mm=0.4, nozzle_range=(210, 235),
              note="Flexible. Print slowly; direct drive printers only."),
@@ -194,8 +263,9 @@ def settings(printer: PrinterProfile, mat: Material, quality: str = "standard", 
     if mat.needs_enclosure and not printer.enclosed:
         warnings.append(f"{mat.name} needs an enclosed printer and {printer.label} is open: expect warping, "
                         "cracked layers and fumes in the room")
-    if mat.name == "TPU" and not printer.direct_drive:
-        warnings.append(f"TPU needs a direct drive extruder and {printer.label} is Bowden: it will likely jam")
+    if mat.flexible and not printer.direct_drive:
+        warnings.append(f"{mat.name} is flexible and needs a direct drive extruder, and {printer.label} is Bowden: "
+                        "it will likely jam")
     if warnings and not force:
         raise ConfigError(warnings[0], "Use PLA or PETG on this printer. If the person has an enclosure or "
                                        "accepts the risk, they can ask for --force")
