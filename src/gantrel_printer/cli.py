@@ -432,6 +432,7 @@ def cmd_check(args):
     goal = args.goal or s.get("goal") or "balanced"
     part = None
     turned = None
+    pcheck.require(s, pcheck.MODEL_REQUIRED if args.model else pcheck.REQUIRED)
     if args.model:
         m = pmesh.load(args.model)
         rot = _plan_rotation(raw)

@@ -40,6 +40,17 @@ FEATURE_WIDTH = {"outer_wall_speed_mms": "outer_line_width_mm", "inner_wall_spee
                  "support_speed_mms": "line_width_mm", "first_layer_speed_mms": "first_layer_line_width_mm"}
 REQUIRED = ("nozzle_c", "bed_c", "layer_height_mm", "first_layer_height_mm", "perimeters", "outer_wall_speed_mms",
             "inner_wall_speed_mms", "infill_speed_mms", "first_layer_speed_mms")
+# The part rules (check --model) also run the time estimate, which needs these.
+MODEL_REQUIRED = REQUIRED + ("top_layers", "bottom_layers", "infill_percent")
+
+
+def require(s: dict, keys: tuple[str, ...] = REQUIRED) -> None:
+    """Refuse settings that lack a key the rules (or the estimate) read, before anything reads them."""
+    missing = [k for k in keys if k not in s]
+    if missing:
+        from ..errors import ConfigError
+        raise ConfigError(f"the settings are missing {', '.join(missing)}",
+                          "Use the settings JSON from gantrel-printer slice --json or plan --json, or add those keys")
 
 
 def _r(rule, status, formula, values, fix=""):
@@ -60,11 +71,7 @@ def check(s: dict, printer: PrinterProfile, fil: materials.Filament, part: dict 
     """All rules. part (from the planner) adds fit, overhang, bridge, thin wall and layer time rules."""
     if goal not in GOALS:
         raise ValueError(f"unknown goal {goal!r}")
-    missing = [k for k in REQUIRED if k not in s]
-    if missing:
-        from ..errors import ConfigError
-        raise ConfigError(f"the settings are missing {', '.join(missing)}",
-                          "Use the settings JSON from gantrel-printer slice --json or plan --json")
+    require(s)
     n = float(s.get("nozzle_mm") or printer.nozzle)
     out = []
     out += _temps(s, printer, fil)

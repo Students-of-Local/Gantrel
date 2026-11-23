@@ -153,3 +153,16 @@ def test_check_settings_without_a_plan_read_the_model_as_drawn(capsys, stl, tmp_
     rc, _, err = run(capsys, "check", str(tmp_path / "bad.json"), "--printer", "creality-k2", "--material", "PLA",
                      "--model", model)
     assert rc == 1 and "not a rotation" in err
+
+
+def test_check_with_a_model_names_missing_keys_instead_of_crashing(capsys, stl, tmp_path):
+    from gantrel_printer.plan import check as C
+    model = stl(shapes.cube(), "c.stl")
+    full = json.loads(run(capsys, "plan", model, "--printer", "bambu-a1", "--material", "PLA", "--json")[1])["settings"]
+    only = tmp_path / "only.json"
+    only.write_text(json.dumps({k: full[k] for k in C.REQUIRED}))
+    rc, out, _ = run(capsys, "check", str(only), "--printer", "bambu-a1", "--material", "PLA")
+    assert rc == 0, out                                      # no model: the required keys are enough
+    rc, _, err = run(capsys, "check", str(only), "--printer", "bambu-a1", "--material", "PLA", "--model", model)
+    assert rc == 1 and "ERROR (config)" in err and "Traceback" not in err
+    assert "top_layers, bottom_layers, infill_percent" in err
