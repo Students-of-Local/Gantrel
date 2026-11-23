@@ -6,13 +6,15 @@ Moonraker is GPL-3.0; this only calls its network API.
 
 from __future__ import annotations
 
+import json
 import urllib.parse
 from pathlib import Path
 
 from .. import net
 from ..errors import AuthFailed, NotFound, ProtocolError
-from ..model import Camera, Status
-from .base import Adapter
+from ..model import Camera, Slot, Status, bounded, clip, material_family
+from .base import Adapter, filament_json
+from .creality import cfs_slots
 
 STATE_MAP = {"standby": "idle", "printing": "printing", "paused": "paused", "complete": "complete",
              "cancelled": "cancelled", "error": "error"}
@@ -40,6 +42,14 @@ class MoonrakerAdapter(Adapter):
         if "result" not in reply:
             raise ProtocolError(f"{self.cfg.name} sent a Moonraker reply without a result")
         return reply["result"]
+
+    def _get_small(self, path: str) -> dict:
+        """GET for loaded-filament reads: the whole reply, capped at FILAMENT_REPLY_MAX before parsing."""
+        _, _, data = net.request("GET", self.base + path, headers=self._headers(), what=self.cfg.name)
+        reply = filament_json(data, self.cfg.name)
+        if "result" not in reply:
+            raise ProtocolError(f"{self.cfg.name} sent a Moonraker reply without a result")
+        return reply
 
     def _post(self, path: str) -> None:
         net.send_json("POST", self.base + path, headers=self._headers(), what=self.cfg.name)
@@ -117,6 +127,45 @@ class MoonrakerAdapter(Adapter):
             total_layers=info.get("total_layer"), message=message,
         )
 
+    # ------------------------------------------------------------ loaded filament
+
+    def filaments(self) -> list[Slot]:
+        """Read-only. A Creality CFS (Klipper's box object), else Spoolman's active spool, else one unknown slot."""
+        objs = self._get_small("/printer/objects/list")["result"]
+        objs = objs.get("objects") if isinstance(objs, dict) else None
+        if not isinstance(objs, list):
+            raise ProtocolError(f"{self.cfg.name} sent a Klipper object list Gantrel can't read")
+        if "box" in objs:
+            return cfs_slots(self._get_small("/printer/objects/query?box"), self.cfg.name)
+        spool = self._spoolman_spool()
+        if spool is None:
+            return [Slot("ext", False, source="moonraker: no Spoolman spool",
+                         extra={"note": "Klipper does not say what is loaded; Spoolman is not set up or has no active spool"})]
+        return [spool]
+
+    def _spoolman_spool(self) -> Slot | None:
+        """The active Spoolman spool through Moonraker's proxy (a GET to Spoolman), or None without one."""
+        try:
+            status = self._get_small("/server/spoolman/status")["result"]
+        except NotFound:
+            return None  # Moonraker's spoolman component is not loaded
+        if not isinstance(status, dict) or status.get("spoolman_connected") is not True:
+            return None
+        sid = self._get_small("/server/spoolman/spool_id")["result"]
+        sid = sid.get("spool_id") if isinstance(sid, dict) else None
+        if isinstance(sid, bool) or not isinstance(sid, int) or not 0 < sid < 10**9:
+            return None
+        # Moonraker's proxy takes a POST that names the method; the request it sends Spoolman is a GET.
+        body = json.dumps({"request_method": "GET", "path": f"/v1/spool/{sid}", "use_v2_response": True}).encode()
+        _, _, data = net.request("POST", self.base + "/server/spoolman/proxy", body=body,
+                                 headers={"Content-Type": "application/json", **self._headers()}, what=self.cfg.name)
+        reply = filament_json(data, self.cfg.name).get("result")
+        if isinstance(reply, dict) and "response" in reply:
+            if reply.get("error"):
+                raise ProtocolError(f"Spoolman, through {self.cfg.name}, could not read spool {sid}")
+            reply = reply.get("response")
+        return spoolman_slot(reply, sid, self.cfg.name)
+
     def upload(self, local_path: Path, remote_name: str) -> str:
         body, ctype = net.multipart({"root": "gcodes"}, "file", remote_name, Path(local_path).read_bytes())
         _, _, data = net.request("POST", f"{self.base}/server/files/upload", body=body, timeout=300,
@@ -175,3 +224,18 @@ class MoonrakerAdapter(Adapter):
 
     def camera_headers(self) -> dict:
         return {}
+
+
+def spoolman_slot(spool, sid: int, what: str) -> Slot:
+    """A Slot from a Spoolman v1 spool object (https://donkie.github.io/Spoolman/)."""
+    if not isinstance(spool, dict):
+        raise ProtocolError(f"Spoolman, through {what}, sent spool {sid} in a shape Gantrel can't read")
+    fil = spool.get("filament") if isinstance(spool.get("filament"), dict) else {}
+    vendor = fil.get("vendor") if isinstance(fil.get("vendor"), dict) else {}
+    extra = {"spool_id": sid}
+    temp = bounded(fil.get("settings_extruder_temp"), 0, 500)
+    if temp is not None:
+        extra["extruder_temp_c"] = temp  # one temperature, not a range, so the nozzle range stays empty
+    return Slot("ext", False, family=material_family(fil.get("material")), material=clip(fil.get("material")),
+                brand=clip(vendor.get("name")), name=clip(fil.get("name")), color=clip(fil.get("color_hex"), 16),
+                grams_left=spool.get("remaining_weight"), source=f"moonraker spoolman /v1/spool/{sid}", extra=extra)
