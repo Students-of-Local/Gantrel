@@ -232,6 +232,54 @@ def test_outside_local_studio_nothing_starts(printer, tmp_path, card, mints, mon
     assert [x["outcome"] for x in log()] == ["not_in_local_studio"]
 
 
+@pytest.mark.parametrize("stop", ["emergency_stop", "pause", "cancel"])
+def test_stops_on_another_printer_answer_while_a_start_card_is_open(printer, tmp_path, card, stop):
+    """A start card holds print_start in recv for up to the budget. A stop for another printer, sent on
+    the same MCP session meanwhile, still answers at once (mcp 2.3 runs sync tools on a worker thread)."""
+    import asyncio
+    import threading
+
+    from mcp import Client
+
+    from gantrel_mcp.server import build
+
+    job = upload(tmp_path)
+    other = fakes.Brain(secret=None)
+    srv = fakes.serve_http(other, fakes.moonraker_routes)
+    try:
+        assert cli.main(["pair", "other", "--type", "moonraker", "--host", "127.0.0.1", "--port",
+                         str(srv.server_address[1]), "--model", "creality-k2"]) == 0
+        other.put("burning.gcode", GCODE)
+        other.state, other.current = "printing", "burning.gcode"
+        release, opened = threading.Event(), {}
+
+        def hold(_req):
+            opened["at"] = time.monotonic()
+            release.wait(8)
+
+        fake = card(answered("Don't start"), on_question=hold)
+
+        async def go():
+            async with Client(build()) as c:
+                held = asyncio.ensure_future(c.call_tool("print_start", {"job_id": job["job"]}))
+                t0 = time.monotonic()
+                while not fake.questions and time.monotonic() - t0 < 5:
+                    await asyncio.sleep(0.02)
+                assert fake.questions, "the start card never opened"
+                res = await c.call_tool(stop, {"printer": "other"})
+                took, card_open = time.monotonic() - opened["at"], not held.done()
+                release.set()
+                return res, took, card_open, await held
+
+        res, took, card_open, held = asyncio.run(go())
+    finally:
+        srv.shutdown()
+    assert not res.is_error, res
+    assert card_open and took < 2, f"{stop} waited {took:.1f} s behind the open card"
+    assert other.events == [{"emergency_stop": "estop"}.get(stop, stop)]
+    assert json.loads(held.content[0].text)["outcome"] == "declined" and not printer.started
+
+
 # ---------------------------------------------------------------- refusals before any card
 
 

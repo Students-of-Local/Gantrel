@@ -246,6 +246,8 @@ def build() -> MCPServer:
         return dumps({"estop": adapter.cfg.name, "result": did, "next": "Tell the person what happened now"})
 
     # ------------------------------------------------------------ start and resume: the person decides
+    # These stay plain def: mcp 2.3 runs a sync tool on a worker thread, so a card held open here never
+    # delays pause, cancel or emergency_stop. An async def would run on the event loop and block them.
 
     @tool(ACT)
     def print_start(job_id: str) -> str:

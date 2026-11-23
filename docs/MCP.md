@@ -67,6 +67,9 @@ A link inside home that points outside it is refused. Models are capped at 200 M
    is never returned, printed or logged.
 7. Append one line to `prints.log`.
 
+While a card is open, the server still answers other calls: mcp 2.3 runs each sync tool on a worker
+thread, so `pause`, `cancel` and `emergency_stop` never wait behind a card.
+
 `print_resume(printer)` is the same flow for a paused print. The printer must be paused on a file
 Gantrel uploaded (a job record whose content-hash name matches); a print started some other way can't
 be resumed here. Its card asks "Resume this paused print?" with the choices Resume print and Don't
