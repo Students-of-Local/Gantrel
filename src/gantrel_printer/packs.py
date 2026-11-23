@@ -474,7 +474,12 @@ PLACEHOLDER_RE = re.compile(r"^\s*([a-z_]+)\s*(?:\[\s*(\d+|initial_extruder|curr
 HOTEND_KEYS = {"EXTRUDER_TEMP", "EXTRUDER_TEMPERATURE", "EXTRUDER", "HOTEND_TEMP", "HOTEND", "NOZZLE_TEMP",
                "NOZZLE", "TOOL_TEMP"}
 BED_KEYS = {"BED_TEMP", "BED_TEMPERATURE", "BED", "HEATER_BED"}
-MARK = "\x00"   # stands in for a slicer placeholder: never a literal
+MARK = "\x00"   # stands in for a known slicer placeholder: never a literal
+UNKNOWN = "\x01"   # stands in for slicer text that is not on the known list
+# Heaters whose S or R parameter sets a temperature. A chamber has no limit in a pack, but its value must still be
+# one Gantrel can read.
+HEATERS = {104: "hotend", 109: "hotend", 140: "bed", 190: "bed", 141: "chamber", 191: "chamber"}
+PLAIN_TEMP_RE = re.compile(r"\d+(?:\.\d+)?")
 GCODE_LINE_RE = re.compile(r"^\s*(?:N\d+\s*)?([GMTgmt])\s*(\d+)(?:\.\d+)?(.*?)(?:\*\d+)?\s*$")
 
 
@@ -492,6 +497,7 @@ def _placeholders(body: str) -> tuple[str, list[str]]:
         pm = PLACEHOLDER_RE.match(inner)
         if not pm or pm.group(1) not in PLACEHOLDERS:
             unknown.append(m.group(0))
+            return UNKNOWN
         return MARK
 
     body = re.sub(r"\{([^{}]*)\}", sub, body)
@@ -500,7 +506,7 @@ def _placeholders(body: str) -> tuple[str, list[str]]:
         if m.group(1) in PLACEHOLDERS:
             return MARK
         unknown.append(m.group(0))
-        return MARK
+        return UNKNOWN
 
     body = re.sub(r"\[([a-z_]+)\]", legacy, body)
     if "{" in body or "}" in body:
@@ -514,6 +520,17 @@ def _num(v: str) -> float | None:
     except ValueError:
         return None
     return x if math.isfinite(x) else None
+
+
+def _glued(value: str) -> bool:
+    """A parameter value where slicer text touches a digit, a sign or more slicer text. The slicer pastes them
+    together, so the value it makes ({temperature[0]}0 becomes 2200) is not one anyone reviewed."""
+    n = value.count(MARK) + value.count(UNKNOWN)
+    return n > 0 and value.strip() not in (MARK, UNKNOWN) and (n > 1 or bool(re.search(r"[\d+-]", value)))
+
+
+GLUED_WHY = ("mixes a slicer placeholder with digits, a sign or another placeholder in one value; the slicer pastes "
+             "them together into a number no one reviewed")
 
 
 def _refused_anywhere(body: str) -> str:
@@ -563,8 +580,26 @@ def gcode_policy(text: str, path: str, hotend_max: float | None, bed_max: float 
         finding = None
         if m:
             letter, num, rest = m.group(1).upper(), int(m.group(2)), m.group(3).upper()
-            params = dict((k, v) for k, v in re.findall(r"([A-Z])\s*(-?\d+(?:\.\d+)?|" + MARK + ")", rest))
+            # Each parameter is a letter and the text up to the next letter, as Klipper reads it.
+            pairs = [(k, v.strip()) for k, v in re.findall(r"([A-Z])([^A-Z]*)", rest)]
+            params = dict(pairs)
             cmd = f"{letter}{num}"
+            heater = HEATERS.get(num) if letter == "M" else None
+            if heater:
+                # S or R must be a plain number Gantrel checks, or one known placeholder alone (the pack's own
+                # material temperature). Marlin reads a value as far as strtod goes (S1E3 is 1000), so the whole
+                # run of text after the letter is what must be plain.
+                bad = [f"{k}{v}" for k, v in re.findall(r"([SR])\s*(\S*)", rest)
+                       if v != MARK and not PLAIN_TEMP_RE.fullmatch(v)]
+                if bad:
+                    rep.add("refusal", path, f"{cmd} {bad[0][0]} must be a plain number or one known slicer "
+                                             f"placeholder alone; anything else sets a {heater} temperature this "
+                                             "check cannot hold to the pack's limits", n, raw)
+                    continue
+            glued = [k for k, v in pairs if _glued(v)]
+            if glued:
+                rep.add("refusal", path, f"{cmd} {glued[0]} {GLUED_WHY}", n, raw)
+                continue
             if letter == "M" and num in REFUSED_M:
                 rep.add("refusal", path, f"{cmd} {REFUSED_M[num]}", n, raw)
                 continue
@@ -581,16 +616,12 @@ def gcode_policy(text: str, path: str, hotend_max: float | None, bed_max: float 
                 # axis to 0), it tells the printer the head is somewhere it is not, as SET_KINEMATIC_POSITION does.
                 finding = ("G92 other than G92 E tells the printer the head is somewhere it may not be, so a later move "
                            "can drive the nozzle into the bed or the frame")
-            heater = {104: "hotend", 109: "hotend", 140: "bed", 190: "bed"}.get(num) if letter == "M" else None
             if heater:
-                for key in ("S", "R"):
-                    v = _num(params.get(key, ""))
-                    if v is not None:
-                        temps.append((heater, v))
+                temps += [(heater, float(v)) for k, v in re.findall(r"([SR])\s*(\S*)", rest) if v != MARK]
         else:
             tokens = body.split()
             word = tokens[0].upper()
-            if MARK in word or not re.match(r"^[A-Z_][A-Z0-9_]*$", word):
+            if MARK in word or UNKNOWN in word or not re.match(r"^[A-Z_][A-Z0-9_]*$", word):
                 finding = "is not a G-code command Gantrel recognizes"
             elif word in REFUSED_WORDS:
                 rep.add("refusal", path, f"{word} {REFUSED_WORDS[word]}", n, raw)
@@ -602,6 +633,10 @@ def gcode_policy(text: str, path: str, hotend_max: float | None, bed_max: float 
                 if "=" in t:
                     k, v = t.split("=", 1)
                     kv[k.upper()] = v
+            glued = [k for k, v in kv.items() if _glued(v)]
+            if glued:
+                rep.add("refusal", path, f"{word} {glued[0]} {GLUED_WHY}", n, raw)
+                continue
             for k, v in kv.items():
                 x = _num(v)
                 if x is None:

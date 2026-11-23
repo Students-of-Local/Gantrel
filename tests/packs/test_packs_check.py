@@ -198,6 +198,39 @@ def test_temperatures_at_the_limit_and_placeholders_pass(good):
     assert not [i for i in rep.items if i.path.startswith("printer.start")], rep.items
 
 
+@pytest.mark.parametrize("line", [
+    "M104 S{first_layer_temperature[0]}0",   # 220 C becomes 2200 once sliced
+    "M104 S1{temperature[0]}", "M104 S+400", "M140 S+150", "M109 R+250", "M104 S-5", "M104 S1E3",
+    "M104 S{temperature[0]+10}", "M109 S{foo}", "M190 S{first_layer_bed_temperature[0]}{temperature[0]}",
+    "M141 S{chamber_temperature[0]}0", "M191 S+60", "M104 S\"400\"", "M104 S", "m104 s+400", "M104 T0 S1{temperature[0]}",
+])
+def test_temperature_parameter_that_is_not_a_plain_number_or_one_placeholder_is_refused(good, line):
+    good["printer"]["start_gcode"] = f"G28\n{line}"
+    item = refused_at(check(good), "printer.start_gcode", 2, "plain number")
+    assert item.text == line
+
+
+@pytest.mark.parametrize("line", [
+    "G1 Z{layer_height}0", "G1 X1{print_bed_max[0]}", "G1 Z-{layer_height}", "G1 Z{layer_z}{layer_height}",
+    "G1 Z+{layer_height}", "START_PRINT EXTRUDER_TEMP={first_layer_temperature[0]}0",
+    "START_PRINT EXTRUDER_TEMP=1{temperature[0]}", "PRINT_START BED_TEMP={bed_temperature[0]}{bed_temperature[0]}",
+    "M106 S2{layer_num}",
+])
+def test_placeholder_glued_to_a_digit_sign_or_placeholder_is_refused(good, line):
+    good["printer"]["start_gcode"] = f"G28\n{line}"
+    item = refused_at(check(good), "printer.start_gcode", 2, "placeholder")
+    assert item.text == line
+
+
+@pytest.mark.parametrize("line", ["M104 S{temperature[0]}", "M109 R[temperature]", "M140 S {bed_temperature[0]}",
+                                  "M104 S215.5", "M104 T0 S{temperature[0]}", "M141 S{chamber_temperature[0]}",
+                                  "M104 S0"])
+def test_plain_numbers_and_one_whole_placeholder_pass(good, line):
+    good["printer"]["start_gcode"] = line
+    rep = check(good)
+    assert not [i for i in rep.items if i.path == "printer.start_gcode"], rep.items
+
+
 @pytest.mark.parametrize("line", ["G0 X1", "G1 X5 Y20 E1 F600", "G2 X1 Y1 I1 J0", "G3 X1 Y1 I1 J0", "G4 P100", "G28",
                                   "G29", "G90", "G91", "G92 E0", "M82", "M83", "M84", "M104 S200", "M105", "M106 S255",
                                   "M107", "M109 S200", "M140 S60", "M190 S60", "M141 S40", "M191 S40", "M204 S5000",
@@ -213,7 +246,7 @@ def test_allowed_lines_pass_without_remark(good, line):
 
 @pytest.mark.parametrize("line, word", [
     ("G32", "G32 is not on"), ("M118 hello", "M118 is not on"), ("T16", "past T15"),
-    ("LOAD_MATERIAL", "LOAD_MATERIAL is a printer macro"), ("M104 S{temperature[0]+10}", "placeholder"),
+    ("LOAD_MATERIAL", "LOAD_MATERIAL is a printer macro"), ("G1 Z{layer_z+1}", "placeholder"),
     ("{if first_layer_temperature[0] > 200}G1 X1{endif}", "not a G-code command"),
     ("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=200", "SET_HEATER_TEMPERATURE"),
 ])
