@@ -79,8 +79,9 @@ Do the steps in order. Stop at any step that fails and tell the person what it s
 3. Check it: `gantrel-printer pack check <file>`. If it says REFUSED, fix each REFUSED line or
    remove what it names, then check again.
 4. Show it: `gantrel-printer pack show <file>`. Show the person all of it: the printer, every
-   material row, every G-code line, and every FINDING line. A FINDING is a G-code line Gantrel does
-   not know, often one of the printer's own macros.
+   material row, every G-code line, and every FINDING line. A FINDING is a G-code line the person
+   must agree to: one Gantrel does not know (often one of the printer's own macros), or one that
+   moves where the printer thinks the nozzle is (G92 with X, Y or Z).
 5. The pack is now saved in that file. Stop here unless the person asks to share it.
 
 ## Share a pack
