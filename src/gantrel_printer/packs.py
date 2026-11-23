@@ -25,6 +25,7 @@ import json
 import math
 import os
 import re
+import shlex
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -474,6 +475,11 @@ PLACEHOLDER_RE = re.compile(r"^\s*([a-z_]+)\s*(?:\[\s*(\d+|initial_extruder|curr
 HOTEND_KEYS = {"EXTRUDER_TEMP", "EXTRUDER_TEMPERATURE", "EXTRUDER", "HOTEND_TEMP", "HOTEND", "NOZZLE_TEMP",
                "NOZZLE", "TOOL_TEMP"}
 BED_KEYS = {"BED_TEMP", "BED_TEMPERATURE", "BED", "HEATER_BED"}
+# Macro parameters that hold a temperature. Their value must read as a number or be one known placeholder alone.
+TEMP_KEYS = HOTEND_KEYS | BED_KEYS | {"TEMP", "TARGET", "CHAMBER_TEMP", "CHAMBER_TEMPERATURE", "CHAMBER"}
+# Of those, the ones Klipper commands also use to name a heater or extruder (SET_PRESSURE_ADVANCE EXTRUDER=extruder),
+# so a plain object name there is not a temperature.
+OBJECT_KEYS = {"EXTRUDER", "NOZZLE", "BED", "HEATER_BED", "CHAMBER"}
 MARK = "\x00"   # stands in for a known slicer placeholder: never a literal
 UNKNOWN = "\x01"   # stands in for slicer text that is not on the known list
 # Heaters whose S or R parameter sets a temperature. A chamber has no limit in a pack, but its value must still be
@@ -531,6 +537,15 @@ def _glued(value: str) -> bool:
 
 GLUED_WHY = ("mixes a slicer placeholder with digits, a sign or another placeholder in one value; the slicer pastes "
              "them together into a number no one reviewed")
+
+
+def _float_word(v: str) -> bool:
+    """inf, nan and the like: words Python's float() (and so Klipper's Jinja |float) reads."""
+    try:
+        float(v)
+        return True
+    except ValueError:
+        return False
 
 
 def _refused_anywhere(body: str) -> str:
@@ -628,16 +643,27 @@ def gcode_policy(text: str, path: str, hotend_max: float | None, bed_max: float 
                 continue
             elif word not in ALLOWED_MACROS:
                 finding = f"{word} is a printer macro or command not on Gantrel's allowed list"
-            kv = {}
-            for t in tokens[1:]:
-                if "=" in t:
-                    k, v = t.split("=", 1)
-                    kv[k.upper()] = v
-            glued = [k for k, v in kv.items() if _glued(v)]
+            # Klipper reads a macro's parameters with shlex.split, so EXTRUDER_TEMP="400" and "EXTRUDER_TEMP=400"
+            # both reach the macro as EXTRUDER_TEMP=400. Read them the same way.
+            try:
+                args = shlex.split(body[len(tokens[0]):])
+            except ValueError:
+                rep.add("refusal", path, f"{word} has a quote with no closing quote; the printer would read it "
+                                         "differently than this check does", n, raw)
+                continue
+            pairs = [(k.upper(), v) for k, v in (t.split("=", 1) for t in args if "=" in t)]
+            kv = dict(pairs)
+            glued = [k for k, v in pairs if _glued(v)]
             if glued:
                 rep.add("refusal", path, f"{word} {glued[0]} {GLUED_WHY}", n, raw)
                 continue
-            for k, v in kv.items():
+            unread = [k for k, v in pairs if k in TEMP_KEYS and v != MARK and _num(v) is None
+                      and not (k in OBJECT_KEYS and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", v) and not _float_word(v))]
+            if unread:
+                rep.add("refusal", path, f"{word} {unread[0]} must read as a number or be one known slicer placeholder "
+                                         "alone; this value cannot be checked against the pack's limits", n, raw)
+                continue
+            for k, v in pairs:
                 x = _num(v)
                 if x is None:
                     continue

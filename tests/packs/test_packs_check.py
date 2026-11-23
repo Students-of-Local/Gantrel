@@ -222,6 +222,40 @@ def test_placeholder_glued_to_a_digit_sign_or_placeholder_is_refused(good, line)
     assert item.text == line
 
 
+@pytest.mark.parametrize("line, word", [
+    # Klipper runs shlex.split on a macro's parameters, so the macro gets EXTRUDER_TEMP=400 from each of these.
+    ('START_PRINT EXTRUDER_TEMP="400" BED_TEMP="150"', "sets the hotend to 400"),
+    ('START_PRINT "EXTRUDER_TEMP=400"', "sets the hotend to 400"),
+    ("START_PRINT EXTRUDER_TEMP='400'", "sets the hotend to 400"),
+    ('PRINT_START "BED_TEMP"=150', "sets the bed to 150"),
+    ('START_PRINT EXTRUDER_TEMP=250 BED_TEMP="1"50', "sets the bed to 150"),
+    ('SET_HEATER_TEMPERATURE HEATER="extruder" TARGET="350"', "sets the hotend to 350"),
+    ("START_PRINT EXTRUDER_TEMP=hot", "read as a number"), ("START_PRINT TEMP=abc", "read as a number"),
+    ("START_PRINT BED_TEMP=0x96", "read as a number"), ("START_PRINT HOTEND=nan", "read as a number"),
+    ("START_PRINT EXTRUDER_TEMP={foo}", "read as a number"), ("START_PRINT EXTRUDER=inf", "read as a number"),
+    ('START_PRINT EXTRUDER_TEMP="400', "quote"),
+])
+def test_macro_temperatures_in_quotes_or_unreadable_are_refused(good, line, word):
+    good["printer"]["start_gcode"] = f"G28\n{line}"
+    item = refused_at(check(good), "printer.start_gcode", 2, word)
+    assert item.text == line
+
+
+@pytest.mark.parametrize("line", ['START_PRINT EXTRUDER_TEMP="250" BED_TEMP=\'60\'',
+                                  'START_PRINT EXTRUDER_TEMP="{first_layer_temperature[0]}"',
+                                  "START_PRINT EXTRUDER_TEMP=+250 CHAMBER_TEMP={chamber_temperature[0]}"])
+def test_macro_temperatures_in_quotes_within_the_limits_pass(good, line):
+    good["printer"]["start_gcode"] = line
+    rep = check(good)
+    assert not [i for i in rep.items if i.path == "printer.start_gcode"], rep.items
+
+
+def test_a_macro_naming_an_extruder_object_is_not_a_temperature(good):
+    good["printer"]["start_gcode"] = "SET_PRESSURE_ADVANCE EXTRUDER=extruder ADVANCE=0.04"
+    rep = check(good)
+    assert not [i for i in rep.refusals if i.path == "printer.start_gcode"], rep.refusals
+
+
 @pytest.mark.parametrize("line", ["M104 S{temperature[0]}", "M109 R[temperature]", "M140 S {bed_temperature[0]}",
                                   "M104 S215.5", "M104 T0 S{temperature[0]}", "M141 S{chamber_temperature[0]}",
                                   "M104 S0"])
