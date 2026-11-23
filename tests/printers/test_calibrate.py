@@ -234,7 +234,9 @@ def test_calibrate_upload_sends_it_and_still_never_starts(k2, tmp_path, capsys):
     assert f"Uploaded to k2 as {remote}. It has NOT started." in text
     job = safety.list_jobs()[0]
     assert job.remote_name == remote and job.material == "PLA" and job.est_seconds
-    assert text.strip().splitlines()[-1].startswith(f"NEXT: Tell the person to start {remote}")
+    last = text.strip().splitlines()[-1]
+    assert last.startswith("NEXT: It has NOT started.")
+    assert f"call print_start {job.id}" in last and f"({remote})" in last
 
 
 def test_calibrate_takes_a_profile_key_without_a_paired_printer(tmp_path, capsys):

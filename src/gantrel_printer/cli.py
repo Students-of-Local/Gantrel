@@ -321,6 +321,14 @@ def loaded_slot(adapter, material: str) -> str:
     return match[0].slot if len(match) == 1 else ""
 
 
+def start_next(job_id: str, remote_name: str) -> str:
+    """How an uploaded job starts. The model's shell can't tell whether it runs in Local Studio (Local
+    Studio gives the ask variables only to the plugin's MCP server), so the line names both routes."""
+    return (f"It has NOT started. In Local Studio (Gantrel's tools are in your tool list), call print_start "
+            f"{job_id}: the person sees a card and starts it there. Anywhere else, tell the person the file name "
+            f"({remote_name}) and where to start it, then wait for them to say it started")
+
+
 def cmd_upload(args):
     path = Path(args.file).expanduser().resolve()
     job, adapter = upload_file(args.printer, path, args.name, args.material)
@@ -328,8 +336,7 @@ def cmd_upload(args):
     out(args, {"job": job.id, "printer": args.printer, "remote_name": remote_name, "sha256": job.sha256},
         f"Uploaded {path.name} to {args.printer} as {remote_name}. It has NOT started.\n"
         f"Only a person starts a print. {adapter.start_by_hand(remote_name)}",
-        f"Tell the person the file name ({remote_name}) and where to start it, then wait for them to say it "
-        f"started. Then watch it: gantrel-printer camera {args.printer} --out cam.jpg")
+        f"{start_next(job.id, remote_name)}. Then watch it: gantrel-printer camera {args.printer} --out cam.jpg")
 
 
 def cmd_calibrate(args):
@@ -357,7 +364,7 @@ def cmd_calibrate(args):
         data.update(job=job.id, remote_name=job.remote_name)
         lines.append(f"Uploaded to {name} as {job.remote_name}. It has NOT started. Only a person starts a print. "
                      + adapter.start_by_hand(job.remote_name))
-        nxt = f"Tell the person to start {job.remote_name} on the printer. {judge}"
+        nxt = f"{start_next(job.id, job.remote_name)}. {judge}"
     else:
         lines.append("Nothing was sent to the printer.")
         send = (f"gantrel-printer upload {path} --printer {name}" if name

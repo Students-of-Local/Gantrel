@@ -83,8 +83,10 @@ surfaces), follow "Calibration prints" below.
    Use `--quality draft|standard|fine|strong` if the person asked for speed, detail or strength.
    Tell the person the main settings it printed (layer height, temperatures, infill, time).
    If it says no slicer is installed, pass on its install advice and stop.
-7. Upload: `gantrel-printer upload <file.gcode> --printer <name> --material <material>`.
-   It prints a job id. Uploading never starts the print. Resin printers (Elegoo Saturn and Mars)
+7. Upload. Inside Local Studio (the Gantrel tools are in your tool list), call the `upload` tool
+   with the file's path, the printer name and the material (and the `plan_id` if you planned it).
+   Anywhere else, run `gantrel-printer upload <file.gcode> --printer <name> --material <material>`.
+   Either one gives a job id and never starts the print. Resin printers (Elegoo Saturn and Mars)
    are not sliced here: upload the .ctb or .goo file the person sliced in their resin slicer.
    If upload is refused (UltiMaker, or a USB printer with no SD card), tell the person what it
    said and how to get the file to the printer.
@@ -137,7 +139,8 @@ the ones the problem needs:
    made by Gantrel for that printer's bed, nozzle and material, so no slicer is needed.
 3. If the person wants it on the printer, run it again with `--upload` (or run
    `gantrel-printer upload <file> --printer <name>`). Then do steps 5, 8 and 9 of "Steps to print":
-   check the bed is empty, tell the person the file name and where to start it, and watch.
+   check the bed is empty, start it the person's way (inside Local Studio, `print_start` with the
+   job id; anywhere else, tell the person the file name and where to start it), and watch.
 4. When it is done, tell the person exactly what the NEXT line says to look for, and which setting
    to change. For towers, band 1 is the bottom; for flow, patch 1 is the left one, marked by a
    small tab. Ask them which band or patch looks best, or look at a camera image with them.
@@ -163,7 +166,8 @@ the ones the problem needs:
 - When the person asks how the print is going, run `gantrel-printer frames <name>`. The newest job
   is first. Look at the last image in its folder's `frames/`, or show it to the person.
 - If a job says `paused_by_guard`, tell the person it was paused and the "paused because" reason.
-  Only they can resume it, on the printer, after they look at the print.
+  Only they can resume it, after they look at the print: on the card `print_resume` shows them
+  inside Local Studio, or on the printer anywhere else.
 - If watch says the printer is already being watched, don't start another watch.
 
 ## Rules and checks
@@ -179,7 +183,9 @@ the ones the problem needs:
 - ABS and ASA need an enclosed printer; TPU needs direct drive. If slice refuses, say why. Use
   --force only when the person asks for it after hearing the warning.
 - If a command prints ERROR, tell the person the error and its advice in plain words.
-- A calibration print is still a print: the person starts it on the printer, with an empty bed.
+- A calibration print is still a print: it starts the same way as step 8 (the person's click on the
+  `print_start` card inside Local Studio, or the person at the printer anywhere else), with an
+  empty bed.
 
 ## Sources
 

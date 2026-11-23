@@ -123,7 +123,10 @@ it writes nothing in the checkout.
 
 - **Local Studio:** nothing to do. The plugin's `plugin.toml` asks for `mcp-server` and `ask-user`;
   grant both on the consent sheet, and Local Studio starts the server for each thread with the ask
-  variables. This is the only place `print_start` can start a print.
+  variables. This is the only place `print_start` can start a print. The plugin's printers skill
+  uploads with the `upload` tool there, whose `next` names `print_start`. The model's shell gets none
+  of the ask variables, so the CLI's `upload` NEXT line names both routes: `print_start <job id>` in
+  Local Studio, the printer anywhere else.
 - **Claude Code:** `claude mcp add --scope user gantrel -- /path/to/Gantrel/bin/gantrel-mcp`
 - **Codex:** `codex mcp add gantrel -- /path/to/Gantrel/bin/gantrel-mcp`
 - **Grok Bot (grok CLI):** `grok mcp add --scope user gantrel /path/to/Gantrel/bin/gantrel-mcp`

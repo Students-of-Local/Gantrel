@@ -696,6 +696,20 @@ def test_prints_command_lists_every_attempt(printer, tmp_path, card, capsys):
     assert text.rstrip().splitlines()[-1].startswith("NEXT: ")
 
 
+def test_cli_upload_next_line_leads_to_print_start_in_local_studio(printer, tmp_path, card, capsys):
+    """first-F2: the printers skill says to follow every NEXT line. Inside Local Studio the CLI upload's
+    NEXT line must name print_start with the job id, or a model that follows it never shows the card."""
+    card(answered("Don't start"))
+    f = tmp_path / "part.gcode"
+    f.write_bytes(GCODE)
+    capsys.readouterr()
+    assert cli.main(["upload", str(f), "--printer", "moon"]) == 0
+    last = capsys.readouterr().out.strip().splitlines()[-1]
+    job = safety.list_jobs()[0]
+    assert last.startswith("NEXT: ") and f"print_start {job.id}" in last
+    assert not printer.started
+
+
 def test_cli_still_has_no_start_or_resume():
     subs = set(cli.parser()._subparsers._group_actions[0].choices)
     assert not subs & {"start", "resume", "confirm", "print"}

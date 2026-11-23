@@ -103,6 +103,7 @@ Calibration prints (`gantrel-printer calibrate <printer> first-layer|temp-tower|
 | The card holds no tool argument | Fake: an injection string as the job id, in the upload's folder, in a file name, as a plan id and as a material never reaches a card or the log. |
 | Upload records the material the file was sliced for: a material argument that disagrees with the file's `filament_type` is refused, with nothing sent or recorded | Fake: a PETG file uploaded as PLA through the MCP tool. |
 | Resume only of a paused print Gantrel uploaded, on the answer Resume print | Fake. |
+| The printers skill leads to `print_start` inside Local Studio: step 7 uploads with the `upload` tool, the calibration and paused-by-guard lines match step 8, and the CLI's `upload` and `calibrate --upload` NEXT lines name `print_start <job id>` (the model's shell gets no Local Studio variables, so the line always names both routes) | Skill text test and the CLI's NEXT line with the Local Studio variables set. No model has run the skill in Local Studio yet. |
 | prints.log (0600) records every attempt and never the token; `gantrel-printer prints` lists it | Fake. |
 | File arguments: inside home or the working folder, links out refused, size caps | Unit tests with HOME and the working folder moved into a temp folder. |
 
