@@ -461,6 +461,44 @@ def test_show_withholds_a_pack_that_holds_private_data(capsys, good, write, wher
     assert rc == 1 and secret not in text + err
 
 
+def _set_start(gcode):
+    def change(p):
+        p["printer"]["start_gcode"] = gcode
+    return change
+
+
+def _control_char_and_unknown_key(p):
+    # A control character refusal carries its raw line, and the unknown key stops the check before its other rules.
+    p["notes"] = "my k2 at 192.168.1.50\x07"
+    p["extra"] = 1
+
+
+def _email_key(p):
+    p["maker@example.com"] = 1   # an unknown key: its refusal's field path is the key itself
+
+
+@pytest.mark.parametrize("change, secret", [
+    (_set_start("LOAD_MATERIAL ; password: Hunter2Secret"), "Hunter2Secret"),
+    (_set_start("G28\nLOAD_MATERIAL ; questions to maker@example.com"), "maker@example.com"),
+    (_control_char_and_unknown_key, "192.168.1.50"),
+    (_email_key, "maker@example.com"),
+], ids=["password-on-one-line", "email-in-a-macro-comment", "control-char-and-schema-fail", "email-as-a-key"])
+def test_private_text_appears_in_no_result_from_any_rule(capsys, good, write, change, secret):
+    change(good)
+    f = write(good)
+    sha = packs.sha256(f.read_bytes())
+    rep = packs.check_bytes(f.read_bytes())[1]
+    assert rep.private, rep.items
+    for i in rep.items:
+        assert secret not in i.path + i.reason + i.text, i.to_dict()
+    for argv in (["pack", "check", f], ["pack", "check", f, "--json"], ["pack", "show", f], ["pack", "show", f, "--json"],
+                 ["pack", "import", f, "--accept", sha[:12]], ["pack", "import", f, "--accept", sha[:12], "--json"]):
+        rc, text, err = run(capsys, *argv)
+        assert rc != 0 and secret not in text + err, (argv, text + err)
+        if argv[1] != "import":   # import names the first refusal's field and reason, not its line
+            assert "[hidden]" in text + err, (argv, text + err)
+
+
 def test_reimporting_an_accepted_pack_is_a_no_op(capsys, tmp_path, good, write, fake_slicer):
     good["printer"]["start_gcode"] += "\nLOAD_MATERIAL"
     f = write(good)

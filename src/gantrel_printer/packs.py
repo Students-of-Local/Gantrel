@@ -65,6 +65,7 @@ class Item:
     reason: str
     line: int | None = None  # 1-based line inside a multi-line string
     text: str = ""          # the line (private data in it masked)
+    raw: tuple = field(default=(), repr=False, compare=False)   # (path, reason, text) as added; never shown
 
     def to_dict(self) -> dict:
         return {"level": self.level, "path": self.path, "line": self.line, "text": self.text, "reason": self.reason}
@@ -77,9 +78,29 @@ class Item:
 class Report:
     sha256: str = ""
     items: list[Item] = field(default_factory=list)
+    # What the privacy scan flagged. Every item's path, reason and text is masked here, in one place, whichever
+    # rule added it and whether it came before or after the scan, so no output can carry the raw text.
+    secrets: list[str] = field(default_factory=list, repr=False)
 
     def add(self, level: str, path: str, reason: str, line: int | None = None, text: str = "") -> None:
-        self.items.append(Item(level, path, reason, line, shown(text)))
+        item = Item(level, path, reason, line, "", (path, reason, text))
+        self._mask(item)
+        self.items.append(item)
+
+    def hide(self, span: str) -> None:
+        """Mask this text in every item, those already added and those to come."""
+        if span and span not in self.secrets:
+            self.secrets.append(span)
+            for i in self.items:
+                self._mask(i)
+
+    def _mask(self, item: Item) -> None:
+        def m(s: str) -> str:
+            spans = [(a, b) for a, b, _ in _private_spans(s)]
+            spans += [(x.start(), x.end()) for sec in self.secrets for x in re.finditer(re.escape(sec), s)]
+            return _mask(s, _merged(spans))
+        path, reason, text = item.raw
+        item.path, item.reason, item.text = m(path), m(reason), shown(m(text))
 
     def of(self, level: str) -> list[Item]:
         return [i for i in self.items if i.level == level]
@@ -385,9 +406,39 @@ PRIVACY = (
 
 
 def _mask(line: str, spans: list[tuple[int, int]]) -> str:
+    """spans must not overlap (see _merged)."""
     for a, b in sorted(spans, reverse=True):
         line = line[:a] + "[hidden]" + line[b:]
     return line
+
+
+def _merged(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    out: list[list[int]] = []
+    for a, b in sorted(spans):
+        if out and a <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], b)
+        else:
+            out.append([a, b])
+    return [(a, b) for a, b in out]
+
+
+def _private_spans(line: str) -> list[tuple[int, int, str]]:
+    """Every match of the privacy patterns in one line: (start, end, what it is)."""
+    hits: list[tuple[int, int, str]] = []
+    for rx, ok, why in PRIVACY:
+        for m in rx.finditer(line):
+            if ok is None or ok(m):
+                if not any(a <= m.start() < b or m.start() <= a < m.end() for a, b, _ in hits):
+                    hits.append((m.start(), m.end(), why))
+    for m in CODE8_RE.finditer(line):
+        tok = m.group(0)
+        near = line[max(0, m.start() - 30):m.end() + 30]
+        if any(c.isdigit() for c in tok) and CODE_WORD_RE.search(near):
+            hits.append((m.start(), m.end(), "an 8 character code next to the word code or access"))
+    for rx, why in KV_PATTERNS:
+        for m in rx.finditer(line):
+            hits.append((m.start(), m.end(), why))
+    return hits
 
 
 def scan_string(s: str, path: str, rep: Report, multiline: bool) -> None:
@@ -395,29 +446,17 @@ def scan_string(s: str, path: str, rep: Report, multiline: bool) -> None:
     lines = s.split("\n")
     for n, line in enumerate(lines, 1):
         ln = n if len(lines) > 1 else None
+        hits = _private_spans(line)
+        for a, b in _merged([(a, b) for a, b, _ in hits]):
+            rep.hide(line[a:b])
         for i, ch in enumerate(line):
             cat = unicodedata.category(ch)
             if (cat[0] == "C" and ch != "\t") or cat in ("Zl", "Zp"):
                 rep.add("refusal", path, f"holds an invisible or control character (U+{ord(ch):04X}); packs must "
                                          "read the same to a person as to a machine", ln, line)
                 break
-        hits: list[tuple[int, int, str]] = []
-        for rx, ok, why in PRIVACY:
-            for m in rx.finditer(line):
-                if ok is None or ok(m):
-                    if not any(a <= m.start() < b or m.start() <= a < m.end() for a, b, _ in hits):
-                        hits.append((m.start(), m.end(), why))
-        for m in CODE8_RE.finditer(line):
-            tok = m.group(0)
-            near = line[max(0, m.start() - 30):m.end() + 30]
-            if any(c.isdigit() for c in tok) and CODE_WORD_RE.search(near):
-                hits.append((m.start(), m.end(), "an 8 character code next to the word code or access"))
-        for rx, why in KV_PATTERNS:
-            for m in rx.finditer(line):
-                hits.append((m.start(), m.end(), why))
         for why in dict.fromkeys(h[2] for h in hits):
-            rep.add("refusal", path, f"holds {why}; {PRIVATE_WHY}", ln,
-                    _mask(line, [(a, b) for a, b, _ in hits]))
+            rep.add("refusal", path, f"holds {why}; {PRIVATE_WHY}", ln, line)
     if not multiline and len(lines) > 1:
         rep.add("refusal", path, "must be one line")
     if "\r" in s:
@@ -825,16 +864,7 @@ def check_bytes(data: bytes) -> tuple[dict | None, Report]:
     for key in ("start_gcode", "end_gcode"):
         gcode_policy(p[key], f"printer.{key}", p["hotend_max_c"], p["bed_max_c"], rep)
     material_rules(raw, rep)
-    _mask_private_lines(rep)
     return raw, rep
-
-
-def _mask_private_lines(rep: Report) -> None:
-    """Every result on a line that holds private data shows the masked line, never the raw one."""
-    masked = {(i.path, i.line): i.text for i in rep.private}
-    for i in rep.items:
-        if i.text and (i.path, i.line) in masked:
-            i.text = masked[(i.path, i.line)]
 
 
 def check_file(path: str | Path) -> tuple[dict | None, Report, bytes]:

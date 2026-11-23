@@ -561,8 +561,11 @@ refused too, so a pack reads the same to a person as to a machine.
 
 `pack show` never prints a pack the scan refuses. It prints the sha256, the result and every
 refusal, finding and note, each with the private part hidden, and none of the pack's contents and no
-accept code; `--json` gives `"pack": null` and no `accept`. Any other result on a line that holds
-private data (a G-code finding, say) shows the same hidden line, in `pack check` too.
+accept code; `--json` gives `"pack": null` and no `accept`. What the scan flags is hidden in every
+result from every rule (a G-code finding, a control character refusal, the field path of an
+unknown key), in its field path, its reason and its line, whether that rule ran before or after the
+scan and even when the schema stops the check early. So `pack check`, `pack show`, both with
+`--json`, and `pack import`'s error never print it.
 
 ### G-code policy
 
