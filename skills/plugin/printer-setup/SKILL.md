@@ -105,12 +105,17 @@ others have copied it. So:
    pack show printed. Do you want to share it?" Do nothing more without a clear yes.
 2. Run `gh auth status`. If it is not signed in, tell the person to sign in with `gh auth login`
    themselves, then stop. Never sign in for them.
-3. With their yes, run these one at a time:
+3. With their yes, run these one at a time, starting in the folder where you exported the pack.
+   `realpath <file>` prints the file's full path; use it as `<full path>` below, because `cd`
+   changes the folder. `<user>` is the person's GitHub user name, from `gh api user --jq .login`.
 
-       gh repo fork baney75/Gantrel --clone
-       cd Gantrel
-       git checkout -b pack-<id>
-       cp <file> profiles/community/<id>.json
+       realpath <file>
+       gh repo fork baney75/Gantrel --clone=false
+       gh repo clone <user>/Gantrel gantrel-pack-<id>
+       cd gantrel-pack-<id>
+       git fetch upstream
+       git checkout -b pack-<id> upstream/main
+       cp <full path> profiles/community/<id>.json
        gantrel-printer pack check profiles/community/<id>.json
        git add profiles/community/<id>.json
        git commit -m "Pack: <id>"
@@ -119,6 +124,8 @@ others have copied it. So:
 
    The body has the `result:` line and the accept code from pack show, and every FINDING line with
    one sentence from the person on what it does.
+   If gh says the fork already exists, go on: the clone uses it. If the `gantrel-pack-<id>` folder
+   already exists, tell the person and stop; never delete it.
 4. Tell the person the pull request link. Reviewers read it with pack show before it is merged.
 
 ## Use a pack someone else shared

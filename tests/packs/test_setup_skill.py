@@ -79,3 +79,15 @@ def test_save_steps_put_in_the_numbers_calibration_measured():
     readme = (ROOT / "profiles" / "community" / "README.md").read_text()
     for field in ("`nozzle_c`", "`retraction_mm`", "`flow_ratio`"):
         assert field in readme, field
+
+
+def test_share_steps_copy_the_file_by_its_full_path_and_handle_an_existing_fork():
+    # pack export writes <id>.json in the current folder and prints the path as given, so after cd a relative
+    # <file> no longer resolves and cp fails.
+    share = section(SKILL.read_text(), "## Share a pack")
+    block = [ln.strip() for ln in share.splitlines() if ln.startswith("       ") and ln.strip()]
+    first_cd = next(i for i, ln in enumerate(block) if ln.startswith("cd "))
+    assert any(ln.startswith("realpath ") for ln in block[:first_cd]), block
+    cp = next(ln for ln in block if ln.startswith("cp "))
+    assert cp.startswith("cp <full path> "), cp
+    assert "already exists" in share
