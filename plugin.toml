@@ -1,6 +1,6 @@
 id = "gantrel"
 name = "Gantrel"
-version = "0.3.0"
+version = "0.4.0"
 description = "Gantrel for Local Studio: design 3D printable parts with a local model and the smoothstone recipes, see and adjust them live in Gantrel Studio, then slice, upload and watch them on your printers"
 skills = "skills/plugin"
 capabilities = ["mcp-server", "ask-user"]
