@@ -290,3 +290,28 @@ def test_plan_reads_a_bambu_style_3mf(tmp_path):
     p = optimize.plan(mesh.load(f), slicing.PRINTERS["bambu-x1c"], "PLA")
     assert p["check"]["ok"] and p["part"]["volume_mm3"] == pytest.approx(abs(shapes.mushroom().volume), rel=1e-6)
 
+
+def test_3mf_mirrored_parts_keep_their_facets_facing_out(tmp_path):
+    """A part mirrored in Bambu Studio or OrcaSlicer has a transform with a negative determinant. Mirroring
+    flips which way every facet winds, so the reader must turn them back. Here only the mushroom is mirrored
+    and the cube beside it is bigger, so the total volume stays positive and a whole-mesh check would miss it."""
+    root = ('<object id="3" type="model"><components>'
+            '<component p:path="/3D/Objects/object_1.model" objectid="1" transform="-1 0 0 0 1 0 0 0 1 30 0 0"/>'
+            '<component p:path="/3D/Objects/object_2.model" objectid="2" transform="1 0 0 0 1 0 0 0 1 60 0 0"/>'
+            '</components></object>')
+    f = _bambu_3mf(tmp_path / "mirrored.3mf", root, '<item objectid="3"/>',
+                   {"3D/Objects/object_1.model": _mesh_object(1, shapes.mushroom()),
+                    "3D/Objects/object_2.model": _mesh_object(2, shapes.cube(40.0))})
+    m = mesh.load(f)
+    assert m.volume == pytest.approx(40.0 ** 3 + MUSHROOM_MM3)
+    c = _upright_support(m)
+    assert c.support_volume_mm3 == pytest.approx(shapes.MUSHROOM_UPRIGHT_SUPPORT_MM3, rel=0.15)
+    # The whole build item mirrored (x and y: a determinant of +1 is a turn, not a mirror; x alone is).
+    one = _bambu_3mf(tmp_path / "item.3mf", '<object id="3" type="model"><components>'
+                     '<component p:path="/3D/Objects/object_1.model" objectid="1"/></components></object>',
+                     '<item objectid="3" transform="-1 0 0 0 1 0 0 0 1 128 128 0"/>',
+                     {"3D/Objects/object_1.model": _mesh_object(1, shapes.mushroom())})
+    m = mesh.load(one)
+    assert m.volume == pytest.approx(MUSHROOM_MM3)
+    assert not any("faced inward" in w for w in m.warnings)
+    assert _upright_support(m).support_volume_mm3 == pytest.approx(shapes.MUSHROOM_UPRIGHT_SUPPORT_MM3, rel=0.15)

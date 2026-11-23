@@ -284,13 +284,15 @@ A mesh that is not watertight is planned with a warning. A watertight mesh whose
 inward (some exporters write them so, and its volume comes out negative) is turned right way out,
 with a warning, because every overhang and support figure depends on which way the facets face.
 
-A 3MF is read as its first build object. Bambu Studio and OrcaSlicer save each mesh in its own
-part (`3D/Objects/object_N.model`) and give the root model only components that point at it; those
-are followed with their transforms, and the build item's transform is applied, so a part scaled
-in the slicer keeps its size. A component may only point at a part inside the same archive. Cycles,
-nesting deeper than 16, more than 100000 components, more than 5000000 triangles in total and more
-than 200 MB of model XML uncompressed are refused. Modifier and negative volumes are not told
-apart from solid parts (Bambu Studio keeps that in its own config), so export such a part as STL.
+A 3MF is read as its first build object. Bambu Studio and OrcaSlicer save each mesh in its own part
+(`3D/Objects/object_N.model`) and give the root model only components that point at it; those are
+followed with their transforms, and the build item's transform is applied, so a part scaled in the
+slicer keeps its size. A mirrored transform (negative determinant), on the build item or on one
+component, reverses that part's facet winding so its facets still face out. A component may only
+point at a part inside the same archive. Cycles, nesting deeper than 16, more than 100000
+components, more than 5000000 triangles in total and more than 200 MB of model XML uncompressed are
+refused. Modifier and negative volumes are not told apart from solid parts (Bambu Studio keeps that
+in its own config), so export such a part as STL.
 
 `plan` and `check --model` take parts of up to 2000000 triangles. A bigger part is refused at once with
 the count; simplify it in the CAD program or slicer and plan again. Slicing the original still works.

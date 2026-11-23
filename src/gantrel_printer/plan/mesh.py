@@ -2,7 +2,8 @@
 
 Every reader refuses oversized input before parsing it, drops degenerate facets, and reports (never
 fixes) a mesh that is not watertight. A watertight mesh whose facets all face inward is turned right way
-out, with a warning. Units are millimeters throughout.
+out, with a warning, and a mirrored 3MF transform keeps its facets facing out. Units are millimeters
+throughout.
 """
 
 from __future__ import annotations
@@ -440,6 +441,8 @@ class _ThreeMF:
             if self.triangle_count > MAX_TRIANGLES:
                 raise MeshError(f"the 3MF has more than {MAX_TRIANGLES} triangles, over Gantrel's limit",
                                 "Simplify the mesh and export it again")
+            if np.linalg.det(a) < 0:   # mirrored (in the slicer, or one component): keep the facets facing out
+                local = local[:, [0, 2, 1]]
             out.append(local @ a + t)
         comps = obj.find(f"{CORE_NS}components")
         if comps is not None:
