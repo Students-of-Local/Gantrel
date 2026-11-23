@@ -924,6 +924,14 @@ def _write_private(path: Path, data: bytes) -> None:
     os.replace(tmp, path)
 
 
+SIDECAR = ".findings-accepted.json"   # <sha>.findings-accepted.json: the findings the person accepted
+
+
+def _pack_files(d: Path) -> list[Path]:
+    """The installed pack files in a pack's folder, never the findings-accepted sidecars beside them."""
+    return sorted(p for p in d.glob("*.json") if not p.name.endswith(SIDECAR)) if d.is_dir() else []
+
+
 def accept_matches(accept: str | None, sha: str) -> bool:
     a = (accept or "").strip().lower()
     return bool(re.fullmatch(r"[0-9a-f]{12}|[0-9a-f]{64}", a)) and sha.startswith(a)
@@ -948,7 +956,7 @@ def install(data: bytes, accept: str | None, accept_findings: bool = False, repl
         raise SafetyError(f"the pack has {len(rep.findings)} finding(s) that need the person's acceptance",
                           "Read every FINDING from pack show to the person; only with their yes, add --accept-findings")
     d = packs_dir() / _check_id(pack["id"])
-    others = sorted(p for p in d.glob("*.json") if p.stem != sha) if d.is_dir() else []
+    others = [p for p in _pack_files(d) if p.stem != sha]
     if others and not replace:
         raise SafetyError(f"pack {pack['id']} is already installed with a different file ({others[0].stem[:12]})",
                           "Ask the person whether to replace it; only with their yes, add --replace")
@@ -956,14 +964,14 @@ def install(data: bytes, accept: str | None, accept_findings: bool = False, repl
     _private_dir(d)
     dest = d / f"{sha}.json"
     _write_private(dest, data)
-    accepted = d / f"{sha}.findings-accepted.json"
+    accepted = d / f"{sha}{SIDECAR}"
     if rep.findings:
         _write_private(accepted, json.dumps([i.to_dict() for i in rep.findings], indent=2).encode() + b"\n")
     elif accepted.exists():
         accepted.unlink()
     for o in others:
         o.unlink()
-        side = o.with_name(f"{o.stem}.findings-accepted.json")
+        side = o.with_name(f"{o.stem}{SIDECAR}")
         if side.exists():
             side.unlink()
     return pack, rep, dest
@@ -973,9 +981,7 @@ def installed() -> list[dict]:
     rows = []
     root = packs_dir()
     for d in sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []:
-        for f in sorted(d.glob("*.json")):
-            if f.name.endswith(".findings-accepted.json"):
-                continue
+        for f in _pack_files(d):
             try:
                 pack, sha, rep = load(d.name)
                 rows.append({"id": pack["id"], "name": pack["name"], "version": pack["version"],
@@ -991,7 +997,7 @@ def installed() -> list[dict]:
 def load(pack_id: str) -> tuple[dict, str, Report]:
     """An installed pack, re-checked: its bytes must still match its name, pass, and have any findings accepted."""
     d = packs_dir() / _check_id(pack_id)
-    files = sorted(p for p in d.glob("*.json") if not p.name.endswith(".findings-accepted.json")) if d.is_dir() else []
+    files = _pack_files(d)
     if not files:
         raise ConfigError(f"no pack {pack_id!r} is installed", "Run gantrel-printer pack list, or import one first")
     if len(files) > 1:
@@ -1008,7 +1014,7 @@ def load(pack_id: str) -> tuple[dict, str, Report]:
     if pack["id"] != pack_id:
         raise SafetyError(f"the file installed as {pack_id} says its id is {pack['id']}")
     if rep.findings:
-        side = files[0].with_name(f"{rep.sha256}.findings-accepted.json")
+        side = files[0].with_name(f"{rep.sha256}{SIDECAR}")
         accepted = json.loads(side.read_text()) if side.exists() else []
         if [i.to_dict() for i in rep.findings] != accepted:
             raise SafetyError(f"pack {pack_id} has findings no one accepted",

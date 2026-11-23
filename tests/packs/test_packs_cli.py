@@ -403,3 +403,21 @@ def test_show_withholds_a_pack_that_holds_private_data(capsys, good, write, wher
     assert d["pack"] is None and "accept" not in d and d["refusals"]
     rc, text, err = run(capsys, "pack", "check", f, "--json")
     assert rc == 1 and secret not in text + err
+
+
+def test_reimporting_an_accepted_pack_is_a_no_op(capsys, tmp_path, good, write, fake_slicer):
+    good["printer"]["start_gcode"] += "\nLOAD_MATERIAL"
+    f = write(good)
+    sha = packs.sha256(f.read_bytes())
+    d = packs.packs_dir() / "test-k2"
+    want = sorted([f"{sha}.json", f"{sha}.findings-accepted.json"])
+    for extra in ([], [], ["--replace"]):
+        rc, text, err = run(capsys, "pack", "import", f, "--accept", sha[:12], "--accept-findings", *extra)
+        assert rc == 0, err
+        assert sorted(p.name for p in d.iterdir()) == want
+    rc, text, _ = run(capsys, "pack", "list", "--json")
+    assert [r["id"] for r in json.loads(text)["packs"]] == ["test-k2"]
+    model = tmp_path / "part.stl"
+    model.write_bytes(STL)
+    rc, _, err = run(capsys, "slice", model, "--printer", "pack:test-k2", "--material", "PLA")
+    assert rc == 0, err
