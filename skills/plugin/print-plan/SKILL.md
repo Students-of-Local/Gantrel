@@ -45,7 +45,8 @@ Planning only reads files. It never talks to a printer, and it never starts a pr
    | Exit | Output starts with | What it means | What you do |
    |---|---|---|---|
    | 0 | `Plan for` | A plan that passed every check | Go to step 4 |
-   | 1 | `REFUSED:` | This printer cannot print this filament | Go to step 5 |
+   | 1 | `REFUSED: the part is` | The part is bigger than this printer builds | Go to step 5 |
+   | 1 | `REFUSED:` (anything else) | This printer cannot print this filament | Go to step 5 |
    | 1 | `ERROR (mesh)` | The file is broken, too big, or not a mesh | Tell the person the error and its advice |
    | 1 | `ERROR (config)` | Unknown printer or filament | Run `gantrel-printer profiles`, fix the name, run again |
 
@@ -59,9 +60,11 @@ Planning only reads files. It never talks to a printer, and it never starts a pr
      person to check it (the hotend's top temperature, whether the nozzle is hardened steel). It
      is not a reason to stop.
    Then follow the `NEXT:` line.
-5. Tell the person every `FAIL:` line, in plain words. Suggest the fix the line gives (another
-   filament, or a printer with an enclosure or a hardened nozzle). Do not use `--force` or any
-   other way around it.
+5. Tell the person the `REFUSED:` line and every `FAIL:` line, in plain words. When the part is
+   too big, give its size and the printer's, and suggest scaling it down, splitting it, or a
+   printer with a bigger build volume; another filament will not help. Otherwise suggest the fix
+   the line gives (another filament, or a printer with an enclosure or a hardened nozzle).
+   Do not use `--force` or any other way around it.
 
 ## Checking settings the person already has
 

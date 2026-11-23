@@ -54,6 +54,29 @@ def test_plan_refused(capsys, stl):
     assert d["refused"] and "enclosure" in d["check"]["fails"]
 
 
+def test_plan_refuses_a_part_too_big_in_plain_words(capsys, stl):
+    """A part that fits the bed in no orientation is not a filament problem: the refusal names the part's size
+    and the bed, and the next step offers scaling, splitting or a bigger printer, never another filament."""
+    big = stl(shapes.boxes((0, 250, 0, 250, 0, 30), name="enclosure"), "big.stl")
+    rc, out, _ = run(capsys, "plan", big, "--printer", "bambu-a1-mini", "--material", "PLA")
+    assert rc == 1
+    first = out.splitlines()[0]
+    assert first.startswith("REFUSED: the part is 250 x 250 x 30 mm and does not fit the Bambu Lab A1 mini's "
+                            "180 x 180 mm bed and 180 mm height in any of the "), first
+    nxt = next(line for line in out.splitlines() if line.startswith("NEXT:"))
+    assert "scale it down" in nxt and "bigger build volume" in nxt and "Another filament will not help" in nxt
+    assert "offer a filament" not in nxt and "do not go together" not in nxt
+    rc, out, _ = run(capsys, "plan", big, "--printer", "bambu-a1-mini", "--material", "PLA", "--json")
+    d = json.loads(out)
+    assert rc == 1 and d["refused_for"] == ["part_too_big"] and "bigger printer" in d["fix"]
+    # Too big and the wrong filament: both are said, and the next step does not offer only a filament.
+    rc, out, _ = run(capsys, "plan", big, "--printer", "generic-marlin", "--material", "ABS", "--json")
+    d = json.loads(out)
+    assert rc == 1 and d["refused_for"] == ["part_too_big", "printer_filament"]   # a 220 x 220 mm bed, no enclosure
+    assert d["reason"].startswith("the part is 250 x 250 x 30 mm") and "ABS on" in d["reason"]
+    assert "bigger build volume" in d["next"]
+
+
 def test_plan_bad_file(capsys, tmp_path):
     bad = tmp_path / "bad.stl"
     bad.write_bytes(b"garbage")

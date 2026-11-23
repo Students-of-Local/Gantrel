@@ -39,15 +39,32 @@ FLAT_OVERHANG_Z = -0.99        # overhangs this flat suit grid supports; anythin
 # Rules a plan cannot fix by changing settings: the printer and filament do not go together. The hardened nozzle
 # rule, like the hotend and bed rules below, fails only on a limit the printer's profile cites; past one of
 # Gantrel's defaults it warns, so the plan goes ahead and tells the person what to check.
-REFUSE = ("enclosure", "hardened nozzle", "direct drive for flexible", "part fits the printer")
+FIT_RULE = "part fits the printer"
+REFUSE = ("enclosure", "hardened nozzle", "direct drive for flexible", FIT_RULE)
+TOO_BIG, PAIRING = "part_too_big", "printer_filament"   # why a plan was refused (PlanRefused.reasons)
 
 
 class PlanRefused(ConfigError):
+    """A plan that cannot go ahead. reasons holds TOO_BIG when the part fits the printer in no orientation
+    tried (another filament will not help), PAIRING when the printer and filament do not go together."""
     code = "plan_refused"
 
-    def __init__(self, message: str, hint: str, result: dict):
+    def __init__(self, message: str, hint: str, result: dict, reasons: list[str] | None = None):
         super().__init__(message, hint)
         self.result = result
+        self.reasons = reasons or [PAIRING]
+
+
+def _mm(v: float) -> str:
+    return f"{v:.1f}".rstrip("0").rstrip(".")
+
+
+def too_big(cand: orient.Candidate, printer: PrinterProfile, tried: int) -> str:
+    """The plain sentence for a part that fits no orientation: its size and the printer's build volume."""
+    w, d = cand.footprint_mm
+    return (f"the part is {_mm(w)} x {_mm(d)} x {_mm(cand.height_mm)} mm and does not fit the {printer.label}'s "
+            f"{_mm(printer.bed[0])} x {_mm(printer.bed[1])} mm bed and {_mm(printer.height)} mm height in any of "
+            f"the {tried} orientations Gantrel tried")
 
 
 def _k(printer: PrinterProfile) -> float:
@@ -229,10 +246,19 @@ def plan(m: Mesh, printer: PrinterProfile, material: str, goal: str = "quality",
     refused = [r for r in result["rules"] if r["status"] == "fail" and r["rule"] in REFUSE]
     temp_refused = [r for r in result["rules"] if r["status"] == "fail" and r["rule"].endswith(
         ("within the hotend", "within the bed heater", f"in the {fil.name} range")) and "temperature" in r["rule"]]
-    if refused or temp_refused:
-        bad = refused + temp_refused
-        raise PlanRefused(f"{fil.name} on {printer.label} cannot pass: " + "; ".join(r["rule"] for r in bad),
-                          bad[0]["fix"], out)
+    fit = [r for r in refused if r["rule"] == FIT_RULE]
+    pairing = [r for r in refused if r["rule"] != FIT_RULE] + temp_refused
+    if fit or pairing:
+        said, fixes, reasons = [], [], []
+        if fit:   # a bigger part than the printer builds: no filament or setting fixes that
+            said.append(too_big(best, printer, len(ranked)))
+            fixes.append(fit[0]["fix"])
+            reasons.append(TOO_BIG)
+        if pairing:
+            said.append(f"{fil.name} on {printer.label} cannot pass: " + "; ".join(r["rule"] for r in pairing))
+            fixes.append(pairing[0]["fix"])
+            reasons.append(PAIRING)
+        raise PlanRefused("; and ".join(said), ". ".join(fixes), out, reasons)
     if not result["ok"]:   # a planner bug: the optimizer must never emit settings that fail
         raise AssertionError(f"plan failed its own check: {result['fails']}")
     b = baseline(best, printer, fil, profile, placed)

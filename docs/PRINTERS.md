@@ -278,7 +278,9 @@ STL header and reads as it is. Any other settings file has no orientation, so th
 drawn, z up. The output says which of the three it did. Both only read files: they never contact a printer, and `plan` is not wired into `upload`
 or `slice`. The code is in `src/gantrel_printer/plan/` (Python and numpy only); the skill is
 `skills/plugin/print-plan/`. Exit codes: 0 when every rule passes, 1 when a rule fails or the
-printer and filament cannot go together.
+plan is refused. A refusal says why: the part fits the printer in no orientation tried (`REFUSED: the
+part is W x D x H mm and does not fit ...`, `refused_for: ["part_too_big"]`), or the printer and
+filament cannot go together (`printer_filament`), or both.
 
 A mesh that is not watertight is planned with a warning. A watertight mesh whose facets all face
 inward (some exporters write them so, and its volume comes out negative) is turned right way out,

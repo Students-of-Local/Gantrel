@@ -366,10 +366,20 @@ def cmd_plan(args):
     try:
         p = optimize.plan(m, printer, args.material, args.goal, args.load_axis)
     except optimize.PlanRefused as err:
-        data = {"refused": True, "reason": err.message, "fix": err.hint, **err.result}
+        data = {"refused": True, "refused_for": err.reasons, "reason": err.message, "fix": err.hint, **err.result}
         lines = [f"REFUSED: {err.message}."] + _rule_lines(err.result["check"])
-        out(args, data, "\n".join(lines), "Tell the person this printer and filament do not go together, and why; "
-                                           "offer a filament or printer that does")
+        if err.reasons == [optimize.TOO_BIG]:
+            nxt = ("Tell the person the part is bigger than this printer can build, with the sizes above; offer to "
+                   "scale it down, split it into pieces, or use a printer with a bigger build volume. Another "
+                   "filament will not help")
+        elif optimize.TOO_BIG in err.reasons:
+            nxt = ("Tell the person both problems: the part is bigger than this printer can build, and this printer "
+                   "and filament do not go together; offer a printer with a bigger build volume that suits the "
+                   "filament, or a smaller or split part on a printer that suits it")
+        else:
+            nxt = ("Tell the person this printer and filament do not go together, and why; offer a filament or "
+                   "printer that does")
+        out(args, data, "\n".join(lines), nxt)
         return EXIT_ERROR
     best = p["orientations"][0]
     e, s, c = p["estimate"], p["settings"], p["check"]
