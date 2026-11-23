@@ -280,6 +280,104 @@ def test_stops_on_another_printer_answer_while_a_start_card_is_open(printer, tmp
     assert json.loads(held.content[0].text)["outcome"] == "declined" and not printer.started
 
 
+def test_two_servers_answered_together_send_one_start_to_the_printer(printer, tmp_path, card, monkeypatch):
+    """first-F1: Local Studio runs one server per thread. Two threads each answer Start print for a
+    different job on one idle printer. Each thread here gets its own fresh in-process lock, as two
+    server processes would, and both are held at the printer's door until the other arrives. Only one
+    start may reach the printer; the other re-checks after it and finds the printer busy."""
+    import threading
+
+    from gantrel_printer.adapters.moonraker import MoonrakerAdapter
+
+    a = upload(tmp_path, "a.gcode")
+    b = upload(tmp_path, "b.gcode", GCODE + b"; b\n")
+    card(answered("Start print"))
+
+    class FreshPerThread:  # what a module-level lock is worth across two processes
+        local = threading.local()
+
+        def __enter__(self):
+            self.local.lock = threading.Lock()
+            return self.local.lock.__enter__()
+
+        def __exit__(self, *exc):
+            return self.local.lock.__exit__(*exc)
+
+    monkeypatch.setattr(start, "_act", FreshPerThread(), raising=False)
+    door = threading.Barrier(2, timeout=3)
+    real_start = MoonrakerAdapter._start
+
+    def at_the_door(self, remote_name):
+        try:
+            door.wait()
+        except threading.BrokenBarrierError:
+            pass  # the other call never got this far: it is waiting for the printer
+        return real_start(self, remote_name)
+
+    monkeypatch.setattr(MoonrakerAdapter, "_start", at_the_door)
+    sent = []
+    real_brain_start = printer.start
+
+    def counted(name):
+        sent.append(name)
+        return real_brain_start(name)
+
+    printer.start = counted
+    results = {}
+
+    def run(job_id):
+        try:
+            results[job_id] = start.print_start(job_id)
+        except Exception as err:  # noqa: BLE001 - the loser is refused, and that is the point
+            results[job_id] = err
+
+    threads = [threading.Thread(target=run, args=(j["job"],)) for j in (a, b)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(30)
+    assert len(sent) == 1, f"{len(sent)} starts reached the printer: {sent}"
+    outcomes = sorted("started" if isinstance(r, dict) and r.get("started") else type(r).__name__
+                      for r in results.values())
+    assert outcomes == ["Refused", "started"], results
+    assert sorted(x["outcome"] for x in log()) == ["refused", "started"]
+
+
+def test_a_start_waits_for_another_process_holding_the_printer_and_gives_up_in_time(printer, tmp_path, card,
+                                                                                   mints, monkeypatch):
+    """first-F1: another process (another thread's server) holds the printer's lock file. The start
+    waits for it only within its budget; then nothing starts and the outcome is logged."""
+    import subprocess
+    import sys
+
+    job = upload(tmp_path)
+    card(answered("Start print"))
+    monkeypatch.setattr(start, "BUDGET_S", 3.0)
+    monkeypatch.setattr(start, "RESERVE_S", 1.0)
+    lock_file = config.state_dir() / "locks" / "moon.lock"
+    lock_file.parent.mkdir(exist_ok=True)
+    holder = subprocess.Popen(
+        [sys.executable, "-c", "import fcntl, os, sys, time\n"
+         "fd = os.open(sys.argv[1], os.O_RDWR | os.O_CREAT, 0o600)\n"
+         "fcntl.flock(fd, fcntl.LOCK_EX)\nprint('held', flush=True)\ntime.sleep(60)\n", str(lock_file)],
+        stdout=subprocess.PIPE, text=True)
+    try:
+        assert holder.stdout.readline().strip() == "held"
+        t0 = time.monotonic()
+        out = call("print_start", {"job_id": job["job"]}).data
+        took = time.monotonic() - t0
+    finally:
+        holder.kill()
+        holder.wait()
+    assert out["started"] is False and out["outcome"] == "timeout"
+    assert "another start, resume or upload on moon was still running" in out["message"]
+    assert not printer.started and mints == [] and took < 5
+    assert [(x["outcome"], x["job"]) for x in log()] == [("timeout", job["job"])]
+    # Once the other process is gone, the lock is free again.
+    out = call("print_start", {"job_id": job["job"]}).data
+    assert out["outcome"] == "started"
+
+
 # ---------------------------------------------------------------- refusals before any card
 
 

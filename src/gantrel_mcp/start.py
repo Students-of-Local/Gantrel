@@ -12,7 +12,8 @@ The flow (docs/MCP.md, "How a print starts"):
    summary. No tool argument reaches the card.
 4. Ask through Local Studio's socket (gantrel_mcp.ask), which checks the peer pid before it sends.
    One budget (BUDGET_S) covers the whole call: the wait gets what is left minus RESERVE_S.
-5. Only on the exact answer "Start print" ("Resume print" for a resume): check step 1 again, mint a
+5. Only on the exact answer "Start print" ("Resume print" for a resume): take the printer's lock
+   (gantrel_mcp.printerlock, shared by every server on this computer), check step 1 again, mint a
    token in this process and spend it at once. The token is never returned or logged. If the
    re-check leaves too little of the budget for the start, which repeats it, nothing starts.
 6. Log the attempt to prints.log (gantrel_printer.printlog), whatever the outcome.
@@ -20,8 +21,8 @@ The flow (docs/MCP.md, "How a print starts"):
 
 from __future__ import annotations
 
+import contextlib
 import os
-import threading
 import time
 
 from gantrel_printer import config, printlog, safety, slicing
@@ -30,7 +31,7 @@ from gantrel_printer.cli import open_printer
 from gantrel_printer.errors import ConfigError, PrinterError, Refused, SafetyError
 from gantrel_printer.model import READY_STATES, bounded, fmt_duration
 
-from . import ask
+from . import ask, printerlock
 
 START_CHOICES = ["Start print", "Don't start"]
 RESUME_CHOICES = ["Resume print", "Don't resume"]
@@ -40,14 +41,12 @@ LABEL_MAX, FILE_MAX, SHORT_MAX = 64, 120, 32
 NOT_IN_LOCAL_STUDIO = "not confirmed: Gantrel starts a print only after the person confirms it in Local Studio"
 TIMEOUT = "not confirmed (no answer in time); ask again when the person is ready"
 TIME_UP = "not started: the printer's checks took too long to start it within one call; ask again"
+BUSY = "not started: another start, resume or upload on {printer} was still running; ask again"
 # One print_start or print_resume call, from its first check to the printer's reply, under the 60 s an
 # MCP call gets. The card's wait gets what is left minus RESERVE_S, kept for the checks and the start.
 BUDGET_S = 50.0
 RESERVE_S = 15.0
 
-# One start or resume at a time in this server, from the re-check to the printer's reply, so two cards
-# answered together can't both pass the "printer is idle" check.
-_act = threading.Lock()
 
 
 class Declined(Exception):
@@ -158,6 +157,21 @@ def in_time(since: float, deadline: float) -> None:
         raise Declined("timeout", TIME_UP)
 
 
+@contextlib.contextmanager
+def one_at_a_time(printer: str, deadline: float):
+    """Hold the printer's lock (gantrel_mcp.printerlock) from the re-check to the printer's reply, so two
+    cards answered together, in this server or another thread's server, can't both pass the "printer is
+    idle" check. Waits for it only until the deadline; then raises Declined and nothing starts."""
+    try:
+        fd = printerlock.acquire(printer, deadline - time.monotonic())
+    except printerlock.Busy:
+        raise Declined("timeout", BUSY.format(printer=printer)) from None
+    try:
+        yield
+    finally:
+        printerlock.release(fd)
+
+
 def caller() -> str | None:
     return os.environ.get("LOCAL_STUDIO_CALLER") or None
 
@@ -185,7 +199,7 @@ def print_start(job_id) -> dict:
         adapter = open_printer(job.printer)
         ready_to_start(adapter, job)
         confirm(card("start", adapter, job), START_CHOICES, deadline)
-        with _act:
+        with one_at_a_time(job.printer, deadline):
             since = time.monotonic()
             ready_to_start(adapter, job)  # the printer may have changed while the card was open
             in_time(since, deadline)
@@ -228,7 +242,7 @@ def print_resume(printer) -> dict:
         job = paused_job(adapter)
         rec.update(job=job.id, sha=job.sha256)
         confirm(card("resume", adapter, job), RESUME_CHOICES, deadline)
-        with _act:
+        with one_at_a_time(cfg.name, deadline):
             since = time.monotonic()
             st = adapter.status()
             if st.state != "paused":

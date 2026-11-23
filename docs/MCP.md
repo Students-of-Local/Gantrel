@@ -60,11 +60,16 @@ A link inside home that points outside it is refused. Models are capped at 200 M
    closes, which takes the card away.
 5. Only the exact answer Start print goes on. Typed text, Don't start, Stop (cancelled), a refusal, a
    different process on the socket, or no answer: nothing starts.
-6. Check step 1 again, because the printer may have changed while the card was open. The start
-   repeats those checks, so if the re-check took longer than what is left of the budget, nothing
-   starts and the outcome is `timeout`. Then mint a single-use token in this process, bound to this
-   job, its file's SHA-256 and the printer's identity, and spend it at once on the start. The token
-   is never returned, printed or logged.
+6. Take the printer's lock: a file per printer, `locks/<printer>.lock` in Gantrel's state folder
+   (`~/.local/state/gantrel-printer/`, or `state/` under `$GANTREL_PRINTER_HOME`), held with `flock`
+   from here to the printer's reply to the start. Local Studio runs one server per thread, so the
+   lock is shared by every Gantrel server on the computer, and two cards answered together can't both
+   find the printer idle. If another start, resume or upload holds it past the budget, nothing starts
+   and the outcome is `timeout`. Check step 1 again, because the printer may have changed while the
+   card was open. The start repeats those checks, so if the re-check took longer than what is left of
+   the budget, nothing starts and the outcome is `timeout`. Then mint a single-use token in this
+   process, bound to this job, its file's SHA-256 and the printer's identity, and spend it at once on
+   the start. The token is never returned, printed or logged.
 7. Append one line to `prints.log`.
 
 While a card is open, the server still answers other calls: mcp 2.3 runs each sync tool on a worker
