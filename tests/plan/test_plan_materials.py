@@ -78,7 +78,19 @@ CITED = {
     "prusa-mk4": {"hotend_max_c": 290, "bed_max_c": 120, "hardened_nozzle": False},
 }
 DEFAULTS = {"hotend_max_c": slicing.DEFAULT_HOTEND_MAX_C, "bed_max_c": slicing.DEFAULT_BED_MAX_C,
-            "max_flow": slicing.DEFAULT_MAX_FLOW, "hardened_nozzle": False, "chamber_heater": False, "high_flow": False}
+            "max_flow": slicing.DEFAULT_MAX_FLOW, "hardened_nozzle": False, "chamber_heater": False, "high_flow": False,
+            "top_speed": 0}
+# Hardware top speeds, mm/s, from the vendor's spec page, its OrcaSlicer machine profile or its PrusaSlicer profile.
+TOP_SPEED = {"creality-k2": 800, "creality-k2-plus": 800, "creality-k1": 600, "creality-k1-max": 800,
+             "creality-ender3-v3": 600, "bambu-x1c": 500, "bambu-p1s": 500, "bambu-p1p": 500, "bambu-a1": 500,
+             "bambu-a1-mini": 500, "prusa-mk4": 300, "prusa-mk3": 200}
+
+
+def test_top_speeds_are_cited_and_above_gantrels_caps():
+    for key, v in TOP_SPEED.items():
+        p = slicing.PRINTERS[key]
+        assert p.top_speed == v and p.is_cited("top_speed") and p.limits_source, key
+        assert p.max_speed <= p.top_speed and p.accel <= p.max_accel, key
 
 
 @pytest.mark.parametrize("key", sorted(CITED))

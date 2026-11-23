@@ -315,6 +315,12 @@ printer and filament cannot go together.
   Max (Orca: brass, Creality: hardened steel), so a nozzle is cited only from the vendor. The
   `creality-k1` profile covers the K1 (brass) and the K1C (hardened steel) and keeps the defaults.
   Several printers also cite `max_accel` from OrcaSlicer's machine profiles.
+- Motion: a profile's `max_speed` and `accel` are Gantrel's chosen caps for the settings it plans,
+  not printer specs. `top_speed` is the hardware's top speed, cited from the vendor's page, its
+  OrcaSlicer machine profile (`machine_max_speed_x`) or Prusa's PrusaSlicer profile
+  (`machine_max_feedrate_x`, release 2.9.7): K2, K2 Plus and K1 Max 800 mm/s, K1/K1C and Ender-3 V3
+  600, X1 Carbon, P1S, P1P, A1 and A1 mini 500, MK4/MK4S 300, MK3S+ 200. The A1 mini's 10000
+  mm/s2 and the MK3S+'s 1250 mm/s2 `max_accel` are cited too.
 - Flow by printer and filament: `src/gantrel_printer/data/printer_material_flow.json` holds the
   `filament_max_volumetric_speed` of each printer vendor's own Generic filament preset in OrcaSlicer
   (pinned commit a31c95e), with the preset name, its file and URL, and the file the value is
@@ -378,7 +384,8 @@ Quality is held first; speed is then taken wherever it does not cost quality.
 - Speed for a feature = min(feature limit, floor(F / (layer height x line width))). The outer wall
   and top surface limit is the goal's cap (quality 150, balanced 200, speed 350 mm/s) and the
   printer's top speed; inner walls, infill and supports may go to the printer's top speed.
-- Acceleration is the profile's `accel` (Gantrel's chosen value, never above `max_accel`).
+- Acceleration is the profile's `accel` (Gantrel's chosen value, never above `max_accel`). Travel is
+  the profile's `max_speed`, never above a cited `top_speed`.
 - Retraction: slicing.py's value, clamped into 0.2 to 2 mm for direct drive or 2 to 7 mm for Bowden.
 - Supports: off when nothing overhangs; normal (grid) when most overhang area is flat; tree
   otherwise.
@@ -426,8 +433,8 @@ limit is a named constant in `plan/check.py`.
 | Line widths | 0.9 <= width / nozzle <= 1.6 (warn outside 1.0 to 1.5) | fail |
 | Walls | walls >= 2 | warn |
 | Flow per feature | layer x width x speed <= F (vendor preset, else 0.9 x min(hotend, material)) | fail |
-| Speeds | speed <= printer top speed | fail |
-| Acceleration | accel <= max_accel | fail |
+| Speeds | speed <= cited top speed, else Gantrel's default cap (`max_speed`) | warn |
+| Acceleration | accel <= max_accel (cited, else Gantrel's default) | warn |
 | Outer wall for the goal | outer wall <= 150, 200 or 350 mm/s | fail for quality, warn otherwise |
 | Enclosure | material needs one -> printer enclosed | fail |
 | Enclosure heat | material softens below 50 C on an enclosed printer | warn (open the lid) |
@@ -441,6 +448,13 @@ limit is a named constant in `plan/check.py`.
 | Supports (with a model) | overhang area > 0 -> supports on | fail |
 | Thin walls (with a model) | thinnest wall >= 1 line width | warn |
 | Bridges (with a model) | longest bridge <= 25 mm without supports (Gantrel's own cautious limit) | warn |
+
+Speed and acceleration only warn. A printer's firmware caps every move at its own top speed and
+acceleration, so a higher setting runs at the cap and the print is not harmed: Bambu Studio's own
+A1 preset asks for 700 mm/s travel on a toolhead Bambu Lab rates at 500 mm/s. Past a cited limit the
+warning says the move runs at the cap and the time estimate assumes the setting; past one of
+Gantrel's defaults it says the cap is a default, not a spec, and to check the printer. Flow, which
+does spoil a print, is its own rule and fails.
 
 slicing.py's own standard settings fail the flow rule on many printers: it asks for up to 300
 mm/s of infill, which at 0.2 x 0.45 mm is 27 mm3/s. That is over every PLA preset Creality ships for

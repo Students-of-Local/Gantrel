@@ -98,3 +98,19 @@ def test_planner_has_no_network_or_printer_code():
         text = f.read_text()
         for word in ("socket", "urllib", "http", "requests", "adapters", "subprocess"):
             assert f"import {word}" not in text and f"from {word}" not in text and f"from ..{word}" not in text, (f, word)
+
+
+@pytest.mark.parametrize("printer,speeds", [
+    ("bambu-x1c", {"travel_speed_mms": 500, "accel_mms2": 10000}),      # Bambu Studio 0.20mm Standard @BBL X1C
+    ("prusa-mk4", {"travel_speed_mms": 300, "accel_mms2": 4000}),       # PrusaSlicer 0.20mm SPEED @MK4IS 0.4
+    ("generic-marlin", {"travel_speed_mms": 150, "accel_mms2": 500}),   # PrusaSlicer 0.20 mm NORMAL @CREALITY
+])
+def test_check_passes_vendor_travel_speeds(capsys, tmp_path, printer, speeds):
+    from gantrel_printer import materials, slicing
+    from gantrel_printer.plan import optimize
+    s = optimize.settings_for("balanced", slicing.PRINTERS[printer], materials.get("PLA")) | speeds
+    f = tmp_path / "s.json"
+    f.write_text(json.dumps(s))
+    rc, out, _ = run(capsys, "check", str(f), "--printer", printer, "--material", "PLA", "--json")
+    d = json.loads(out)
+    assert rc == 0 and d["ok"], d["fails"]

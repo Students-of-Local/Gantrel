@@ -148,7 +148,8 @@ def part_facts(cand: orient.Candidate, e: dict, printer: PrinterProfile, thin: f
 
 
 def printer_limits(printer: PrinterProfile) -> dict:
-    keys = ("hotend_max_c", "bed_max_c", "max_flow", "high_flow", "hardened_nozzle", "max_accel", "chamber_heater")
+    keys = ("hotend_max_c", "bed_max_c", "max_flow", "high_flow", "hardened_nozzle", "max_accel", "top_speed",
+            "chamber_heater")
     return {k: {"value": getattr(printer, k), "source": "cited" if printer.is_cited(k) else "Gantrel default, not a spec"}
             for k in keys} | ({"sources": printer.limits_source} if printer.limits_source else {})
 

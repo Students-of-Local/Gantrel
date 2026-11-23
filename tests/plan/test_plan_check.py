@@ -57,9 +57,9 @@ def test_planned_settings_pass_everything_on_an_open_printer():
     ("flow at infill", {"infill_speed_mms": 240}, "fail"),
     ("flow at outer wall", {"outer_wall_speed_mms": 200}, "fail"),
     ("flow at first layer", {"first_layer_speed_mms": 200}, "fail"),
-    ("travel speed within the printer", {"travel_speed_mms": 500}, "fail"),
-    ("infill speed within the printer", {"infill_speed_mms": 400}, "fail"),
-    ("acceleration within the printer", {"accel_mms2": 50000}, "fail"),
+    ("travel speed within the printer", {"travel_speed_mms": 600}, "warn"),      # the A1 cites 500 mm/s
+    ("infill speed within the printer", {"infill_speed_mms": 600}, "warn"),
+    ("acceleration within the printer", {"accel_mms2": 50000}, "warn"),
     ("part fan in the PLA range", {"fan_percent": [10, 50]}, "warn"),
     ("retraction for direct drive", {"retract_mm": 3.0}, "fail"),
     ("retraction for direct drive", {"retract_mm": 0.1}, "warn"),
@@ -197,3 +197,65 @@ def test_flow_rule_says_which_source_it_used():
     gk = slicing.PRINTERS["generic-klipper"]
     other = rule(C.check(good(gk), gk, PLA, PART), "flow at infill")["values"]
     assert other["cap_mm3s"] == pytest.approx(10.8) and other["cap_source"].startswith("Gantrel default")
+
+
+# Speeds and accelerations from the vendors' own slicer presets (resolved through their inherits chains).
+# Bambu Studio / OrcaSlicer at a31c95e: BBL/process/0.20mm Standard @BBL X1C.json and @BBL A1.json.
+BAMBU_X1C_STANDARD = {"travel_speed_mms": 500, "infill_speed_mms": 270, "inner_wall_speed_mms": 300,
+                      "outer_wall_speed_mms": 200, "top_speed_mms": 200, "accel_mms2": 10000}
+BAMBU_A1_STANDARD = {"travel_speed_mms": 700, "infill_speed_mms": 270, "inner_wall_speed_mms": 300,
+                     "outer_wall_speed_mms": 200, "top_speed_mms": 200, "accel_mms2": 6000}
+# PrusaSlicer 2.9.7 PrusaResearch.ini "0.20mm SPEED @MK4IS 0.4" and Creality.ini "0.20 mm NORMAL (0.4 mm nozzle)
+# @CREALITY" (the Ender-3 class printer generic-marlin stands for).
+PRUSA_MK4IS_SPEED = {"travel_speed_mms": 300, "infill_speed_mms": 200, "inner_wall_speed_mms": 170,
+                     "outer_wall_speed_mms": 170, "top_speed_mms": 100, "support_speed_mms": 120,
+                     "first_layer_speed_mms": 40, "accel_mms2": 4000}
+CREALITY_NORMAL = {"travel_speed_mms": 150, "infill_speed_mms": 50, "inner_wall_speed_mms": 40,
+                   "outer_wall_speed_mms": 25, "top_speed_mms": 30, "support_speed_mms": 40,
+                   "first_layer_speed_mms": 20, "accel_mms2": 500}
+MOTION = ("speed within the printer", "acceleration within the printer")
+
+
+def _motion(result):
+    return [r for r in result["rules"] if r["rule"].endswith(MOTION)]
+
+
+@pytest.mark.parametrize("key,preset", [("bambu-x1c", BAMBU_X1C_STANDARD), ("prusa-mk4", PRUSA_MK4IS_SPEED)])
+def test_vendor_preset_speeds_pass_on_a_cited_top_speed(key, preset):
+    printer = slicing.PRINTERS[key]
+    assert printer.is_cited("top_speed") and printer.is_cited("max_accel")
+    r = C.check(dict(good(printer), **preset), printer, PLA, PART, "speed")
+    motion = _motion(r)
+    assert motion and all(x["status"] == "pass" and x["values"]["cited"] for x in motion), \
+        [(x["rule"], x["status"]) for x in motion]
+    # The planned settings with only the vendor's travel speed pass the whole check.
+    s = dict(good(printer), travel_speed_mms=preset["travel_speed_mms"])
+    assert C.check(s, printer, PLA, PART)["ok"]
+
+
+def test_speed_past_a_cited_top_speed_warns_that_the_printer_caps_it():
+    """Bambu's own A1 preset travels at 700 mm/s on a 500 mm/s toolhead: the firmware caps it, nothing breaks."""
+    r = C.check(dict(good(A1), **BAMBU_A1_STANDARD), A1, PLA, PART, "speed")
+    travel = rule(r, "travel speed within the printer")
+    assert travel["status"] == "warn" and travel["values"] == {"speed_mms": 700, "top_speed_mms": 500, "cited": True}
+    assert "moves at most 500 mm/s" in travel["fix"]
+    assert not [x for x in _motion(r) if x["status"] == "fail"]
+
+
+def test_speed_past_gantrels_default_cap_warns_and_names_it():
+    """generic-marlin at PrusaSlicer's normal Ender-3 speeds: travel 150 is over Gantrel's 100 mm/s cap only."""
+    assert not MARLIN.is_cited("top_speed") and not MARLIN.is_cited("max_accel")
+    s = dict(good(MARLIN), **CREALITY_NORMAL)
+    r = C.check(s, MARLIN, PLA, PART)
+    assert r["ok"], r["fails"]
+    travel = rule(r, "travel speed within the printer")
+    assert travel["status"] == "warn" and travel["values"]["cited"] is False
+    assert "Gantrel's default speed cap" in travel["fix"] and "not a printer spec" in travel["fix"]
+    fast = rule(C.check(dict(s, accel_mms2=3000), MARLIN, PLA, PART), "acceleration within the printer")
+    assert fast["status"] == "warn" and "Gantrel's default acceleration" in fast["fix"]
+
+
+def test_motion_rules_never_fail():
+    for printer in (A1, X1C, K2, MARLIN, slicing.PRINTERS["generic-klipper"]):
+        s = dict(good(printer), travel_speed_mms=5000, infill_speed_mms=5000, accel_mms2=10 ** 6)
+        assert not [x["rule"] for x in _motion(C.check(s, printer, PLA, PART)) if x["status"] == "fail"]

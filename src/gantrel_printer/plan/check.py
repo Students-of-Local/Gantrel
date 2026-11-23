@@ -168,20 +168,35 @@ def _flow_and_speed(s, printer, fil, n, goal):
                        "cap_mm3s": round(cap, 2), "cap_source": limit["source"]},
                       f"Lower {key} to {int(cap / (h * w))} mm/s or less: {flow:.1f} mm3/s is over the "
                       f"{cap:.1f} mm3/s cap ({limit['source']}), so the part would under-extrude"))
+    # Speed and acceleration never fail: the printer's firmware caps every move at its own top speed and
+    # acceleration, so a higher setting runs at the cap (Bambu Studio's own A1 preset asks for 700 mm/s travel on a
+    # 500 mm/s toolhead). Past a cited limit the warning says the move runs slower than set; past Gantrel's default
+    # cap it says the cap is a default, not a spec. Flow, which does spoil a print, has its own rule above.
+    top_cited = printer.is_cited("top_speed") and printer.top_speed > 0
+    top = printer.top_speed if top_cited else printer.max_speed
     for key in SPEED_KEYS:
         if key not in s:
             continue
         v = float(s[key])
-        ok = v <= printer.max_speed
-        out.append(_r(f"{key.replace('_mms', '').replace('_', ' ')} within the printer", "pass" if ok else "fail",
-                      "speed <= printer max_speed", {"speed_mms": v, "max_speed_mms": printer.max_speed},
-                      f"Lower {key} to {printer.max_speed} mm/s or less"))
+        ok = v <= top
+        out.append(_r(f"{key.replace('_mms', '').replace('_', ' ')} within the printer", "pass" if ok else "warn",
+                      "speed <= printer top speed" if top_cited else "speed <= Gantrel's default speed cap",
+                      {"speed_mms": v, "top_speed_mms": top, "cited": top_cited},
+                      f"{printer.label} moves at most {top} mm/s, so this runs at {top} mm/s, not {v:g}: set {key} "
+                      f"to {top} or less so the time estimate holds" if top_cited else
+                      f"{v:g} mm/s is over {top} mm/s, Gantrel's default speed cap for the {printer.label}, not a "
+                      f"printer spec: check your printer's top speed, and lower {key} only if it is slower"))
     if "accel_mms2" in s:
         a = float(s["accel_mms2"])
+        cited = printer.is_cited("max_accel")
         ok = a <= printer.max_accel
-        out.append(_r("acceleration within the printer", "pass" if ok else "fail", "accel <= max_accel",
-                      {"accel_mms2": a, "max_accel_mms2": printer.max_accel, "cited": printer.is_cited("max_accel")},
-                      f"Lower accel_mms2 to {printer.max_accel} or less"))
+        out.append(_r("acceleration within the printer", "pass" if ok else "warn",
+                      "accel <= printer max_accel" if cited else "accel <= Gantrel's default acceleration",
+                      {"accel_mms2": a, "max_accel_mms2": printer.max_accel, "cited": cited},
+                      f"{printer.label} accelerates at most {printer.max_accel} mm/s2, so moves run at that, not "
+                      f"{a:g}: set accel_mms2 to {printer.max_accel} or less" if cited else
+                      f"{a:g} mm/s2 is over {printer.max_accel} mm/s2, Gantrel's default acceleration for the "
+                      f"{printer.label}, not a printer spec: check your printer's maximum acceleration"))
     v = float(s["outer_wall_speed_mms"])
     limit = OUTER_WALL_CAP[goal]
     st = "pass" if v <= limit else ("fail" if goal == "quality" else "warn")
