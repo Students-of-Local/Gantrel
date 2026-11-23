@@ -24,7 +24,7 @@ import time
 from pathlib import Path
 
 from ..errors import AuthFailed, ProtocolError, Refused, Unreachable, Unsupported
-from ..model import Camera, Status
+from ..model import FILAMENT_REPLY_MAX, Camera, Slot, Status, bounded, clip, material_family
 from .base import Adapter, write_image
 
 STATE_MAP = {"IDLE": "idle", "RUNNING": "printing", "PREPARE": "printing", "SLICING": "printing",
@@ -34,6 +34,11 @@ RTSP_MODELS = ("bambu-x1", "bambu-x1c", "bambu-x1e", "bambu-h2d", "bambu-h2s", "
 # print_error codes Bambu firmware sets when a person stops a print (screen, app or a stop command).
 # From ha-bambulab's error table (MIT): 0300400C "The task was canceled", 0500400E "Printing was cancelled".
 USER_CANCEL_ERRORS = (0x0300400C, 0x0500400E)
+# A full pushall report is tens of kilobytes; refuse a report far bigger than that.
+REPORT_MAX = 4 * FILAMENT_REPLY_MAX
+AMS_UNITS_MAX = 16
+AMS_TRAYS_MAX = 8
+EXTERNAL_TRAY_ID = 254  # vt_tray, the spool holder outside the AMS
 DEV_MODE_HINT = ("On newer firmware turn on LAN-only mode and Developer Mode on the printer, then pair again "
                  "with the access code shown there")
 
@@ -167,6 +172,8 @@ class BambuAdapter(Adapter):
             connected.set()
 
         def on_message(client, userdata, msg):
+            if len(msg.payload) > REPORT_MAX:
+                return  # far bigger than any real report; never parse it
             try:
                 data = json.loads(msg.payload)
             except ValueError:
@@ -273,6 +280,11 @@ class BambuAdapter(Adapter):
             message=message,
         )
 
+    def filaments(self) -> list[Slot]:
+        """Read-only: the AMS trays and the external spool from the same pushall report status reads."""
+        p = self._mqtt([{"pushing": {"sequence_id": "0", "command": "pushall"}}], want_report=True)
+        return ams_slots(p, self.cfg.name)
+
     def _ftp(self, work):
         self._require()
         ctx = self._ctx(self.ftp_port)
@@ -378,6 +390,64 @@ class BambuAdapter(Adapter):
             raise Unreachable(f"{self.cfg.name}'s camera did not answer ({err.__class__.__name__})",
                               "Check LAN Mode Liveview is on") from None
         return write_image(data, out)
+
+
+def ams_slots(p: dict, what: str) -> list[Slot]:
+    """Slots from a Bambu print report: ams.ams[].tray[] and the external spool vt_tray.
+
+    Trays are named like Bambu Studio names them: A1 to A4 for the first AMS, B1 to B4 for the next.
+    """
+    try:
+        return _ams_slots(p, what)
+    except (KeyError, TypeError, ValueError, AttributeError, IndexError):
+        raise ProtocolError(f"{what} sent AMS data in a shape Gantrel can't read",
+                            "The firmware may have changed; record its version and report it") from None
+
+
+def _ams_slots(p: dict, what: str) -> list[Slot]:
+    bad = ProtocolError(f"{what} sent AMS data in a shape Gantrel can't read",
+                        "The firmware may have changed; record its version and report it")
+    slots: list[Slot] = []
+    ams = p.get("ams")
+    if ams is not None:
+        units = ams.get("ams") if isinstance(ams, dict) else None
+        if not isinstance(units, list):
+            raise bad
+        for n, unit in enumerate(units[:AMS_UNITS_MAX]):
+            if not isinstance(unit, dict) or not isinstance(unit.get("tray", []), list):
+                raise bad
+            uid = bounded(unit.get("id", n), 0, 255)
+            uid = int(uid) if uid is not None else n
+            extra = {k: v for k, v in (("humidity_level", bounded(unit.get("humidity"), 0, 100)),
+                                       ("temperature_c", bounded(unit.get("temp"), -40, 150))) if v is not None}
+            for t, tray in enumerate(unit.get("tray", [])[:AMS_TRAYS_MAX]):
+                if not isinstance(tray, dict):
+                    raise bad
+                tid = bounded(tray.get("id", t), 0, 255)
+                tid = int(tid) if tid is not None else t
+                name = (chr(ord("A") + uid) + str(tid + 1)) if uid < 26 else f"AMS{uid}-{tid + 1}"
+                slots.append(_tray_slot(tray, name, f"bambu print.ams.ams[{n}].tray[{t}]", extra))
+    vt = p.get("vt_tray")
+    if vt is not None:
+        if not isinstance(vt, dict):
+            raise bad
+        slots.append(_tray_slot(vt, "ext", "bambu print.vt_tray", {}))
+    if not slots:
+        slots.append(Slot("ext", False, source="bambu: no ams or vt_tray in the report",
+                          extra={"note": "the printer did not say what is loaded"}))
+    return slots
+
+
+def _tray_slot(tray: dict, name: str, source: str, extra: dict) -> Slot:
+    kind = clip(tray.get("tray_type"))
+    if not kind:
+        return Slot(name, True, source=source, extra=extra)
+    color = tray.get("tray_color")
+    return Slot(name, False, family=material_family(kind), material=kind, name=clip(tray.get("tray_sub_brands")),
+                color=color[:6] if isinstance(color, str) and len(color) in (6, 8) else "",
+                percent_left=tray.get("remain"),  # -1 when the printer can't tell; that falls out as unknown
+                nozzle_min_c=tray.get("nozzle_temp_min"), nozzle_max_c=tray.get("nozzle_temp_max"),
+                source=source, extra=extra)
 
 
 def _hms_errors(p: dict) -> list[str]:
