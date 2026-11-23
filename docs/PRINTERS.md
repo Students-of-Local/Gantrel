@@ -612,7 +612,9 @@ holds both slicers to it (PrusaSlicer `--max-volumetric-speed`, OrcaSlicer
 `filament_max_volumetric_speed`). Its retraction speed and flow ratio go to PrusaSlicer
 (`--retract-speed`, `--extrusion-multiplier`) and OrcaSlicer; pressure advance goes to OrcaSlicer
 only (PrusaSlicer has no such setting). On OrcaSlicer the pack's start and end G-code replace the
-bundled machine profile's (`machine_start_gcode`, `machine_end_gcode`), exactly as reviewed. The
+bundled machine profile's (`machine_start_gcode`, `machine_end_gcode`), exactly as reviewed, and
+PrusaSlicer always gets `--start-gcode` and `--end-gcode`. An empty block is passed as empty to
+both, so neither slicer falls back to G-code no one reviewed. The
 sliced file is named `<part>_pack_<id>_<material>.gcode`, which `upload` takes as is. The pack's
 printer limits (`hotend_max_c`, `bed_max_c`, `max_flow`, `high_flow`, `hardened_nozzle`, `max_accel`,
 `chamber_heater`, and `top_speed` when given) are its author's values. They count as cited, with the

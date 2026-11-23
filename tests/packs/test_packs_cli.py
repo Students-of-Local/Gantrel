@@ -381,6 +381,32 @@ def test_orca_writes_the_packs_reviewed_start_and_end_gcode(capsys, tmp_path, go
     assert "machine_start_gcode" not in machine and "machine_end_gcode" not in machine
 
 
+@pytest.mark.parametrize("which", ["start_gcode", "end_gcode", "both"])
+def test_an_empty_pack_gcode_block_reaches_both_slicers_empty(capsys, tmp_path, good, write, fake_slicer, fake_orca,
+                                                               which):
+    # An empty block is what the person reviewed: neither slicer may fill it with its bundled machine's G-code.
+    for key in (("start_gcode", "end_gcode") if which == "both" else (which,)):
+        good["printer"][key] = ""
+    f = write(good)
+    sha = packs.sha256(f.read_bytes())
+    assert run(capsys, "pack", "import", f, "--accept", sha[:12])[0] == 0
+    model = tmp_path / "part.stl"
+    model.write_bytes(STL)
+    rc, _, err = run(capsys, "slice", model, "--printer", "pack:test-k2", "--material", "PLA", "--slicer",
+                     "orcaslicer", "--json")
+    assert rc == 0, err
+    machine = json.loads(fake_orca.read_text())["machine"]
+    assert machine["machine_start_gcode"] == good["printer"]["start_gcode"]
+    assert machine["machine_end_gcode"] == good["printer"]["end_gcode"]
+    rc, _, err = run(capsys, "slice", model, "--printer", "pack:test-k2", "--material", "PLA", "--slicer",
+                     "prusaslicer", "--json")
+    assert rc == 0, err
+    argv = json.loads(fake_slicer.read_text())
+    assert argv.count("--start-gcode") == 1 and argv.count("--end-gcode") == 1
+    assert argv[argv.index("--start-gcode") + 1] == good["printer"]["start_gcode"].replace("\n", "\\n")
+    assert argv[argv.index("--end-gcode") + 1] == good["printer"]["end_gcode"].replace("\n", "\\n")
+
+
 @pytest.mark.parametrize("where, before, secret", [
     ("notes", "Questions to ", "maker@example.com"),
     ("notes", "printer password: ", "Hunter2Secret"),

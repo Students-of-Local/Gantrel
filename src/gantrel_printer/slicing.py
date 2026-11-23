@@ -439,9 +439,11 @@ def prusa_args(s: dict, printer: PrinterProfile) -> list[str]:
         # what the printer does, and a printer.cfg without [firmware_retraction] still retracts.
         a += ["--use-relative-e-distances", "--max-print-speed",
               str(s["infill_speed_mms"]), "--machine-max-acceleration-extruding", str(s["accel_mms2"])]
-    if printer.start_gcode:
+    # A pack profile always passes both, an empty block too: left out, PrusaSlicer writes its own default start
+    # G-code, which no one reviewed.
+    if printer.start_gcode or printer.source:
         a += ["--start-gcode", printer.start_gcode.replace("{chamber_temperature[0]}", str(s["chamber_c"]))]
-    if printer.end_gcode:
+    if printer.end_gcode or printer.source:
         a += ["--end-gcode", printer.end_gcode]
     return a
 
@@ -470,9 +472,10 @@ def orca_overrides(s: dict, printer: PrinterProfile) -> tuple[dict, dict, dict]:
         # A pack profile: Orca writes the pack's reviewed start and end G-code, not the bundled machine's.
         # Orca's machine profiles hold real line breaks; the profile carries \n escapes (packs.to_profile), and a
         # pack's G-code may hold no backslash of its own, so turning them back gives exactly the reviewed text.
+        # Both are always set, an empty block too: left out, Orca would run the inherited machine's G-code, which
+        # no one reviewed.
         for key, text in (("machine_start_gcode", printer.start_gcode), ("machine_end_gcode", printer.end_gcode)):
-            if text:
-                machine[key] = text.replace("\\n", "\n")
+            machine[key] = text.replace("\\n", "\n")
     if "retract_speed_mms" in s:
         machine["retraction_speed"] = [str(s["retract_speed_mms"])]
     if "flow_ratio" in s:
