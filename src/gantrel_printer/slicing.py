@@ -507,7 +507,7 @@ def slice_model(model_path: Path, out_dir: Path, printer: PrinterProfile, s: dic
             argv = found[kind] + ["--slice", "0", "--load-settings", f"{files[0]};{files[1]}", "--load-filaments",
                                   files[2], "--outputdir", str(outdir), str(model_path)]
         try:
-            proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+            proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
         except subprocess.TimeoutExpired:
             raise PrinterError(f"{kind} took longer than {timeout}s", "Try a smaller model or the draft quality") from None
         if proc.returncode != 0:

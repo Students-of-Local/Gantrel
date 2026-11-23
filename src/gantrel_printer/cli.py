@@ -20,10 +20,10 @@ import sys
 import time
 from pathlib import Path
 
-from . import __version__, calibrate, config, discover as disc, guard as vguard, monitor, notify, safety, slicing
+from . import __version__, calibrate, config, discover as disc, guard as vguard, monitor, notify, printlog, safety, slicing
 from .adapters import ADAPTERS, adapter_class, build
 from .errors import ConfigError, PrinterError, SafetyError
-from .model import fmt_duration
+from .model import fmt_duration, material_family
 
 EXIT_ERROR, EXIT_USAGE, EXIT_SAFETY = 1, 2, 3
 REMOTE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(gcode|bgcode|3mf|ctb|goo)$")
@@ -252,8 +252,13 @@ def cmd_slice(args):
         f"gantrel-printer upload {gcode} --printer {cfg.name} --material {mat.name}")
 
 
-def upload_file(printer: str, path: Path, name: str | None = None, material_name: str | None = None):
-    """Send a file to a paired printer and record the job. Never starts it. Returns (job, adapter)."""
+def upload_file(printer: str, path: Path, name: str | None = None, material_name: str | None = None,
+                plan: dict | None = None, record_slot: bool = False):
+    """Send a file to a paired printer and record the job. Never starts it. Returns (job, adapter).
+
+    plan: a summary from safety.load_plan, kept on the job for the Local Studio card. record_slot: also
+    ask the printer which slot holds the material, and record it when exactly one loaded slot matches.
+    """
     if not path.is_file():
         raise ConfigError(f"no file at {path}")
     requested = name or path.name
@@ -273,6 +278,16 @@ def upload_file(printer: str, path: Path, name: str | None = None, material_name
                           "Send .ctb or .goo files only to an Elegoo resin printer paired with a resin --model")
     before = snapshot_cfg(adapter)
     facts = slicing.gcode_facts(path)
+    gfacts_material = facts.get("material", "")
+    material = material or (gfacts_material if gfacts_material.upper() in slicing.MATERIALS else "")
+    if plan:
+        profile = slicing.profile_for(adapter.cfg.model, adapter.cfg.type).key
+        if plan.get("printer") != profile:
+            raise ConfigError(f"plan {plan.get('id')} is for {plan.get('printer')}, not {printer} ({profile})",
+                              "Plan the part for this printer, then upload with that plan")
+        if material and str(plan.get("material", "")).upper() != material.upper():
+            raise ConfigError(f"plan {plan.get('id')} is for {plan.get('material')}, not {material}",
+                              "Plan the part with the material this file was sliced for")
     if adapter.verifies_remote and adapter.remote_info(remote) is not None:
         raise SafetyError(f"{remote} is already on {printer}; uploads never replace a file",
                           "Use its existing job (gantrel-printer jobs), or delete it on the printer first")
@@ -283,12 +298,22 @@ def upload_file(printer: str, path: Path, name: str | None = None, material_name
     save_if_changed(adapter, before)
     if safety.file_sha256(path) != sha:
         raise SafetyError("the file changed during upload", "Upload it again")
-    gfacts_material = facts.get("material", "")
-    material = material or (gfacts_material if gfacts_material.upper() in slicing.MATERIALS else "")
+    slot = loaded_slot(adapter, material) if record_slot and material else ""
     job = safety.new_job(printer, path, remote_name, material=material, est_seconds=facts.get("est_seconds"),
                          identity=adapter.identity(), sha256=sha, remote_size=info.get("size"),
-                         remote_mtime=info.get("mtime"))
+                         remote_mtime=info.get("mtime"), slot=slot, plan=plan)
     return job, adapter
+
+
+def loaded_slot(adapter, material: str) -> str:
+    """The one loaded slot whose family matches material, as the printer reports it; "" if none or several."""
+    try:
+        slots = adapter.filaments()
+    except PrinterError:
+        return ""
+    want = material_family(material)
+    match = [s for s in slots if not s.empty and s.family == want]
+    return match[0].slot if len(match) == 1 else ""
 
 
 def cmd_upload(args):
@@ -420,12 +445,9 @@ def cmd_plan(args):
 
 def cmd_check(args):
     """Check a settings file against the printer, the filament and (with --model) the part."""
-    import numpy as np
-
     from . import materials
-    from .plan import check as pcheck, estimate as pest, mesh as pmesh, orient
-    printer = _plan_printer(args.printer)
-    fil = materials.get(args.material)
+    _plan_printer(args.printer)   # a bad printer or filament fails before the file is read
+    materials.get(args.material)
     path = Path(args.settings).expanduser()
     try:
         raw = json.loads(path.read_text())
@@ -436,17 +458,43 @@ def cmd_check(args):
     s = raw.get("settings", raw) if isinstance(raw, dict) else None
     if not isinstance(s, dict):
         raise ConfigError(f"{path} does not hold a settings object", "Use the JSON from slice --json or plan --json")
-    goal = args.goal or s.get("goal") or "balanced"
+    printer, fil, goal, turned, c = check_settings(s, args.printer, args.material, args.model, args.goal, raw)
+    lines = [f"Check of {path.name} for {printer.label}, {fil.name}, goal {goal}: "
+             f"{'pass' if c['ok'] else 'FAIL'} ({len(c['fails'])} failed, {len(c['warns'])} warning(s), "
+             f"{sum(r['status'] == 'pass' for r in c['rules'])} passed)"]
+    if turned:
+        lines.append(f"Part checked {turned}.")
+    lines += _rule_lines(c)
+    nxt = ("Fix every FAIL line as its advice says, then check again" if not c["ok"] else
+           "The settings pass; tell the person about any warnings")
+    out(args, {"printer": printer.key, "material": fil.name, "part_orientation": turned, **c}, "\n".join(lines), nxt)
+    return 0 if c["ok"] else EXIT_ERROR
+
+
+def check_settings(s: dict, printer_key: str, material: str, model: str | None = None, goal: str | None = None,
+                   raw=None):
+    """The check behind `check` and the MCP check tool. Returns (printer, filament, goal, turned, result).
+
+    s: the settings object. raw: the JSON it came in (plan --json output carries orientations), so a model is
+    turned the plan's way; defaults to s. turned: how the part was checked, or None without a model.
+    """
+    import numpy as np
+
+    from . import materials
+    from .plan import check as pcheck, estimate as pest, mesh as pmesh, orient
+    printer = _plan_printer(printer_key)
+    fil = materials.get(material)
+    goal = goal or s.get("goal") or "balanced"
     part = None
     turned = None
-    pcheck.require(s, pcheck.MODEL_REQUIRED if args.model else pcheck.REQUIRED)
-    if args.model:
-        m = pmesh.load(args.model)
+    pcheck.require(s, pcheck.MODEL_REQUIRED if model else pcheck.REQUIRED)
+    if model:
+        m = pmesh.load(model)
         pmesh.fits_planner(m)
-        rot = _plan_rotation(raw)
+        rot = _plan_rotation(s if raw is None else raw)
         if rot is None:
             turned = "as drawn (z up): the settings hold no plan orientation"
-        elif pmesh.is_oriented_output(args.model):
+        elif pmesh.is_oriented_output(model):
             turned = "as the file has it: it is a plan --write-oriented file, already turned"
         else:
             m = m.transformed(rot)
@@ -459,17 +507,7 @@ def cmd_check(args):
                 "smallest_layer_seconds": e["smallest_layer_seconds"],
                 "layers_below_min_layer_time": e["layers_below_min_layer_time"]}
         part["orientation"] = turned
-    c = pcheck.check(s, printer, fil, part, goal)
-    lines = [f"Check of {path.name} for {printer.label}, {fil.name}, goal {goal}: "
-             f"{'pass' if c['ok'] else 'FAIL'} ({len(c['fails'])} failed, {len(c['warns'])} warning(s), "
-             f"{sum(r['status'] == 'pass' for r in c['rules'])} passed)"]
-    if turned:
-        lines.append(f"Part checked {turned}.")
-    lines += _rule_lines(c)
-    nxt = ("Fix every FAIL line as its advice says, then check again" if not c["ok"] else
-           "The settings pass; tell the person about any warnings")
-    out(args, {"printer": printer.key, "material": fil.name, "part_orientation": turned, **c}, "\n".join(lines), nxt)
-    return 0 if c["ok"] else EXIT_ERROR
+    return printer, fil, goal, turned, pcheck.check(s, printer, fil, part, goal)
 
 
 def _plan_rotation(raw):
@@ -496,6 +534,17 @@ def cmd_jobs(args):
                      for j in jobs)
     out(args, {"jobs": [j.__dict__ for j in jobs]}, text or "No uploads.",
         "A person starts a print on the printer itself; see the upload message")
+
+
+def cmd_prints(args):
+    rows = printlog.read()
+    text = "\n".join(f"{r.get('time', '?'):20} {r.get('action', '?'):6} {r.get('outcome', '?'):19} "
+                     f"{r.get('printer') or '-':12} job {r.get('job') or '-':10} file {r.get('sha256') or '-':12}"
+                     + (f"  by {r['caller']}" if r.get("caller") else "")
+                     + (f"\n    {r['reason']}" if r.get("reason") else "") for r in rows)
+    out(args, {"log": str(printlog.path()), "prints": rows},
+        text or "No print starts or resumes have been asked for.",
+        "Each line is one start or resume Gantrel asked the person about, and what happened")
 
 
 def cmd_pause(args):
@@ -772,6 +821,7 @@ def parser() -> argparse.ArgumentParser:
     sp.add_argument("--model", help="the STL or 3MF, as it will sit on the bed, for fit, overhang and layer checks")
     sp.add_argument("--goal", choices=["quality", "balanced", "speed"], help="default: the file's goal, else balanced")
     add("jobs", cmd_jobs, "files uploaded with this tool")
+    add("prints", cmd_prints, "every print start or resume asked for through Local Studio, and its outcome")
     for name, fn, h in (("pause", cmd_pause, "pause now (safe)"),
                         ("cancel", cmd_cancel, "cancel the current print"),
                         ("estop", cmd_estop, "emergency stop")):
