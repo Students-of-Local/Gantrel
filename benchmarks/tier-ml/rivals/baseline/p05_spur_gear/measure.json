@@ -1,0 +1,62 @@
+[
+ {
+  "check": "stone check",
+  "value": "FIX: watertight surface has holes; FIX: bodies 49 bodies (max 1); FIX: min_wall thinnest wall 0.07 mm (need 0.8 mm)",
+  "want": "all PASS",
+  "pass": false
+ },
+ {
+  "check": "thickness",
+  "value": 8.0,
+  "want": "8 +-0.3",
+  "pass": true
+ },
+ {
+  "check": "tip diameter",
+  "value": 33.79,
+  "want": "39.0 +-0.39",
+  "pass": false
+ },
+ {
+  "check": "root diameter",
+  "value": 32.24,
+  "want": "32.25 +-0.4",
+  "pass": true
+ },
+ {
+  "check": "tooth count",
+  "value": 48,
+  "want": "24",
+  "pass": false
+ },
+ {
+  "check": "tooth thickness at pitch circle",
+  "value": 0.34,
+  "want": "2.356 +-0.15",
+  "pass": false
+ },
+ {
+  "check": "meshes with a copy at 36 mm (overlap mm2)",
+  "value": 0.485,
+  "want": "< 0.05 mm2",
+  "pass": false
+ },
+ {
+  "check": "closest approach while meshing (pixel centers)",
+  "value": 0.001,
+  "want": "report",
+  "pass": true
+ },
+ {
+  "check": "bore across round",
+  "value": 5.2,
+  "want": "5.05..5.4",
+  "pass": true
+ },
+ {
+  "check": "bore across flat",
+  "value": 4.6,
+  "want": "4.55..4.8",
+  "pass": true
+ }
+]

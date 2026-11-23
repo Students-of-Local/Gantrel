@@ -1,0 +1,12 @@
+File: /home/baney75/.local/state/flagship/studies/gantrel/baseline/p11_keychain/part.stl
+Size: 48.7 x 13.9 x 4.2 mm
+PASS loads: 1424 faces
+PASS watertight: closed surface
+PASS bodies: 1 bodies (max 1)
+PASS volume: 1912.7 mm3
+PASS bed: 48.7 x 13.9 x 4.2 mm on a 256 x 256 x 256 mm bed
+PASS resting: lowest point z = 0.00 mm
+PASS first_layer: 582.3 mm2 on the bed (need 101.6 mm2)
+PASS min_wall: thinnest wall 1.28 mm (need 0.8 mm)
+PASS overhang: 0.0% of the surface hangs past 45 deg (max 5%)
+NEXT: none, the file passes

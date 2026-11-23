@@ -1,0 +1,32 @@
+[
+ {
+  "check": "stone check",
+  "value": "FIX: volume -522083.4 mm3; FIX: first_layer 0.0 mm2 on the bed (need 200.0 mm2); FIX: overhang 5.6% of the surface hangs past 45 deg (max 5%)",
+  "want": "all PASS",
+  "pass": false
+ },
+ {
+  "check": "height",
+  "value": 180.0,
+  "want": "180 +-1.8",
+  "pass": true
+ },
+ {
+  "check": "max diameter",
+  "value": 79.97,
+  "want": "80 +-0.8",
+  "pass": true
+ },
+ {
+  "check": "base contact",
+  "value": 2004.5,
+  "want": ">= 1500 mm2",
+  "pass": true
+ },
+ {
+  "check": "solid body for vase mode (loops at mid height)",
+  "value": 1,
+  "want": "1",
+  "pass": true
+ }
+]

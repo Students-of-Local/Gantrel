@@ -1,0 +1,83 @@
+[
+ {
+  "check": "stone check",
+  "value": "all PASS",
+  "want": "all PASS",
+  "pass": true
+ },
+ {
+  "check": "legs (outside)",
+  "value": [
+   50.0,
+   50.0
+  ],
+  "want": "50 +-0.5",
+  "pass": true
+ },
+ {
+  "check": "width",
+  "value": 25.0,
+  "want": "25 +-0.3",
+  "pass": true
+ },
+ {
+  "check": "bed leg holes",
+  "value": [
+   4.49,
+   4.49
+  ],
+  "want": "2 holes, 4.5 +-0.3",
+  "pass": true
+ },
+ {
+  "check": "bed leg hole positions from corner",
+  "value": [
+   15.0,
+   40.0
+  ],
+  "want": "15, 40 +-0.3",
+  "pass": true
+ },
+ {
+  "check": "bed leg holes on center line",
+  "value": [
+   0.0,
+   -0.0
+  ],
+  "want": "+-0.3",
+  "pass": true
+ },
+ {
+  "check": "countersink on inside face (dia at 0.05 below face)",
+  "value": [
+   8.87,
+   8.87
+  ],
+  "want": "8.4..9.5",
+  "pass": true
+ },
+ {
+  "check": "upright leg holes",
+  "value": [
+   4.49,
+   4.49
+  ],
+  "want": "2 holes, 4.5 +-0.3",
+  "pass": true
+ },
+ {
+  "check": "upright leg hole positions",
+  "value": [
+   15.0,
+   40.0
+  ],
+  "want": "15, 40 +-0.3",
+  "pass": true
+ },
+ {
+  "check": "gusset at the side (section area at y=1)",
+  "value": 787.5,
+  "want": "> legs only",
+  "pass": true
+ }
+]

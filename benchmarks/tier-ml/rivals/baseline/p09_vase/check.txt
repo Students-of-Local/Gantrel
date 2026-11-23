@@ -1,0 +1,12 @@
+File: /home/baney75/.local/state/flagship/studies/gantrel/baseline/p09_vase/part.stl
+Size: 78.2 x 78.8 x 180.0 mm
+PASS loads: 25476 faces
+PASS watertight: closed surface
+PASS bodies: 1 bodies (max 1)
+FIX: volume -522083.4 mm3; the part has no volume; go back to the default parameters
+PASS bed: 78.3 x 78.8 x 180.0 mm on a 256 x 256 x 256 mm bed
+PASS resting: lowest point z = 0.00 mm
+FIX: first_layer 0.0 mm2 on the bed (need 200.0 mm2); too little of the part touches the bed; give it a flat base
+PASS min_wall: skipped (no ray engine or no hits)
+FIX: overhang 5.6% of the surface hangs past 45 deg (max 5%); too much of the part hangs in the air; add a chamfer or flip it
+NEXT: stone check /home/baney75/.local/state/flagship/studies/gantrel/baseline/p09_vase/part.stl

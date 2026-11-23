@@ -1,0 +1,53 @@
+[
+ {
+  "check": "stone check",
+  "value": "FIX: watertight surface has holes; FIX: bodies 2 bodies (max 1)",
+  "want": "all PASS",
+  "pass": false
+ },
+ {
+  "check": "footprint x",
+  "value": 83.5,
+  "want": "83.5 +-0.3",
+  "pass": true
+ },
+ {
+  "check": "footprint y",
+  "value": 41.5,
+  "want": "41.5 +-0.3",
+  "pass": true
+ },
+ {
+  "check": "height with lip",
+  "value": 46.4,
+  "want": "46.4 +-0.5",
+  "pass": true
+ },
+ {
+  "check": "foot bottoms",
+  "value": [
+   [
+    35.7,
+    35.7
+   ],
+   [
+    35.7,
+    35.7
+   ]
+  ],
+  "want": "2 feet, 35.6 x 35.6 +-0.3",
+  "pass": true
+ },
+ {
+  "check": "cavities at mid height (one divider)",
+  "value": 2,
+  "want": "2",
+  "pass": true
+ },
+ {
+  "check": "label shelf (cavity shallower near top)",
+  "value": 7.8,
+  "want": ">= 4 mm narrower in y",
+  "pass": true
+ }
+]

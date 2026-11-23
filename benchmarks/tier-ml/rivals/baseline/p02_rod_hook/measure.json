@@ -1,0 +1,35 @@
+[
+ {
+  "check": "stone check",
+  "value": "all PASS",
+  "want": "all PASS",
+  "pass": true
+ },
+ {
+  "check": "width",
+  "value": 30.0,
+  "want": "30 +-0.3",
+  "pass": true
+ },
+ {
+  "check": "cradle fits dowel (largest circle in the throat)",
+  "value": 26.4,
+  "want": "25.7..28.4 (25.4 dowel + 0.3..3.0)",
+  "pass": true
+ },
+ {
+  "check": "screw holes",
+  "value": [
+   4.49,
+   4.49
+  ],
+  "want": "2 holes, 4.2..4.8",
+  "pass": true
+ },
+ {
+  "check": "tip rises past dowel center",
+  "value": 11.6,
+  "want": ">= 0 mm above center",
+  "pass": true
+ }
+]
