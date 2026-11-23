@@ -528,6 +528,7 @@ G-code block 8 KiB, `notes` 2000, `author` 64.
 | `printer.bed`, `height` | whole mm, 50 to 2000 |
 | `printer.nozzle`, `filament_mm` | 0.1 to 2.0 mm; 1.75, 2.85 or 3.0 mm |
 | `printer.max_speed`, `accel`, `max_accel` | 10 to 2000 mm/s; 100 to 100000 mm/s2 each, with `accel` <= `max_accel` |
+| `printer.top_speed` | optional: the fastest the printer moves, 10 to 2000 mm/s, with `max_speed` <= `top_speed`; export writes it when Gantrel's profile has one |
 | `printer.hotend_max_c`, `bed_max_c`, `max_flow` | 150 to 500 C; 0 to 200 C; 1 to 200 mm3/s |
 | `printer.high_flow`, `hardened_nozzle`, `enclosed`, `chamber_heater`, `direct_drive` | true or false |
 | `printer.start_gcode`, `end_gcode` | printable ASCII G-code, line feeds only, under the policy below |
@@ -596,7 +597,12 @@ name when a pack has two of one family). The output names the source as `pack <i
 The pack's `max_flow` for that material is the flow cap, used as is, like a vendor preset. Its
 retraction speed and flow ratio go to PrusaSlicer (`--retract-speed`, `--extrusion-multiplier`) and
 OrcaSlicer; pressure advance goes to OrcaSlicer only (PrusaSlicer has no such setting). The pack's
-printer limits are its author's values, and plan says so. Uploading still goes to a paired printer.
+printer limits (`hotend_max_c`, `bed_max_c`, `max_flow`, `high_flow`, `hardened_nozzle`, `max_accel`,
+`chamber_heater`, and `top_speed` when given) are its author's values. They count as cited, with the
+source `pack <id> <hash12> (the pack author's values)`, so check and plan fail a rule past them as
+they do past a vendor's cited limit; speed and acceleration still only warn. A pack without
+`top_speed` has no top speed, so the speed rules fall back to its `max_speed`. Uploading still goes
+to a paired printer.
 
 ### Export
 

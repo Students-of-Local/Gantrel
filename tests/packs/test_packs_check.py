@@ -69,6 +69,7 @@ def test_top_level_formats(good, field, value):
     (("printer", "hotend_max_c"), 900, "printer.hotend_max_c"), (("printer", "accel"), 0, "printer.accel"),
     (("printer", "filament_mm"), 2.0, "printer.filament_mm"), (("printer", "flavor"), "bash", "printer.flavor"),
     (("printer", "adapter"), "telnet", "printer.adapter"),
+    (("printer", "top_speed"), 5000, "printer.top_speed"), (("printer", "top_speed"), 400.5, "printer.top_speed"),
     (("printer", "default_ports"), {"creality": 70000}, "printer.default_ports.creality"),
     (("materials", 0, "retraction_mm"), 30, "materials[0].retraction_mm"),
     (("materials", 0, "flow_ratio"), 3, "materials[0].flow_ratio"),
@@ -272,3 +273,39 @@ def test_materials_breaking_check_rules_are_refused(good, change, word):
 def test_duplicate_material_refused(good):
     good["materials"].append(dict(good["materials"][0]))
     refused_at(check(good), "materials[1].name", word="same brand and name")
+
+
+# ---------------------------------------------------------------- a pack's limits are cited
+
+
+def test_a_packs_limits_are_cited_with_the_pack_as_source(good):
+    from gantrel_printer.plan import check as pcheck
+    prof = packs.to_profile(good, "ab" * 32)
+    assert set(packs.LIMITS) <= set(prof.cited) and "top_speed" not in prof.cited and prof.top_speed == 0
+    assert prof.limits_source == "pack test-k2 abababababab (the pack author's values)"
+    good["printer"]["top_speed"] = 800
+    prof = packs.to_profile(good)
+    assert prof.top_speed == 800 and prof.is_cited("top_speed")
+    # Main's check semantics: past a cited limit the hotend, bed and nozzle rules fail; speed and accel only warn.
+    from gantrel_printer import materials
+    s = {"nozzle_c": 305, "bed_c": 60, "layer_height_mm": 0.2, "first_layer_height_mm": 0.25, "perimeters": 2,
+         "outer_wall_speed_mms": 150, "inner_wall_speed_mms": 200, "infill_speed_mms": 200,
+         "first_layer_speed_mms": 30, "travel_speed_mms": 700, "accel_mms2": 30000}
+    c = pcheck.check(s, prof, materials.get("PETG"))
+    by = {r["rule"]: r for r in c["rules"]}
+    assert by["nozzle temperature within the hotend"]["status"] == "fail"
+    assert by["nozzle temperature within the hotend"]["values"]["cited"] is True
+    assert by["travel speed within the printer"]["status"] == "pass"
+    assert by["travel speed within the printer"]["values"]["top_speed_mms"] == 800
+    assert by["acceleration within the printer"]["status"] == "warn"
+    s["travel_speed_mms"] = 900
+    c = pcheck.check(s, prof, materials.get("PETG"))
+    r = next(r for r in c["rules"] if r["rule"] == "travel speed within the printer")
+    assert r["status"] == "warn" and r["values"]["cited"] is True and "travel speed within the printer" not in c["fails"]
+
+
+def test_top_speed_is_optional_and_bounds_max_speed(good):
+    good["printer"]["top_speed"] = 500
+    assert check(good).result == "pass"
+    good["printer"]["top_speed"] = 150
+    refused_at(check(good), "printer.max_speed", word="above top_speed")

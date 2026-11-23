@@ -46,6 +46,11 @@ FILAMENT_MM = (1.75, 2.85, 3.0)
 CAL_TESTS = ("first-layer", "temp-tower", "retraction", "flow")
 PROOF_KINDS = ("print", "calibration", "slice")
 MULTILINE = ("notes", "start_gcode", "end_gcode", "result", "note")
+# The printer limits a pack carries. A profile built from a pack cites each one it holds, with the pack as the
+# source: plan/check.py then fails a rule past them, as it does past a vendor's cited limit. top_speed is optional
+# (an author may not know it); without it the profile has none and the speed rules fall back to max_speed.
+LIMITS = ("hotend_max_c", "bed_max_c", "max_flow", "high_flow", "hardened_nozzle", "max_accel", "chamber_heater")
+OPTIONAL_LIMITS = ("top_speed",)
 
 
 # ---------------------------------------------------------------- report
@@ -182,6 +187,7 @@ def printer_spec() -> S:
         _req("max_speed", S("int", 10, 2000, what="mm/s")),
         _req("accel", S("int", 100, 100000, what="mm/s2")),
         _req("max_accel", S("int", 100, 100000, what="mm/s2")),
+        _opt("top_speed", S("int", 10, 2000, what="mm/s")),
         _req("hotend_max_c", S("int", 150, 500, what="C")),
         _req("bed_max_c", S("int", 0, 200, what="C")),
         _req("max_flow", S("num", 1, 200, what="mm3/s")),
@@ -611,7 +617,7 @@ def to_profile(pack: dict, sha: str = "", chosen: int | None = None) -> slicing.
     mats = [material_from(pack, i, src) for i in range(len(pack["materials"]))]
     if chosen is not None:
         mats.insert(0, mats.pop(chosen))
-    limits = ("hotend_max_c", "bed_max_c", "max_flow", "high_flow", "hardened_nozzle", "max_accel", "chamber_heater")
+    cited = LIMITS + tuple(k for k in OPTIONAL_LIMITS if k in p)
     return slicing.PrinterProfile(
         key=f"pack:{pack['id']}", label=p["model"], bed=(p["bed"][0], p["bed"][1]), height=p["height"],
         flavor=p["flavor"], nozzle=p["nozzle"], max_speed=p["max_speed"], accel=p["accel"],
@@ -621,7 +627,7 @@ def to_profile(pack: dict, sha: str = "", chosen: int | None = None) -> slicing.
         orca_machine=p.get("orca_machine", ""), filament_mm=p["filament_mm"],
         hotend_max_c=p["hotend_max_c"], bed_max_c=p["bed_max_c"], max_flow=p["max_flow"], high_flow=p["high_flow"],
         hardened_nozzle=p["hardened_nozzle"], max_accel=p["max_accel"], chamber_heater=p["chamber_heater"],
-        cited=limits, limits_source=f"{src} (the pack author's values)", pack_materials=tuple(mats), source=src)
+        top_speed=p.get("top_speed", 0), cited=cited, limits_source=f"{src} (the pack author's values)", pack_materials=tuple(mats), source=src)
 
 
 def material_from(pack: dict, i: int, src: str) -> slicing.Material:
@@ -644,6 +650,9 @@ def material_rules(pack: dict, rep: Report) -> None:
     p = pack["printer"]
     if p["accel"] > p["max_accel"]:
         rep.add("refusal", "printer.accel", f"accel {p['accel']} is above max_accel {p['max_accel']}")
+    if "top_speed" in p and p["max_speed"] > p["top_speed"]:
+        rep.add("refusal", "printer.max_speed", f"max_speed {p['max_speed']} is above top_speed {p['top_speed']}, "
+                                                "the fastest this printer moves")
     names = {}
     for i, m in enumerate(pack["materials"]):
         path = f"materials[{i}]"
@@ -803,8 +812,9 @@ def export(printer: str, pack_id: str | None = None, name: str | None = None, au
         raise ConfigError(f"pack id {pack_id!r} is not allowed", "Use 3 to 64 lowercase letters, digits and hyphens")
     left_out = []
     wanted = [slicing.material(m).name for m in materials_wanted] if materials_wanted else list(slicing.MATERIALS)
-    uncited = [k for k in ("hotend_max_c", "bed_max_c", "max_flow", "high_flow", "hardened_nozzle", "max_accel",
-                           "chamber_heater") if not prof.is_cited(k)]
+    # top_speed goes in only when the profile has one (0 means no source gives it); a pack cites what it holds.
+    top = {"top_speed": prof.top_speed} if prof.top_speed else {}
+    uncited = [k for k in LIMITS + tuple(top) if not prof.is_cited(k)]
     auto = (f"Exported by gantrel-printer from its {prof.key} profile and its material defaults. "
             "Calibration: Gantrel does not record calibration results yet, so calibrated is empty.")
     if uncited:
@@ -816,7 +826,7 @@ def export(printer: str, pack_id: str | None = None, name: str | None = None, au
         "printer": {
             "model": prof.label, "adapter": adapter, "bed": list(prof.bed), "height": prof.height,
             "nozzle": prof.nozzle, "flavor": prof.flavor, "max_speed": prof.max_speed, "accel": prof.accel,
-            "max_accel": prof.max_accel, "hotend_max_c": prof.hotend_max_c, "bed_max_c": prof.bed_max_c,
+            "max_accel": prof.max_accel, **top, "hotend_max_c": prof.hotend_max_c, "bed_max_c": prof.bed_max_c,
             "max_flow": prof.max_flow, "high_flow": prof.high_flow, "hardened_nozzle": prof.hardened_nozzle,
             "enclosed": prof.enclosed, "chamber_heater": prof.chamber_heater, "direct_drive": prof.direct_drive,
             "filament_mm": prof.filament_mm, "start_gcode": prof.start_gcode.replace("\\n", "\n"),
@@ -1039,6 +1049,7 @@ def show_lines(pack: dict | None, rep: Report, data: bytes) -> list[str]:
     else:
         p = pack["printer"]
         yn = {True: "yes", False: "no"}
+        top = f"{p['top_speed']} mm/s" if "top_speed" in p else "not given"
         lines += [
             f"Pack {pack['id']} {shown(pack['version'])}: {shown(pack['name'])}",
             f"  author: {shown(pack['author']) or '(none given)'}   created: {pack['created']}",
@@ -1050,8 +1061,8 @@ def show_lines(pack: dict | None, rep: Report, data: bytes) -> list[str]:
             f"Printer: {shown(p['model'])} (adapter {p['adapter']}, {p['flavor']} G-code)",
             f"  bed {p['bed'][0]:g} x {p['bed'][1]:g} mm, height {p['height']:g} mm, nozzle {p['nozzle']:g} mm, "
             f"filament {p['filament_mm']:g} mm",
-            f"  speed cap {p['max_speed']} mm/s, accel {p['accel']} mm/s2 (max {p['max_accel']}), hotend flow "
-            f"{p['max_flow']:g} mm3/s, high flow hotend {yn[p['high_flow']]}",
+            f"  speed cap {p['max_speed']} mm/s (printer top speed {top}), accel {p['accel']} mm/s2 (max "
+            f"{p['max_accel']}), hotend flow {p['max_flow']:g} mm3/s, high flow hotend {yn[p['high_flow']]}",
             f"  hotend max {p['hotend_max_c']} C, bed max {p['bed_max_c']} C, enclosed {yn[p['enclosed']]}, chamber "
             f"heater {yn[p['chamber_heater']]}, direct drive {yn[p['direct_drive']]}, hardened nozzle "
             f"{yn[p['hardened_nozzle']]}",

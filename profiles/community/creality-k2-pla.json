@@ -19,6 +19,7 @@
     "max_speed": 300,
     "accel": 10000,
     "max_accel": 20000,
+    "top_speed": 800,
     "hotend_max_c": 300,
     "bed_max_c": 100,
     "max_flow": 23,

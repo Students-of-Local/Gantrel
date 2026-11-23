@@ -64,6 +64,18 @@ def test_export_from_a_paired_printer_holds_nothing_private(capsys, tmp_path, pa
     assert f"sha256 {sha}" in text and accept_code(text) == sha[:12]
 
 
+def test_export_carries_top_speed_only_when_the_profile_has_one(capsys, tmp_path):
+    out, text = export(capsys, tmp_path, "creality-k2", "--material", "PLA")
+    pack = json.loads(out.read_text())
+    assert pack["printer"]["top_speed"] == 800 and "top_speed" not in pack["notes"]
+    rc, shown_text, _ = run(capsys, "pack", "show", out)
+    assert rc == 0 and "printer top speed 800 mm/s" in shown_text
+    out, _ = export(capsys, tmp_path, "generic-klipper", "--material", "PLA", name="gk.json")
+    pack = json.loads(out.read_text())
+    assert "top_speed" not in pack["printer"] and "hotend_max_c" in pack["notes"]
+    assert packs.to_profile(pack).top_speed == 0
+
+
 def test_export_default_materials_leave_out_what_the_printer_cannot_take(capsys, tmp_path):
     out, text = export(capsys, tmp_path, "generic-marlin")
     fams = [m["family"] for m in json.loads(out.read_text())["materials"]]
@@ -243,9 +255,12 @@ def test_community_example_passes(capsys):
     prof = packs.to_profile(pack)
     from gantrel_printer import slicing
     k2p = slicing.PRINTERS["creality-k2"]
-    for f in ("bed", "height", "flavor", "max_speed", "accel", "max_accel", "hotend_max_c", "bed_max_c", "max_flow",
-              "hardened_nozzle", "enclosed", "direct_drive", "start_gcode", "end_gcode", "orca_machine"):
+    for f in ("bed", "height", "flavor", "max_speed", "accel", "max_accel", "top_speed", "hotend_max_c", "bed_max_c",
+              "max_flow", "hardened_nozzle", "enclosed", "direct_drive", "chamber_heater", "start_gcode", "end_gcode",
+              "orca_machine"):
         assert getattr(prof, f) == getattr(k2p, f), f
+    # Everything the K2 profile cites, the pack cites too (its own values, from the pack).
+    assert set(k2p.cited) <= set(prof.cited) and prof.limits_source.startswith("pack creality-k2-pla")
     pla = slicing.MATERIALS["PLA"]
     m = pack["materials"][0]
     assert (m["nozzle_c"], m["first_layer_nozzle_c"], m["bed_c"], m["first_layer_bed_c"], m["retraction_mm"]) == \
