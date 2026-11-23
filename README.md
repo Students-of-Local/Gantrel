@@ -40,7 +40,7 @@ Install:
    git clone https://github.com/baney75/Gantrel ~/.local-studio/plugins/gantrel
    ```
 
-4. Check it: `local-studio plugin validate ~/.local-studio/plugins/gantrel` prints `OK gantrel 0.2.0 (3 skills, 0 prompts, 3 commands)`.
+4. Check it: `local-studio plugin validate ~/.local-studio/plugins/gantrel` prints `OK gantrel 0.3.0 (4 skills, 0 prompts, 4 commands)`.
 
 The skill's first action is `stone status`; if that prints `stone: command not found`, the model is told to point you to these install steps and stop without installing anything. That step is not tested yet on a machine without `stone`.
 
