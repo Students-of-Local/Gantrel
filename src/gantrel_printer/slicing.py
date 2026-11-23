@@ -149,11 +149,13 @@ PRINTERS: dict[str, PrinterProfile] = {p.key: p for p in (
                    limits_source=f"{CREALITY_ENDER3_V3_SPECS} ; "
                                  f"{ORCA_PROFILES}/Creality/machine/Creality%20Ender-3%20V3%200.4%20nozzle.json"),
     # X1 Carbon limits: Bambu Lab's X1 page ("All-Metal Hotend 300 C", "Hardened Steel Nozzle 50 HRC",
-    # "Hotbed 120 C"; its spec table lists the X1C nozzle as hardened steel and PA, PC and carbon or glass fibre
+    # its spec table lists the X1C nozzle as hardened steel and PA, PC and carbon or glass fibre
     # filled filament as Ideal) and Orca's X1C machine profile (machine_max_acceleration_x 20000,
-    # machine_max_speed_x 500). Orca's Bambu machine profiles set no nozzle_type.
+    # machine_max_speed_x 500). Orca's Bambu machine profiles set no nozzle_type. Bed: Bambu's X1-Carbon tech
+    # specs PDF (public-cdn.bambulab.com/store/X1-Carbon%20tech%20specs.pdf) gives "Max Build Plate Temperature
+    # 110 @220 V, 120 @110 V", so 110 C, which holds on either supply. (The X1 page's "Hotbed 120 C" is the 110 V figure.)
     PrinterProfile("bambu-x1c", "Bambu Lab X1 Carbon", (256, 256), 256, "marlin2", max_speed=300, accel=10000,
-                   enclosed=True, orca_machine="Bambu Lab X1 Carbon 0.4 nozzle", hotend_max_c=300, bed_max_c=120,
+                   enclosed=True, orca_machine="Bambu Lab X1 Carbon 0.4 nozzle", hotend_max_c=300, bed_max_c=110,
                    hardened_nozzle=True, max_accel=20000, top_speed=500,
                    cited=("hotend_max_c", "bed_max_c", "hardened_nozzle", "max_accel", "top_speed"),
                    limits_source=f"{BAMBU_X1_SPECS} ; "

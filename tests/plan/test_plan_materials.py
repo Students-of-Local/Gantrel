@@ -68,7 +68,7 @@ def test_k2_limits_are_cited():
 
 # What each vendor publishes (the profile comments in slicing.py name the page and its words).
 CITED = {
-    "bambu-x1c": {"hotend_max_c": 300, "bed_max_c": 120, "hardened_nozzle": True},
+    "bambu-x1c": {"hotend_max_c": 300, "bed_max_c": 110, "hardened_nozzle": True},
     "bambu-p1s": {"hotend_max_c": 300, "bed_max_c": 100, "hardened_nozzle": False},
     "bambu-p1p": {"hotend_max_c": 300, "bed_max_c": 100, "hardened_nozzle": False},
     "bambu-a1": {"hotend_max_c": 300, "bed_max_c": 100, "hardened_nozzle": False},
