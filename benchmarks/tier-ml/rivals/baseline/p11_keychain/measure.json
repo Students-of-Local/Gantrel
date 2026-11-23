@@ -1,0 +1,36 @@
+[
+ {
+  "check": "stone check",
+  "value": "all PASS",
+  "want": "all PASS",
+  "pass": true
+ },
+ {
+  "check": "width",
+  "value": 48.73,
+  "want": "45..55",
+  "pass": true
+ },
+ {
+  "check": "key ring hole",
+  "value": 4.99,
+  "want": ">= 4.0",
+  "pass": true
+ },
+ {
+  "check": "letters stand up (top levels)",
+  "value": [
+   0.0,
+   3.0,
+   4.19
+  ],
+  "want": ">= 0.8 mm",
+  "pass": true
+ },
+ {
+  "check": "OCR of the cut 0.3 mm below the top (ocr_cut.png)",
+  "value": "EMMA",
+  "want": "EMMA",
+  "pass": true
+ }
+]

@@ -1,0 +1,141 @@
+[
+ {
+  "part": "p01_fan_guard",
+  "pass": false,
+  "exit": 0,
+  "warnings": [],
+  "pinned_volume": 13517.78,
+  "solid_exit": 0,
+  "solid_volume": 15734.33,
+  "mesh_volume": 16636.71,
+  "solid_over_mesh": 0.9458
+ },
+ {
+  "part": "p02_rod_hook",
+  "pass": true,
+  "exit": 0,
+  "warnings": [],
+  "pinned_volume": 10933.193,
+  "solid_exit": 0,
+  "solid_volume": 24031.775,
+  "mesh_volume": 23868.72,
+  "solid_over_mesh": 1.0068
+ },
+ {
+  "part": "p03_gridfinity",
+  "pass": true,
+  "exit": 0,
+  "warnings": [],
+  "pinned_volume": 23496.553,
+  "solid_exit": 0,
+  "solid_volume": 38698.395,
+  "mesh_volume": 39497.16,
+  "solid_over_mesh": 0.9798
+ },
+ {
+  "part": "p04_cable_comb",
+  "pass": true,
+  "exit": 0,
+  "warnings": [],
+  "pinned_volume": 2958.534,
+  "solid_exit": 0,
+  "solid_volume": 5831.248,
+  "mesh_volume": 5814.66,
+  "solid_over_mesh": 1.0029
+ },
+ {
+  "part": "p05_spur_gear",
+  "pass": true,
+  "exit": 0,
+  "warnings": [],
+  "pinned_volume": 3001.358,
+  "solid_exit": 0,
+  "solid_volume": 6898.211,
+  "mesh_volume": 6964.71,
+  "solid_over_mesh": 0.9905
+ },
+ {
+  "part": "p06_phone_stand",
+  "pass": false,
+  "exit": 0,
+  "warnings": [
+   {
+    "class": "slicing_warning_non_critical",
+    "plate_id": 1,
+    "text": "It seems object part.stl has a floating cantilever. Please re-orient the object or enable support generation."
+   },
+   "It seems object part.stl has a floating cantilever. Please re-orient the object or enable support generation."
+  ],
+  "pinned_volume": 50807.725,
+  "solid_exit": 0,
+  "solid_volume": 188055.685,
+  "mesh_volume": 187717.97,
+  "solid_over_mesh": 1.0018
+ },
+ {
+  "part": "p07_pi5_lid",
+  "pass": true,
+  "exit": 0,
+  "warnings": [],
+  "pinned_volume": 9514.193,
+  "solid_exit": 0,
+  "solid_volume": 11225.922,
+  "mesh_volume": 11281.84,
+  "solid_over_mesh": 0.995
+ },
+ {
+  "part": "p08_l_bracket",
+  "pass": true,
+  "exit": 0,
+  "warnings": [],
+  "pinned_volume": 6939.25,
+  "solid_exit": 0,
+  "solid_volume": 13227.169,
+  "mesh_volume": 13243.57,
+  "solid_over_mesh": 0.9988
+ },
+ {
+  "part": "p09_vase",
+  "pass": true,
+  "exit": 0,
+  "warnings": [],
+  "pinned_volume": 109224.144,
+  "solid_exit": 0,
+  "solid_volume": 522494.624,
+  "mesh_volume": 522083.39,
+  "solid_over_mesh": 1.0008
+ },
+ {
+  "part": "p10_planter",
+  "pass": true,
+  "exit": 0,
+  "warnings": [],
+  "pinned_volume": 77115.328,
+  "solid_exit": 0,
+  "solid_volume": 125076.458,
+  "mesh_volume": 125363.86,
+  "solid_over_mesh": 0.9977
+ },
+ {
+  "part": "p11_keychain",
+  "pass": true,
+  "exit": 0,
+  "warnings": [],
+  "pinned_volume": 1343.4,
+  "solid_exit": 0,
+  "solid_volume": 1922.181,
+  "mesh_volume": 1912.68,
+  "solid_over_mesh": 1.005
+ },
+ {
+  "part": "p12_lithophane",
+  "pass": true,
+  "exit": 0,
+  "warnings": [],
+  "pinned_volume": 31983.718,
+  "solid_exit": 0,
+  "solid_volume": 37920.476,
+  "mesh_volume": 39694.92,
+  "solid_over_mesh": 0.9553
+ }
+]

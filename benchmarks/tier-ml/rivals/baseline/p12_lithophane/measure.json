@@ -1,0 +1,60 @@
+[
+ {
+  "check": "stone check",
+  "value": "FIX: bodies 124 bodies (max 1); FIX: resting lowest point z = -8.00 mm; FIX: min_wall thinnest wall 0.47 mm (need 0.8 mm)",
+  "want": "all PASS",
+  "pass": false
+ },
+ {
+  "check": "bounding box",
+  "value": [
+   108.0,
+   25.0,
+   137.0
+  ],
+  "want": "report",
+  "pass": true
+ },
+ {
+  "check": "thinnest in picture",
+  "value": 1.0,
+  "want": "0.8 +-0.15",
+  "pass": false
+ },
+ {
+  "check": "thickest in picture",
+  "value": 2.2,
+  "want": "3.0 +-0.15",
+  "pass": false
+ },
+ {
+  "check": "picture width (box minus 2 x registered frame)",
+  "value": [
+   100.0,
+   4.0
+  ],
+  "want": "100 +-1",
+  "pass": true
+ },
+ {
+  "check": "thickness vs dark (r, unmirrored)",
+  "value": 0.8,
+  "want": ">= 0.8",
+  "pass": true
+ },
+ {
+  "check": "reads unmirrored from the front",
+  "value": [
+   0.8,
+   0.157
+  ],
+  "want": "r > r_mirror",
+  "pass": true
+ },
+ {
+  "check": "foot depth on the bed",
+  "value": 25.0,
+  "want": ">= 20 mm",
+  "pass": true
+ }
+]

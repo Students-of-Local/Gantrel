@@ -1,0 +1,1 @@
+{"type":"process","name":"gantrel-pin-0.20-pla-solid","from":"User","inherits":"","layer_height":"0.2","initial_layer_print_height":"0.2","wall_loops":"2","sparse_infill_density":"100%","sparse_infill_pattern":"rectilinear","top_shell_layers":"4","bottom_shell_layers":"3","enable_support":"0","version":"2.5.0.0"}

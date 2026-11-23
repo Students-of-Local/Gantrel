@@ -1,0 +1,63 @@
+[
+ {
+  "check": "stone check",
+  "value": "all PASS",
+  "want": "all PASS",
+  "pass": true
+ },
+ {
+  "check": "outline x",
+  "value": 120.0,
+  "want": "120 +-1.2",
+  "pass": true
+ },
+ {
+  "check": "outline y",
+  "value": 120.0,
+  "want": "120 +-1.2",
+  "pass": true
+ },
+ {
+  "check": "thickness",
+  "value": 2.5,
+  "want": "2.5 +-0.3",
+  "pass": true
+ },
+ {
+  "check": "corner holes found",
+  "value": 4,
+  "want": "4",
+  "pass": true
+ },
+ {
+  "check": "hole diameters",
+  "value": [
+   4.3,
+   4.3,
+   4.3,
+   4.3
+  ],
+  "want": "4.3 +-0.3",
+  "pass": true
+ },
+ {
+  "check": "hole spacing",
+  "value": [
+   105.0
+  ],
+  "want": "105 +-1.05",
+  "pass": true
+ },
+ {
+  "check": "largest opening (probe diameter)",
+  "value": 8.97,
+  "want": "< 12.0",
+  "pass": true
+ },
+ {
+  "check": "open area in 110 mm circle",
+  "value": 0.716,
+  "want": ">= 0.50",
+  "pass": true
+ }
+]

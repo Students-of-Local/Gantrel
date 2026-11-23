@@ -1,0 +1,26 @@
+[
+ {
+  "check": "stone check",
+  "value": "all PASS",
+  "want": "all PASS",
+  "pass": true
+ },
+ {
+  "check": "inner rim diameter",
+  "value": 105.14,
+  "want": "104..112",
+  "pass": true
+ },
+ {
+  "check": "inner depth",
+  "value": 95.0,
+  "want": ">= 91",
+  "pass": true
+ },
+ {
+  "check": "drain hole",
+  "value": 11.98,
+  "want": ">= 8 mm",
+  "pass": true
+ }
+]

@@ -1,0 +1,38 @@
+[
+ {
+  "check": "stone check",
+  "value": "all PASS",
+  "want": "all PASS",
+  "pass": true
+ },
+ {
+  "check": "width",
+  "value": 80.0,
+  "want": "80 +-0.8",
+  "pass": true
+ },
+ {
+  "check": "back rest angle (straightest fit)",
+  "value": 70,
+  "want": "70 +-2 deg",
+  "pass": true
+ },
+ {
+  "check": "9 mm phone seats on a ledge in front of the rest",
+  "value": true,
+  "want": "seats",
+  "pass": true
+ },
+ {
+  "check": "forward play of the phone at the ledge",
+  "value": 2.2,
+  "want": "<= 3 mm",
+  "pass": true
+ },
+ {
+  "check": "cable slot cut at mid width (mm2 of profile removed)",
+  "value": 145.4,
+  "want": "> 20 mm2",
+  "pass": true
+ }
+]

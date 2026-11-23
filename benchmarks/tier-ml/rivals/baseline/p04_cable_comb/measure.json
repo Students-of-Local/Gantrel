@@ -1,0 +1,52 @@
+[
+ {
+  "check": "stone check",
+  "value": "all PASS",
+  "want": "all PASS",
+  "pass": true
+ },
+ {
+  "check": "slot count",
+  "value": 6,
+  "want": "6",
+  "pass": true
+ },
+ {
+  "check": "pitch",
+  "value": [
+   10.0,
+   10.0,
+   10.0,
+   10.0,
+   10.0
+  ],
+  "want": "10 +-0.3",
+  "pass": true
+ },
+ {
+  "check": "seat diameter",
+  "value": [
+   6.23,
+   6.23,
+   6.23,
+   6.23,
+   6.23,
+   6.23
+  ],
+  "want": "6.0..6.6",
+  "pass": true
+ },
+ {
+  "check": "mouth width (click-in)",
+  "value": [
+   5.4,
+   5.4,
+   5.4,
+   5.4,
+   5.4,
+   5.4
+  ],
+  "want": "5.2..5.9",
+  "pass": true
+ }
+]

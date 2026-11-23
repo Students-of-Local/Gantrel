@@ -1,0 +1,12 @@
+File: /home/baney75/.local/state/flagship/studies/gantrel/baseline/p04_cable_comb/part.stl
+Size: 62.0 x 16.0 x 8.0 mm
+PASS loads: 1444 faces
+PASS watertight: closed surface
+PASS bodies: 1 bodies (max 1)
+PASS volume: 5814.7 mm3
+PASS bed: 62.0 x 16.0 x 8.0 mm on a 256 x 256 x 256 mm bed
+PASS resting: lowest point z = 0.00 mm
+PASS first_layer: 726.8 mm2 on the bed (need 148.8 mm2)
+PASS min_wall: thinnest wall 3.24 mm (need 0.8 mm)
+PASS overhang: 0.0% of the surface hangs past 45 deg (max 5%)
+NEXT: none, the file passes
