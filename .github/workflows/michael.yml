@@ -10,7 +10,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Every action is pinned to a commit
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE/.github/workflows"
+          if grep -nE '^[ -]*"?uses"? *:' *.y*ml | sed 's/ #.*//' | grep -vE 'uses"? *: *(\./|baney75/|[^ ]+@[0-9a-f]{40} *$)'; then exit 1; fi
       - name: Check existing encryption dependency
         run: /usr/bin/python3 -I -c 'import cryptography'
       - name: Run fixture and refusal gates
