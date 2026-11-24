@@ -15,7 +15,7 @@ jobs:
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE/.github/workflows"
-          if grep -nE '^ *(- )?uses:' *.y*ml | grep -vE 'uses: *(\./|baney75/)|@[0-9a-f]{40}( |$)'; then exit 1; fi
+          if grep -nE '^[ -]*"?uses"? *:' *.y*ml | sed 's/ #.*//' | grep -vE 'uses"? *: *(\./|baney75/|[^ ]+@[0-9a-f]{40} *$)'; then exit 1; fi
       - name: Check existing encryption dependency
         run: /usr/bin/python3 -I -c 'import cryptography'
       - name: Run fixture and refusal gates
