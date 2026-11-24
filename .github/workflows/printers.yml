@@ -11,8 +11,8 @@ jobs:
     # The suite takes about 10 minutes and apt has taken up to 9 for ffmpeg; 15 cancelled #21 and #25 mid-suite.
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
       # The watch tests check the timelapse MP4 with ffmpeg and ffprobe; without them that test is skipped.
       - run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg
         timeout-minutes: 12
