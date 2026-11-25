@@ -10,7 +10,7 @@ A local-AI 3D design studio for hobbyists up to professionals, starting with 3D 
 
 ## Ground rules
 
-- **Local first, compute via Fonsviva.** Features must work with local models on the user's own hardware. All compute, including RunPod and other cloud providers, comes via [Fonsviva](https://github.com/baney75/Fonsviva). This app never adds providers, stores provider keys or calls a cloud provider itself. It connects to Fonsviva and shows where each job ran. Cloud providers are personal use only and are set up in Fonsviva.
+- **Local first, compute via Fonsviva.** Features must work with local models on the user's own hardware. All compute, including RunPod and other cloud providers, comes via [Fonsviva](https://github.com/Students-of-Local/Fonsviva). This app never adds providers, stores provider keys or calls a cloud provider itself. It connects to Fonsviva and shows where each job ran. Cloud providers are personal use only and are set up in Fonsviva.
 - **Private and secure by default.** User data is encrypted at rest and in transit. Never log, print or send secrets or personal data.
 - **Trusted models only.** Use safe, reputable open models. Document which models a feature was tested with.
 - **Easy beats clever.** Every feature has to be usable by a non-technical person.
@@ -22,9 +22,9 @@ A local-AI 3D design studio for hobbyists up to professionals, starting with 3D 
 
 ## Install and setup (for agents setting this up for a person)
 
-> **Status: planned, not released.** Gantrel has no release yet, so there is nothing to install today. These steps are the target behavior. Each one becomes true only when its test in [TESTING.md](https://github.com/baney75/Gantrel/blob/main/TESTING.md) passes, and [SUPPORTED.md](https://github.com/baney75/Gantrel/blob/main/SUPPORTED.md) is the source of truth for what works now. An agent must check SUPPORTED.md first and tell the person plainly if a step isn't supported yet.
+> **Status: planned, not released.** Gantrel has no release yet, so there is nothing to install today. These steps are the target behavior. Each one becomes true only when its test in [TESTING.md](https://github.com/Students-of-Local/Gantrel/blob/main/TESTING.md) passes, and [SUPPORTED.md](https://github.com/Students-of-Local/Gantrel/blob/main/SUPPORTED.md) is the source of truth for what works now. An agent must check SUPPORTED.md first and tell the person plainly if a step isn't supported yet.
 
-Follow [docs/agents.md](docs/agents.md) ([web](https://baney75.github.io/Gantrel/agents)). In short:
+Follow [docs/agents.md](docs/agents.md) ([web](https://students-of-local.github.io/Gantrel/agents)). In short:
 
 1. **Install:** [docs/setup/install.md](docs/setup/install.md). Check: `fonsviva status` prints `Fonsviva <version> running at http://127.0.0.1:7341`.
 2. **Connect to Fonsviva:** [docs/setup/connect-fonsviva.md](docs/setup/connect-fonsviva.md). Check: `fonsviva keys list` shows `gantrel` as `active`.
@@ -36,7 +36,7 @@ Ask before installing anything or spending money, never print keys, and never tr
 
 ## Skills
 
-Skills live in `skills/maintainer/` (for building this project) and `skills/runtime/` (used by agents inside the app). None exist yet. `skills/plugin/` holds the skills the Local Studio plugin ships; today that is smoothstone, synced from baney75/smoothstone with `scripts/sync-smoothstone.sh`, never edited by hand. Each one must be original and tested before it merges; see `skills/README.md`. Load the skill that matches your task before starting, and improve it when you learn something. Improvements to the smoothstone skill (including what its own closing rule asks for) go to baney75/smoothstone and come back here through `scripts/sync-smoothstone.sh`; the other plugin skills, such as printers, are edited in this repo.
+Skills live in `skills/maintainer/` (for building this project) and `skills/runtime/` (used by agents inside the app). None exist yet. `skills/plugin/` holds the skills the Local Studio plugin ships; today that is smoothstone, synced from Students-of-Local/smoothstone with `scripts/sync-smoothstone.sh`, never edited by hand. Each one must be original and tested before it merges; see `skills/README.md`. Load the skill that matches your task before starting, and improve it when you learn something. Improvements to the smoothstone skill (including what its own closing rule asks for) go to Students-of-Local/smoothstone and come back here through `scripts/sync-smoothstone.sh`; the other plugin skills, such as printers, are edited in this repo.
 
 ## Testing and honesty
 

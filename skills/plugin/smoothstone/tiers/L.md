@@ -12,7 +12,7 @@ You can drive stone like tier M, and you can also write new recipes when no reci
 - In Gantrel the plugin ships this card, not the recipe sources. To write a new recipe, put a
   copy of them in a fixed cache folder outside the person's project. Each bash call may start a
   fresh shell, so write the full path every time instead of keeping it in a variable:
-  `git clone -q https://github.com/baney75/smoothstone ~/.cache/gantrel/smoothstone-45e05ce28634216c6d029fa1be26ee85ae9b6b15 2>/dev/null; git -C ~/.cache/gantrel/smoothstone-45e05ce28634216c6d029fa1be26ee85ae9b6b15 checkout -q 45e05ce28634216c6d029fa1be26ee85ae9b6b15`.
+  `git clone -q https://github.com/Students-of-Local/smoothstone ~/.cache/gantrel/smoothstone-45e05ce28634216c6d029fa1be26ee85ae9b6b15 2>/dev/null; git -C ~/.cache/gantrel/smoothstone-45e05ce28634216c6d029fa1be26ee85ae9b6b15 checkout -q 45e05ce28634216c6d029fa1be26ee85ae9b6b15`.
   Write the recipe in `~/.cache/gantrel/smoothstone-45e05ce28634216c6d029fa1be26ee85ae9b6b15/recipes/`, run
   `cd ~/.cache/gantrel/smoothstone-45e05ce28634216c6d029fa1be26ee85ae9b6b15 && uv run python tools/sheet.py <name>` (from that folder, not `recipes/`),
   and build with `STONE_RECIPES=~/.cache/gantrel/smoothstone-45e05ce28634216c6d029fa1be26ee85ae9b6b15/recipes stone build`.

@@ -28,6 +28,6 @@ If there is no part yet, the studio still opens and shows how to start one. Make
 `/gantrel` and the studio updates on its own.
 
 If bash prints `gantrel-studio: command not found`, tell the person to install it with
-`uv tool install git+https://github.com/baney75/Gantrel`, then stop. Never install it yourself.
+`uv tool install git+https://github.com/Students-of-Local/Gantrel`, then stop. Never install it yourself.
 
 Run `gantrel-studio` only with `--detach`. Without it the command never returns.

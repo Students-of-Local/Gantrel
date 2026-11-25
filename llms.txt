@@ -5,17 +5,17 @@
 Cloud providers are personal use only and live only in Fonsviva. Apps never hold provider keys. UntoCaesar client work and Corunis are blocked from cloud.
 
 ## Setup
-- [For agents: quickstart](https://baney75.github.io/Gantrel/agents): rules and order of steps
-- [Install](https://baney75.github.io/Gantrel/setup/install): steps, checks, expected output
-- [Connect to Fonsviva](https://baney75.github.io/Gantrel/setup/connect-fonsviva)
-- [Select models](https://baney75.github.io/Gantrel/setup/select-models)
-- [Add a cloud provider](https://baney75.github.io/Gantrel/setup/add-cloud-provider)
-- [Troubleshoot](https://baney75.github.io/Gantrel/setup/troubleshoot)
+- [For agents: quickstart](https://students-of-local.github.io/Gantrel/agents): rules and order of steps
+- [Install](https://students-of-local.github.io/Gantrel/setup/install): steps, checks, expected output
+- [Connect to Fonsviva](https://students-of-local.github.io/Gantrel/setup/connect-fonsviva)
+- [Select models](https://students-of-local.github.io/Gantrel/setup/select-models)
+- [Add a cloud provider](https://students-of-local.github.io/Gantrel/setup/add-cloud-provider)
+- [Troubleshoot](https://students-of-local.github.io/Gantrel/setup/troubleshoot)
 
 ## Project
-- [AGENTS.md](https://github.com/baney75/Gantrel/blob/main/AGENTS.md): rules for agents working on the code
-- [SUPPORTED.md](https://github.com/baney75/Gantrel/blob/main/SUPPORTED.md): what works today
-- [TESTING.md](https://github.com/baney75/Gantrel/blob/main/TESTING.md): how claims are proven
+- [AGENTS.md](https://github.com/Students-of-Local/Gantrel/blob/main/AGENTS.md): rules for agents working on the code
+- [SUPPORTED.md](https://github.com/Students-of-Local/Gantrel/blob/main/SUPPORTED.md): what works today
+- [TESTING.md](https://github.com/Students-of-Local/Gantrel/blob/main/TESTING.md): how claims are proven
 
 ## Related
-- [Fonsviva](https://baney75.github.io/Fonsviva/llms.txt): the shared compute layer Gantrel runs on
+- [Fonsviva](https://students-of-local.github.io/Fonsviva/llms.txt): the shared compute layer Gantrel runs on

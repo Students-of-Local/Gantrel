@@ -157,7 +157,7 @@ def test_privacy_scan_reaches_gcode_and_material_fields(good):
 def test_privacy_does_not_flag_ordinary_text(good):
     good["notes"] = ("Version 1.2.3 of the profile, tested 2026-11-20 at 12:30:45. Uses BED_MESH_CALIBRATE and "
                      "first_layer_bed_temperature. Orca profile Creality K2 0.4 nozzle. "
-                     "https://github.com/baney75/Gantrel")
+                     "https://github.com/Students-of-Local/Gantrel")
     rep = check(good)
     assert rep.result == "pass", [(i.path, i.reason) for i in rep.refusals]
 

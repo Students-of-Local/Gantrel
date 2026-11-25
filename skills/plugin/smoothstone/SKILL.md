@@ -22,7 +22,7 @@ the whole time: every step below works toward that one part.
    step first, then stop.
 
 If bash prints `stone: command not found`, tell the person stone is not installed, give them
-the install steps at https://github.com/baney75/Gantrel#local-studio-plugin (smoothstone commit
+the install steps at https://github.com/Students-of-Local/Gantrel#local-studio-plugin (smoothstone commit
 `45e05ce28634216c6d029fa1be26ee85ae9b6b15`), then stop. Never install it yourself.
 
 stone turns a request into a print-ready STL. The model picks a recipe and sets its numbers;

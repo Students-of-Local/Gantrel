@@ -34,7 +34,7 @@ Planning only reads files. It never talks to a printer, and it never starts a pr
 ## Steps
 
 1. Run `command -v gantrel-printer`. If it prints nothing, tell the person to install it with
-   `uv tool install git+https://github.com/baney75/Gantrel`, then stop. Never install it yourself.
+   `uv tool install git+https://github.com/Students-of-Local/Gantrel`, then stop. Never install it yourself.
 2. Run the plan command, with the bash tool, in the foreground:
 
        gantrel-printer plan <file> --printer <name> --material <filament> --goal quality

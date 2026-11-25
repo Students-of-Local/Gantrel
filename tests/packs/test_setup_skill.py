@@ -54,7 +54,7 @@ def test_skill_keeps_the_rules():
     assert "The person types it" in text and "Never ask them to tell you the code" in text
     assert "Never share a pack without the person's yes" in text
     assert "Never import a pack that says REFUSED" in text
-    assert "baney75/Gantrel" in text and "profiles/community/" in text
+    assert "Students-of-Local/Gantrel" in text and "profiles/community/" in text
     assert "Never sign in for them" in text
 
 

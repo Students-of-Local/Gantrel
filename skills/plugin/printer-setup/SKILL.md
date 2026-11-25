@@ -27,7 +27,7 @@ printer.
 Do the steps in order. Stop at any step that fails and tell the person what it said.
 
 1. Run `command -v gantrel-printer`. If it prints nothing, tell the person to install it with
-   `uv tool install git+https://github.com/baney75/Gantrel`, then stop. Never install it yourself.
+   `uv tool install git+https://github.com/Students-of-Local/Gantrel`, then stop. Never install it yourself.
 2. Find the printer: `gantrel-printer discover`. If nothing is found, ask the person for the
    printer's IP address (the printer's screen, Network).
 3. Pick the model: `gantrel-printer profiles`. Use the key that matches the printer, such as
@@ -101,7 +101,7 @@ Sharing publishes the file on GitHub under the person's own account. It cannot b
 others have copied it. So:
 
 1. Ask the person, in these words or close to them: "Sharing opens a pull request to
-   baney75/Gantrel from your GitHub account with this one file: <file>. Everything in it is what
+   Students-of-Local/Gantrel from your GitHub account with this one file: <file>. Everything in it is what
    pack show printed. Do you want to share it?" Do nothing more without a clear yes.
 2. Run `gh auth status`. If it is not signed in, tell the person to sign in with `gh auth login`
    themselves, then stop. Never sign in for them.
@@ -110,7 +110,7 @@ others have copied it. So:
    changes the folder. `<user>` is the person's GitHub user name, from `gh api user --jq .login`.
 
        realpath <file>
-       gh repo fork baney75/Gantrel --clone=false
+       gh repo fork Students-of-Local/Gantrel --clone=false
        gh repo clone <user>/Gantrel gantrel-pack-<id>
        cd gantrel-pack-<id>
        git fetch upstream
@@ -120,7 +120,7 @@ others have copied it. So:
        git add profiles/community/<id>.json
        git commit -m "Pack: <id>"
        git push -u origin pack-<id>
-       gh pr create --repo baney75/Gantrel --title "Pack: <id>" --body "<body>"
+       gh pr create --repo Students-of-Local/Gantrel --title "Pack: <id>" --body "<body>"
 
    The body has the `result:` line and the accept code from pack show, and every FINDING line with
    one sentence from the person on what it does.

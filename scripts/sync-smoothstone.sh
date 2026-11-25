@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ref="${1:?usage: scripts/sync-smoothstone.sh <sha|ref>}"
-repo_url="${SMOOTHSTONE_REPO:-https://github.com/baney75/smoothstone}"
+repo_url="${SMOOTHSTONE_REPO:-https://github.com/Students-of-Local/smoothstone}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 dest="$root/skills/plugin/smoothstone"
 preamble="$root/scripts/smoothstone-preamble.md"
