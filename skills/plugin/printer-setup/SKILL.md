@@ -108,6 +108,10 @@ others have copied it. So:
 3. With their yes, run these one at a time, starting in the folder where you exported the pack.
    `realpath <file>` prints the file's full path; use it as `<full path>` below, because `cd`
    changes the folder. `<user>` is the person's GitHub user name, from `gh api user --jq .login`.
+   If `gh api repos/Students-of-Local/Gantrel --jq .permissions.push` prints `true`, they can push there:
+   skip the fork line, clone `Students-of-Local/Gantrel` instead, and use `origin/main` for `upstream/main`
+   and `git fetch origin` for `git fetch upstream`. Never fork into `baney75`: a repo at that old name ends
+   GitHub's redirect from it.
 
        realpath <file>
        gh repo fork Students-of-Local/Gantrel --clone=false
