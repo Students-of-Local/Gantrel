@@ -44,7 +44,7 @@ surfaces), follow "Calibration prints" below.
 1. Run `command -v gantrel-printer`. If it prints nothing, tell the person to install it with this
    command, then stop:
 
-       uv tool install git+https://github.com/baney75/Gantrel
+       uv tool install git+https://github.com/Students-of-Local/Gantrel
 
    Never install it yourself.
 2. Run `gantrel-printer list`. If the printer is there, go to step 4.

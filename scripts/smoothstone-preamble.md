@@ -15,5 +15,5 @@ the whole time: every step below works toward that one part.
    step first, then stop.
 
 If bash prints `stone: command not found`, tell the person stone is not installed, give them
-the install steps at https://github.com/baney75/Gantrel#local-studio-plugin (smoothstone commit
+the install steps at https://github.com/Students-of-Local/Gantrel#local-studio-plugin (smoothstone commit
 `@SHA@`), then stop. Never install it yourself.

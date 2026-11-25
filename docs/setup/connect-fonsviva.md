@@ -1,8 +1,8 @@
 # Connect Gantrel to Fonsviva
 
-> **Status: planned, not released.** Gantrel has no release yet, so there is nothing to install today. These steps are the target behavior. Each one becomes true only when its test in [TESTING.md](https://github.com/baney75/Gantrel/blob/main/TESTING.md) passes, and [SUPPORTED.md](https://github.com/baney75/Gantrel/blob/main/SUPPORTED.md) is the source of truth for what works now. An agent must check SUPPORTED.md first and tell the person plainly if a step isn't supported yet.
+> **Status: planned, not released.** Gantrel has no release yet, so there is nothing to install today. These steps are the target behavior. Each one becomes true only when its test in [TESTING.md](https://github.com/Students-of-Local/Gantrel/blob/main/TESTING.md) passes, and [SUPPORTED.md](https://github.com/Students-of-Local/Gantrel/blob/main/SUPPORTED.md) is the source of truth for what works now. An agent must check SUPPORTED.md first and tell the person plainly if a step isn't supported yet.
 
-Gantrel doesn't run models itself. It connects to [Fonsviva](https://baney75.github.io/Fonsviva/).
+Gantrel doesn't run models itself. It connects to [Fonsviva](https://students-of-local.github.io/Fonsviva/).
 
 ## Steps
 

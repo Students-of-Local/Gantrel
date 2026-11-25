@@ -113,7 +113,7 @@ or more, and `ended` otherwise.
 ### Failure guard (`--guard`)
 
 With `--guard`, each frame taken while the printer reports printing goes to a vision model through
-[Fonsviva](https://github.com/baney75/Fonsviva), like all of Gantrel's compute: Fonsviva's
+[Fonsviva](https://github.com/Students-of-Local/Fonsviva), like all of Gantrel's compute: Fonsviva's
 OpenAI-compatible `/v1/chat/completions` endpoint, by default `http://127.0.0.1:7341/v1`. Gantrel
 sends its own Fonsviva app key as the bearer. The guard is measured (below), off by default, and has
 not yet been run through a real Fonsviva install: every guard test uses a fake Fonsviva that requires

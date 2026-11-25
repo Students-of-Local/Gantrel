@@ -30,7 +30,7 @@ The format, the G-code policy and every check are described in
 
    Fix every REFUSED line. A FINDING is a G-code line Gantrel does not know (often one of your
    printer's own macros); keep it only if you know what it does.
-4. Copy the file into this folder as `<id>.json` and open a pull request to baney75/Gantrel. In the
+4. Copy the file into this folder as `<id>.json` and open a pull request to Students-of-Local/Gantrel. In the
    description, paste the `pack show` result line and list every FINDING with one sentence on what
    that line does on your printer. A pull request publishes the file under your GitHub account.
 
