@@ -105,7 +105,7 @@ only questions and only the person's click or typed text, in the app or on a pai
 one. A server the model puts in place of the socket gets no token and gives no answer to a plugin
 that checks the peer pid, which Gantrel does.
 
-Until Local Studio's per-session sandboxing ([local-studio#33](https://github.com/Students-of-Local/local-studio/issues/33))
+Until Local Studio's per-session sandboxing ([local-studio#33](https://github.com/baney75/local-studio/issues/33))
 lands, the model's bash runs as the same user as Local Studio and Gantrel. A model that attacks the
 system itself is outside this guarantee: one that drives the desktop app, pairs a device, kills or
 traces processes, reads the server's environment (`ps eww`) to take its ask token and raise questions
@@ -136,7 +136,7 @@ answer "not confirmed": those clients have no Local Studio card, so the person s
 printer's screen or web page, as the reply says.
 
 There is no HTTP transport. Reaching Gantrel from away from home waits on Local Studio's public-tools
-consent ([local-studio#13](https://github.com/Students-of-Local/local-studio/issues/13)) and the tunnel rule in
+consent ([local-studio#13](https://github.com/baney75/local-studio/issues/13)) and the tunnel rule in
 [DIRECTION.md](DIRECTION.md).
 
 ## Proof

@@ -5,7 +5,7 @@ Most of this is planned. three.js is in use now, in Gantrel Studio. This is the 
 | Build | Part | License | How Gantrel uses it |
 |---|---|---|---|
 | 1 | [t3code](https://github.com/pingdotgg/t3code) | MIT | Forked for the desktop app, projects, threads and provider layer. Upstream isn't taking big features, so Gantrel keeps a fork and rebases. |
-| 1 | [Local Studio](https://github.com/Students-of-Local/local-studio) | MIT | A native local-LLM workspace (GTK4 and libadwaita on Linux, SwiftUI on macOS) on the Eukhe core. Gantrel ships first as its plugin, and Gantrel Studio opens in its browser panel. |
+| 1 | [Local Studio](https://github.com/baney75/local-studio) | MIT | A native local-LLM workspace (GTK4 and libadwaita on Linux, SwiftUI on macOS) on the Eukhe core. Gantrel ships first as its plugin, and Gantrel Studio opens in its browser panel. |
 | 1 | [Backplane](https://github.com/BackplaneWorks/Backplane) | MIT | A native Rust (GPUI) app for agentic hardware design, with a hub and KiCad and FreeCAD viewers. The pattern Gantrel takes: the agent shows a file in a viewer beside the chat, and the viewer follows every save. Its KiCad fork keeps KiCad's license (GPL-3.0) and isn't used. |
 | 2 | [build123d](https://github.com/gumyr/build123d), [CadQuery](https://github.com/CadQuery/cadquery) | Apache-2.0 | The CAD libraries the model writes code for. |
 | 2 | OpenCascade (OCP wheels) | LGPL-2.1 | Used unmodified as a library. |

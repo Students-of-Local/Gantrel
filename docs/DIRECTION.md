@@ -40,8 +40,8 @@ And in the next message:
 ### 4. An MCP server for Grok Bot
 
 - Gantrel has an MCP server so Grok Bot, and any assistant that speaks MCP (claude.ai, ChatGPT, grok.com), can act through it: make or change a part, slice it, check a printer and its camera. The printer safety rules hold over MCP too: no tool starts or resumes a print on its own. `print_start` and `print_resume` only ask, on a Local Studio card the person must click, and refuse outside Local Studio; every attempt is logged ([MCP.md](MCP.md)).
-- Reaching it from away from home follows Local Studio's tunnel rule ([local-studio docs/tunnel.md](https://github.com/Students-of-Local/local-studio/blob/main/docs/tunnel.md)): hosted tunnels are waitlist-only, because running them costs money and Donovan will either charge for them or negotiate with the provider. Anyone on the dev channel can use their own tunnel today (their own Cloudflare account or Tailscale).
-- A server reached through a tunnel needs auth on every path and the public-tools consent ([local-studio#13](https://github.com/Students-of-Local/local-studio/issues/13)).
+- Reaching it from away from home follows Local Studio's tunnel rule ([local-studio docs/tunnel.md](https://github.com/baney75/local-studio/blob/main/docs/tunnel.md)): hosted tunnels are waitlist-only, because running them costs money and Donovan will either charge for them or negotiate with the provider. Anyone on the dev channel can use their own tunnel today (their own Cloudflare account or Tailscale).
+- A server reached through a tunnel needs auth on every path and the public-tools consent ([local-studio#13](https://github.com/baney75/local-studio/issues/13)).
 
 ### 5. A high standard
 
