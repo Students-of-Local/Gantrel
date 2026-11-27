@@ -91,7 +91,7 @@ Calibration prints (`gantrel-printer calibrate <printer> first-layer|temp-tower|
 
 | Part | Proven |
 |---|---|
-| The 14 tools list and answer through the MCP SDK (mcp 2.3.0) | Fake: in-process client, and `bin/gantrel-mcp` answering initialize and tools/list over stdio from a copy of the plugin without `scripts` and `tests` (the catalog's exclude), writing nothing in that copy. Each checkout gets its own environment, keyed on its resolved path (`tests/mcp/test_launcher.py`, with a stub `uv`). |
+| The 16 tools list and answer through the MCP SDK (mcp 2.3.0) | Fake: in-process client, and `bin/gantrel-mcp` answering initialize and tools/list over stdio from a copy of the plugin without `scripts` and `tests` (the catalog's exclude), writing nothing in that copy. Each checkout gets its own environment, keyed on its resolved path (`tests/mcp/test_launcher.py`, with a stub `uv`). |
 | A print starts only on the exact answer Start print, once, with a token bound to that job, file hash and printer | Fake (Moonraker fake). Don't start, Stop, a refusal, typed text and near misses ("start print", "Start print.") start nothing. |
 | No answer in time withdraws the card; nothing starts. One 50 s budget covers the checks, the wait and the start, so the call ends under the client's 60 s, and an answer too late or checks too slow to start in time start nothing | Fake, with the budget shortened in the test, a slow fake status and a late answer. |
 | While a start card is open, pause, cancel and emergency_stop on another printer still answer at once | Fake: a card held open through the in-process client; each stop returns within 2 s while the card is still open. The same test fails when the SDK is patched to run sync tools on the event loop. |
@@ -108,6 +108,7 @@ Calibration prints (`gantrel-printer calibrate <printer> first-layer|temp-tower|
 | The printers skill leads to `print_start` inside Local Studio: step 7 uploads with the `upload` tool, the calibration and paused-by-guard lines match step 8, and the CLI's `upload` and `calibrate --upload` NEXT lines name `print_start <job id>` (the model's shell gets no Local Studio variables, so the line always names both routes) | Skill text test and the CLI's NEXT line with the Local Studio variables set. No model has run the skill in Local Studio yet. |
 | prints.log (0600) records every attempt and never the token; `gantrel-printer prints` lists it | Fake. |
 | File arguments: inside home or the working folder, links out refused, size caps | Unit tests with HOME and the working folder moved into a temp folder. |
+| `solid_build` and `solid_measure` give the `gantrel-solid` CLI's result (the plate, built and measured); a job through `..` and a design outside home and the working folder are refused. They never touch a printer | Real: `python -m gantrel_mcp` over stdio JSON-RPC with the real SolidCraft and stone (`tests/solid/test_mcp.py`). |
 
 Not checked yet: a real Local Studio thread showing the card and a person clicking it; any MCP start on a real printer; the server under Claude Code, Codex or Grok Bot.
 

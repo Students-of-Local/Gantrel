@@ -30,11 +30,13 @@ anything else.
 | `emergency_stop` | `printer` | The strongest stop the printer offers over the network. |
 | `print_start` | `job_id` | Asks the person to start the job, on a Local Studio card. |
 | `print_resume` | `printer` | Asks the person to resume a paused print Gantrel uploaded, on a Local Studio card. |
+| `solid_build` | `design`, `job` | Builds a SolidCraft design (a JSON file of modeling commands) into `<job>/build/` (STEP, STL, 3MF) and runs the print checks, as `gantrel-solid build` does. `job` must be inside the working folder. Stopped and refused after 50 s. Contacts no printer. |
+| `solid_measure` | `path` | Bounding box size in mm and volume of a STEP, STL or 3MF. Read-only. |
 
-File arguments (`path`, `model_path`) must name an existing regular file whose real location, after
+File arguments (`path`, `model_path`, `design`) must name an existing regular file whose real location, after
 following links, is inside the person's home folder or the server's working folder (never `/` itself).
 A link inside home that points outside it is refused. Models are capped at 200 MB, sliced files at
-500 MB.
+500 MB, SolidCraft designs at 1 MB.
 
 ## How a print starts
 
