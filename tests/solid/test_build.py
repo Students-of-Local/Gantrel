@@ -46,12 +46,35 @@ def test_two_bodies_fail_with_the_one_piece_fix(solid):
     assert any(f.startswith("bodies:") and "separate pieces" in f for f in out["fixes"])
 
 
-def test_a_design_that_reaches_files_is_refused(run):
+@pytest.mark.parametrize("cid", ["file.export", "solid.import_mesh"])
+def test_a_design_that_reaches_files_is_refused(run, cid):
     d = run.work / "d.json"
     d.write_text('{"commands": [{"command": "solid.box", "params": {"length": 1, "width": 1, "height": 1}},'
-                 ' {"command": "file.export", "params": {"path": "/tmp/x.stl"}}]}')
+                 f' {{"command": "{cid}", "params": {{"path": "/tmp/x.stl"}}}}]}}')
     code, out = run("build", str(d))
-    assert code == 2 and out["error"].startswith("commands[1] file.export") and not (run.work / "solid-job").exists()
+    assert code == 2 and out["error"].startswith(f"commands[1] {cid}") and not (run.work / "solid-job").exists()
+
+
+def test_a_failed_build_leaves_no_earlier_parts(solid):
+    assert build(solid, "plate")[0] == 0
+    code, out = build(solid, "bad_edge")
+    assert code == 1 and out["files"] == []
+    assert [p.name for p in (solid.work / "solid-job" / "build").iterdir()] == []
+
+
+@pytest.mark.parametrize("printed, exit_code", [
+    ("PASS watertight: closed\nFIX bodies two pieces\n", 1),
+    ("PASS watertight: closed\n", 1),
+    ("PASS watertight: closed\nFIX: bodies two pieces; join them\n", 0),
+])
+def test_a_stone_verdict_its_lines_do_not_show_is_refused(tmp_path, monkeypatch, printed, exit_code):
+    stone = tmp_path / "bin" / "stone"
+    stone.parent.mkdir()
+    stone.write_text(f"#!/bin/sh\nprintf '{printed}'\nexit {exit_code}\n")
+    stone.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{stone.parent}:/usr/bin:/bin")
+    with pytest.raises(solid_build.Refused):
+        solid_build.stone_checks(tmp_path / "part.stl")
 
 
 @pytest.mark.parametrize("how", ["dotdot", "absolute", "symlink", "build-symlink"])

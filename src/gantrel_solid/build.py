@@ -73,13 +73,16 @@ def stone_checks(stl: Path) -> list[dict]:
         code, out, err = run_slicer([stone, "check", str(stl)], CHECK_TIMEOUT)
     except subprocess.TimeoutExpired:
         raise Refused(f"stone check took longer than {CHECK_TIMEOUT} s") from None
-    results = []
+    results, unread = [], []
     for line in out.splitlines():
         if m := re.match(r"PASS (\w+): (.*)", line):
             results.append({"name": m[1], "ok": True, "detail": m[2], "advice": ""})
         elif m := re.match(r"FIX: (\w+) (.*?); (.*)", line):
             results.append({"name": m[1], "ok": False, "detail": m[2], "advice": m[3]})
-    if code not in (0, 1) or not results:
+        elif line.startswith("FIX"):
+            unread.append(line)
+    failed = any(not r["ok"] for r in results)
+    if code not in (0, 1) or not results or unread or failed != (code == 1):
         raise Refused(f"stone check failed: {(err or out).strip()[:300]}")
     return results
 
@@ -97,11 +100,15 @@ def build(args) -> int:
         exe = find()
         if not exe:
             raise Refused(f"{CLI} is not installed; run gantrel-solid doctor")
+        if not shutil.which("stone"):
+            raise Refused("stone is not installed; the print checks are smoothstone's (see the README's plugin section)")
     except Refused as e:
         emit({"ok": False, "error": str(e)})
         return 2
     out = job / "build"
     out.mkdir(parents=True, exist_ok=True)
+    for f in ("design.json", *PARTS, "check.json"):
+        (out / f).unlink(missing_ok=True)
     work = Path(tempfile.mkdtemp(prefix=".solid-", dir=out))
     try:
         return _build(exe, design, work, out)
@@ -125,8 +132,11 @@ def _build(exe: str, design: dict, work: Path, out: Path) -> int:
             failed = json.loads((work / "results.json").read_text()).get("error") or {}
         except (OSError, ValueError, AttributeError):
             pass
-        if failed.get("step"):
-            i = int(failed["step"]) - 1
+        if not isinstance(failed, dict):
+            err = f"{failed} {err}"
+            failed = {}
+        if isinstance(failed.get("step"), int) and failed["step"] > 0:
+            i = failed["step"] - 1
             emit({"ok": False, "index": i, "command": failed.get("command"), "files": [],
                   "error": f"commands[{i}] {failed.get('command')}: {failed.get('error')}"})
         else:
