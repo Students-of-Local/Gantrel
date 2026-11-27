@@ -1,6 +1,6 @@
 id = "gantrel"
 name = "Gantrel"
-version = "0.4.0"
+version = "0.5.0"
 description = "Gantrel for Local Studio: design 3D printable parts with a local model and the smoothstone recipes, see and adjust them live in Gantrel Studio, then slice, upload and watch them on your printers"
 skills = "skills/plugin"
 capabilities = ["mcp-server", "ask-user"]
@@ -32,3 +32,8 @@ skill = "print-plan"
 name = "setup-printer"
 description = "Set up a new printer, then save and (with your yes) share its working setup as a pack"
 skill = "printer-setup"
+
+[[commands]]
+name = "solid"
+description = "Design a precise part in SolidCraft"
+skill = "solidcraft"

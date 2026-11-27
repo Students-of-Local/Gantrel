@@ -25,6 +25,23 @@ These are checks, not design results; nothing here is in `tests/golden/`. Checke
 
 Not checked yet: the page inside Local Studio's own browser panel (WebKitGTK on Linux, WKWebView on macOS), and a local model running `/studio` or step 4 of `/gantrel` by itself.
 
+### SolidCraft parts
+
+`gantrel-solid` with SolidCraft v0.50.0 (`solidcraft-cli`, Linux x86_64) and smoothstone `45e05ce`'s `stone check`. These are checks of the real programs, not design results; nothing here is in `tests/golden/`. Details in [docs/SOLIDCRAFT.md](docs/SOLIDCRAFT.md). `tests/solid/` runs in CI (`.github/workflows/solid.yml`), which fails on any skipped test.
+
+| Part | Proven |
+|---|---|
+| `doctor` with nothing installed names the pinned file and its SHA256 and downloads nothing; `fetch` without `--yes` downloads nothing | Real CLI against a release stub on 127.0.0.1, scratch HOME. |
+| `fetch --yes` installs `solidcraft-cli` under `~/.local/share/gantrel/solidcraft/0.50.0/` and it reports 0.50.0 | The real pinned tarball, served from the stub. |
+| A tampered download, or a `SHA256SUMS.txt` that disagrees with the pin, is refused with nothing left | Stub. |
+| The pinned hashes match the release's `SHA256SUMS.txt` | Network test against GitHub (CI). |
+| The plate, enclosure and collar designs build into STEP, STL and 3MF that pass every check, each measuring within 0.1 mm of its size | Real SolidCraft and stone. |
+| A failing command names its index and writes nothing; two bodies fail with the one-piece fix; a design that touches files is refused; a job folder through `..`, outside the working folder or through a symlink is refused | Real SolidCraft and stone. |
+| Gantrel Studio shows a solid job's part, size and checks | `Studio(job).state()` after a real build. Its status line still reads "No part yet" (no recipe); not checked in a browser. |
+| The skill's worked designs are the tested ones, and its command table is what they use; `/solid` loads it | Tests. |
+
+Not checked yet: `fetch` on Linux aarch64, the by-hand steps on macOS and Windows, a part over the MCP tool's 50 s, `/solid` inside Local Studio, and the skill on a local model.
+
 ## Printer connections
 
 `gantrel-printer` has an adapter for each printer family below. "Fake" means the shared contract suite in `tests/printers/` passed against a fake printer built from public protocol notes, speaking the protocol over real sockets (a pseudo terminal for USB). It does not mean the adapter has worked with a real printer. Details are in [docs/PRINTERS.md](docs/PRINTERS.md).

@@ -10,10 +10,11 @@ The parts and licenses are in [docs/STACK.md](docs/STACK.md), and the printer pl
 
 ## Local Studio plugin
 
-This repo is a Local Studio plugin package: `plugin.toml` at the root, with its skills in `skills/plugin/`. It adds three commands to the Local Studio palette:
+This repo is a Local Studio plugin package: `plugin.toml` at the root, with its skills in `skills/plugin/`. It adds these commands to the Local Studio palette:
 
 - `/gantrel <what you want>` asks the model for a printable part. It loads the [smoothstone](https://github.com/Students-of-Local/smoothstone) skill, so the model drives the `stone` CLI: it picks a tested parametric recipe, sets its sizes, builds the STL with OpenSCAD and checks that it prints (watertight, one piece, flat base, walls, overhangs, size). The part lands in `stone-job/` in your project. On the local fleet, LFM3-1.7B has made a 40 mm fan guard this way that passes every stone check; the LFM2.5 8B and 24B have not. See [SUPPORTED.md](SUPPORTED.md) for what is proven.
 - `/studio` opens Gantrel Studio on the part: a 3D view with soft studio light and a 220 mm build plate, every recipe size as a slider and a typed value, a rebuild in a few seconds, the print checks with what to fix, an overhang overlay, and STL or 3MF export. It follows the job folder, so a change the model makes from chat shows up without a reload. After stone builds a part, `/gantrel` also starts the studio and gives you its link. See [docs/STUDIO.md](docs/STUDIO.md).
+- `/solid <what you want>` designs a part with exact sizes in [SolidCraft](https://github.com/tangency-labs/solidcraft), an open-source parametric CAD program. The model writes the design as a list of modeling commands, and `gantrel-solid build` turns it into `part.step`, `part.stl` and `part.3mf` in `solid-job/build/` and runs the print checks; the model then measures the part against the asked sizes. Install SolidCraft's CLI with `gantrel-solid fetch --yes` (Linux), or the steps `gantrel-solid doctor` prints. See [docs/SOLIDCRAFT.md](docs/SOLIDCRAFT.md).
 - `/print` loads the printers skill, so the model uses the `gantrel-printer` CLI to check a printer's status and camera, slice with that printer's profile, upload, pause, cancel or stop. Gantrel's tools never start or resume a print: you start it on the printer. See [docs/PRINTERS.md](docs/PRINTERS.md).
 
 Install:
@@ -40,7 +41,7 @@ Install:
    git clone https://github.com/Students-of-Local/Gantrel ~/.local-studio/plugins/gantrel
    ```
 
-4. Check it: `local-studio plugin validate ~/.local-studio/plugins/gantrel` prints `OK gantrel 0.4.0 (5 skills, 0 prompts, 5 commands)`.
+4. Check it: `local-studio plugin validate ~/.local-studio/plugins/gantrel` prints `OK gantrel 0.5.0 (6 skills, 0 prompts, 6 commands)`.
 
 The skill's first action is `stone status`; if that prints `stone: command not found`, the model is told to point you to these install steps and stop without installing anything. That step is not tested yet on a machine without `stone`.
 
