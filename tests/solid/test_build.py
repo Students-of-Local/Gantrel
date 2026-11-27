@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import struct
 from pathlib import Path
 
 import pytest
@@ -90,3 +92,74 @@ def test_build_refuses_a_job_outside_the_working_folder(run, tmp_path, how):
     code, out = run("build", str(DESIGNS / "plate.json"), "--job", job)
     assert code == 2 and out["ok"] is False and "--job" in out["error"]
     assert list(outside.iterdir()) == []
+
+
+def refused_design(work):
+    d = work / "d.json"
+    d.write_text('{"commands": [{"command": "file.export", "params": {"path": "/tmp/x.stl"}}]}')
+    return d
+
+
+def test_a_refused_build_leaves_no_earlier_parts(run):
+    out = run.work / "solid-job" / "build"
+    out.mkdir(parents=True)
+    for f in ("design.json", *solid_build.PARTS, "check.json"):
+        (out / f).write_text("from an earlier build")
+    code, res = run("build", str(refused_design(run.work)))
+    assert code == 2 and res["error"].startswith("commands[0] file.export")
+    assert list(out.iterdir()) == []
+
+
+def cube_stl(path, mm=10.0):
+    v = [(x, y, z) for x in (0, mm) for y in (0, mm) for z in (0, mm)]
+    faces = [(0, 2, 1), (1, 2, 3), (4, 5, 6), (5, 7, 6), (0, 1, 4), (1, 5, 4),
+             (2, 6, 3), (3, 6, 7), (0, 4, 2), (2, 4, 6), (1, 3, 5), (3, 7, 5)]
+    data = b"\0" * 80 + struct.pack("<I", len(faces))
+    for f in faces:
+        data += struct.pack("<3f", 0, 0, 0) + b"".join(struct.pack("<3f", *v[i]) for i in f) + b"\0\0"
+    path.write_bytes(data)
+
+
+def fake_solidcraft(tmp_path, after: str = "") -> Path:
+    """A solidcraft-cli that writes a 10 mm cube for each --out, then runs `after` with $job set."""
+    stl = tmp_path / "cube.stl"
+    cube_stl(stl)
+    exe = tmp_path / "fake" / "solidcraft-cli"
+    exe.parent.mkdir()
+    exe.write_text(f'#!/bin/sh\n[ "$1" = --version ] && {{ echo solidcraft-cli 0.50.0; exit 0; }}\n'
+                   f'for a; do case "$a" in */part.*) last="$a"; cp {stl} "$a";; esac; done\n'
+                   f'work=$(dirname "$last"); job=$(dirname "$(dirname "$work")")\n{after}\n')
+    exe.chmod(0o755)
+    return exe
+
+
+def test_a_job_folder_that_is_a_file_prints_one_json_line(run, tmp_path):
+    run.env["GANTREL_SOLIDCRAFT"] = str(fake_solidcraft(tmp_path))
+    run.env["PATH"] = f"{tmp_path / 'fake'}:{run.env['PATH']}"
+    (tmp_path / "fake" / "stone").write_text("#!/bin/sh\nexit 1\n")
+    (tmp_path / "fake" / "stone").chmod(0o755)
+    (run.work / "notes.txt").write_text("mine")
+    code, out = run("build", str(DESIGNS / "plate.json"), "--job", "notes.txt")
+    assert code == 1 and out["ok"] is False and out["files"] == [] and "notes.txt" in out["error"]
+    assert (run.work / "notes.txt").read_text() == "mine"
+
+
+def test_a_build_folder_swapped_for_a_symlink_during_the_run_gets_no_parts(run, tmp_path):
+    if not shutil.which("stone"):
+        pytest.skip("stone (smoothstone) is not on PATH; build runs its print checks")
+    outside = tmp_path / "outside"
+    swap = (f'mv "$job/build" "$job/build.real"; mkdir -p {outside}; '
+            f'cp -r "$job/build.real/$(basename "$work")" {outside}/; ln -s {outside} "$job/build"')
+    run.env["GANTREL_SOLIDCRAFT"] = str(fake_solidcraft(tmp_path, swap))
+    code, out = run("build", str(DESIGNS / "plate.json"))
+    assert out["size_mm"] == [10, 10, 10], out
+    assert not any(p.name.startswith("part.") for p in outside.iterdir())
+    assert {p.name for p in (run.work / "solid-job" / "build.real").iterdir()} >= set(solid_build.PARTS)
+
+
+def test_a_job_named_through_a_symlinked_working_folder_is_inside_it(run, tmp_path):
+    link = tmp_path / "proj"
+    link.symlink_to(run.work)
+    run.env["PWD"] = str(link)
+    code, out = run("build", str(refused_design(run.work)), "--job", f"{link}/job", cwd=link)
+    assert code == 2 and out["error"].startswith("commands[0] file.export"), out

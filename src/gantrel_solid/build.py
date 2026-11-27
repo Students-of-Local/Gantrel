@@ -36,6 +36,13 @@ def job_dir(arg: str) -> Path:
         raise Refused(f"--job {arg} uses '..'; give a folder inside the working folder")
     cwd = Path.cwd().resolve()
     full = raw if raw.is_absolute() else cwd / raw
+    logical = Path(os.environ.get("PWD") or cwd)
+    if not full.is_relative_to(cwd) and logical.is_absolute() and full.is_relative_to(logical):
+        try:
+            if os.path.samefile(logical, cwd):
+                full = cwd / full.relative_to(logical)
+        except OSError:
+            pass
     if not full.is_relative_to(cwd):
         raise Refused(f"--job {arg} is outside the working folder {cwd}")
     p = cwd
@@ -96,6 +103,10 @@ def plate_check(size: list[float]) -> dict:
 def build(args) -> int:
     try:
         job = job_dir(args.job)
+        out = job / "build"
+        if out.is_dir():
+            for f in ("design.json", *PARTS, "check.json"):
+                (out / f).unlink(missing_ok=True)
         design = read_design(Path(args.design) if args.design else job / "design.json")
         exe = find()
         if not exe:
@@ -105,18 +116,29 @@ def build(args) -> int:
     except Refused as e:
         emit({"ok": False, "error": str(e)})
         return 2
-    out = job / "build"
-    out.mkdir(parents=True, exist_ok=True)
-    for f in ("design.json", *PARTS, "check.json"):
-        (out / f).unlink(missing_ok=True)
-    work = Path(tempfile.mkdtemp(prefix=".solid-", dir=out))
+    except OSError as e:
+        emit({"ok": False, "files": [], "error": f"cannot use the job folder {args.job}: {e}"})
+        return 1
     try:
-        return _build(exe, design, work, out)
+        out.mkdir(parents=True, exist_ok=True)
+        out_fd = os.open(out, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError as e:
+        emit({"ok": False, "files": [], "error": f"cannot use the job folder {args.job}: {e}"})
+        return 1
+    try:
+        work = Path(tempfile.mkdtemp(prefix=".solid-", dir=out))
+        try:
+            return _build(exe, design, work, out, out_fd)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+    except OSError as e:
+        emit({"ok": False, "files": [], "error": f"could not write the parts into {out}: {e}"})
+        return 1
     finally:
-        shutil.rmtree(work, ignore_errors=True)
+        os.close(out_fd)
 
 
-def _build(exe: str, design: dict, work: Path, out: Path) -> int:
+def _build(exe: str, design: dict, work: Path, out: Path, out_fd: int) -> int:
     (work / "design.json").write_text(json.dumps(design, indent=1) + "\n")
     argv = [exe, "run", str(work / "design.json"), "--quiet", "--results", "--json-out", str(work / "results.json")]
     for f in PARTS:
@@ -155,7 +177,7 @@ def _build(exe: str, design: dict, work: Path, out: Path) -> int:
     ok = all(c["ok"] for c in checks)
     (work / "check.json").write_text(json.dumps({"results": checks, "size_mm": size, "passed": ok}, indent=1) + "\n")
     for f in ("design.json", *PARTS, "check.json"):
-        os.replace(work / f, out / f)
+        os.replace(work / f, f, dst_dir_fd=out_fd)
     fixes = [f"{c['name']}: {c['detail']}; {c['advice']}" for c in checks if not c["ok"]]
     emit({"ok": ok, "files": [str(out / f) for f in PARTS], "size_mm": size,
           "checks": {c["name"]: c["ok"] for c in checks}, "fixes": fixes})
