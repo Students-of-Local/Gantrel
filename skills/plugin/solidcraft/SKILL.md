@@ -13,10 +13,11 @@ toward that one part. All sizes are in millimeters.
 1. Research first. When the request names a real thing the part must fit (a phone, a bearing, a
    screw, a board), find its exact sizes on the maker's drawing or in the standard, and write each one
    with its source in the design's `"sources"` list. Never make up a size a part has to fit. When the
-   request gives every size, use those sizes and skip this step.
-   A part that fits over, into or around a real thing needs clearance, because printed holes come
-   out small: make a hole 0.3 mm wider than the shaft, screw or pin it slides on, and an opening
-   0.5 mm wider each way than a board or phone it holds. Write each clearance in `"sources"`.
+   request gives every size, use those sizes and skip the research, but still add clearance.
+   Clearance always applies, even when the request gives every size: a part that fits over, into or
+   around a real thing needs it, because printed holes come out small. Make a hole 0.3 mm wider than
+   the shaft, screw or pin it slides on (an 8 mm shaft gets an 8.3 mm bore), and an opening 0.5 mm
+   wider each way than a board or phone it holds. Write each clearance in `"sources"`.
 2. Write the design to `solid-job/design.json` with one bash call:
 
    ```
