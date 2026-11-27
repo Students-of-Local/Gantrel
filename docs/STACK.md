@@ -1,6 +1,6 @@
 # Open-source stack
 
-Most of this is planned. three.js is in use now, in Gantrel Studio. This is the list of existing projects Gantrel v0 plans to assemble, in build order, with each license and how Gantrel uses it. Gantrel's own code stays MIT.
+Most of this is planned. three.js is in use now, in Gantrel Studio, and SolidCraft's CLI in `gantrel-solid`. This is the list of existing projects Gantrel v0 plans to assemble, in build order, with each license and how Gantrel uses it. Gantrel's own code stays MIT.
 
 | Build | Part | License | How Gantrel uses it |
 |---|---|---|---|
@@ -10,6 +10,7 @@ Most of this is planned. three.js is in use now, in Gantrel Studio. This is the 
 | 2 | [build123d](https://github.com/gumyr/build123d), [CadQuery](https://github.com/CadQuery/cadquery) | Apache-2.0 | The CAD libraries the model writes code for. |
 | 2 | OpenCascade (OCP wheels) | LGPL-2.1 | Used unmodified as a library. |
 | 2, 9 | [bubblewrap](https://github.com/containers/bubblewrap) | LGPL-2.0+ | Sandbox on Linux for model-written scripts and agent-written adapters. macOS uses sandbox-exec. |
+| 2 | [SolidCraft](https://github.com/tangency-labs/solidcraft) | MIT OR Apache-2.0 (its name, logo and UI kit under LICENSE-BRAND) | In use: `gantrel-solid` runs the pinned v0.50.0 `solidcraft-cli` headless as a separate program, unmodified, to build designs into STEP, STL and 3MF ([SOLIDCRAFT.md](SOLIDCRAFT.md)). Gantrel ships none of its branding. |
 | 3 | [three.js](https://github.com/mrdoob/three.js) | MIT | 3D viewer. In use: Gantrel Studio vendors r170 unmodified in `src/gantrel_studio/web/vendor/three/`. |
 | 3 | occt-import-js | LGPL-2.1 | Opens STEP files in the viewer, unmodified. |
 | 3, 4, 13 | [trimesh](https://github.com/mikedh/trimesh) | MIT | Mesh import, checks and export. |
