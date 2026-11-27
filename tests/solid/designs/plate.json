@@ -1,0 +1,14 @@
+{"sources": ["every size is in the request"],
+ "commands": [
+  {"command": "sketch.create", "params": {"plane": "XY", "name": "Plate"}},
+  {"command": "sketch.rectangle.two_point", "params": {"p0": [0, 0], "p1": [80, 40]}},
+  {"command": "sketch.finish", "params": {}},
+  {"command": "solid.extrude", "params": {"distance": 5, "body_name": "Plate"}},
+  {"command": "sketch.create", "params": {"plane": "XY", "name": "Holes"}},
+  {"command": "sketch.circle.center", "params": {"center": [10, 10], "diameter": 5}},
+  {"command": "sketch.circle.center", "params": {"center": [70, 10], "diameter": 5}},
+  {"command": "sketch.circle.center", "params": {"center": [10, 30], "diameter": 5}},
+  {"command": "sketch.circle.center", "params": {"center": [70, 30], "diameter": 5}},
+  {"command": "sketch.finish", "params": {}},
+  {"command": "solid.extrude", "params": {"distance": 5, "operation": "cut"}}
+]}

@@ -1,0 +1,9 @@
+{"commands": [
+  {"command": "solid.box", "params": {"length": 60, "width": 40, "height": 30, "corner": [0, 0, 0], "body_name": "Box"}},
+  {"command": "solid.fillet", "params": {"edges": [[0, 0, 15], [60, 0, 15], [60, 40, 15], [0, 40, 15]], "radius": 4, "body": "Box"}},
+  {"command": "solid.shell", "params": {"faces": [[30, 20, 30]], "thickness": 2, "body": "Box"}},
+  {"command": "solid.box", "params": {"length": 58, "width": 38, "height": 3, "corner": [1, 1, 30], "body_name": "Lip"}},
+  {"command": "solid.fillet", "params": {"edges": [[1, 1, 31.5], [59, 1, 31.5], [59, 39, 31.5], [1, 39, 31.5]], "radius": 3, "body": "Lip"}},
+  {"command": "solid.shell", "params": {"faces": [[30, 20, 33], [30, 20, 30]], "thickness": 1, "body": "Lip"}},
+  {"command": "solid.combine", "params": {"target": "Box", "tools": ["Lip"], "operation": "join"}}
+]}

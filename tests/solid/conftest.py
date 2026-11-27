@@ -1,9 +1,14 @@
-"""Run the real gantrel-solid in a scratch HOME and working folder, with a stub release server."""
+"""Run the real gantrel-solid in a scratch HOME and working folder, with a stub release server.
+
+Build and measure need the real SolidCraft CLI ($GANTREL_SOLIDCRAFT, e.g. from `gantrel-solid fetch --yes`
+in CI) and smoothstone's stone on PATH; without them those tests skip and say why.
+"""
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -12,7 +17,6 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
-
 
 class Run:
     def __init__(self, home: Path, work: Path):
@@ -34,6 +38,17 @@ def run(tmp_path) -> Run:
     home.mkdir()
     work.mkdir()
     return Run(home, work)
+
+
+@pytest.fixture
+def solid(run) -> Run:
+    exe = os.environ.get("GANTREL_SOLIDCRAFT")
+    if not exe or not Path(exe).is_file():
+        pytest.skip("GANTREL_SOLIDCRAFT does not name solidcraft-cli (run gantrel-solid fetch --yes and set it)")
+    if not shutil.which("stone"):
+        pytest.skip("stone (smoothstone) is not on PATH; build runs its print checks")
+    run.env["GANTREL_SOLIDCRAFT"] = exe
+    return run
 
 
 class Release:

@@ -176,17 +176,25 @@ def fetch(args) -> int:
 
 
 def make_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="gantrel-solid", description="SolidCraft's CLI for Gantrel, at a pinned release.")
+    p = argparse.ArgumentParser(prog="gantrel-solid", description="Parametric parts from SolidCraft, checked for printing.")
     sub = p.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("doctor", help=f"find {CLI} and say how to get SolidCraft {pin.VERSION}")
     d.add_argument("--json", action="store_true")
     f = sub.add_parser("fetch", help=f"download SolidCraft {pin.VERSION}'s CLI into {data_dir()}")
     f.add_argument("--yes", action="store_true", help="the person agreed to the download")
+    b = sub.add_parser("build", help="build a design into the job folder and check it prints")
+    b.add_argument("design", nargs="?", help="design JSON (default <job>/design.json)")
+    b.add_argument("--job", default="./solid-job", help="job folder inside the working folder (default ./solid-job)")
+    m = sub.add_parser("measure", help="bounding box (mm) and volume of a STEP, STL or 3MF")
+    m.add_argument("file")
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     args = make_parser().parse_args(argv)
+    if args.cmd in ("build", "measure"):
+        from . import build
+        return getattr(build, args.cmd)(args)
     return {"doctor": doctor, "fetch": fetch}[args.cmd](args)
 
 

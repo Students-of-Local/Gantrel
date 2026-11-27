@@ -1,0 +1,5 @@
+{"commands": [
+  {"command": "solid.cylinder", "params": {"diameter": 24, "height": 10, "body_name": "Collar"}},
+  {"command": "solid.cylinder", "params": {"diameter": 10, "height": 10, "operation": "cut", "targets": ["Collar"]}},
+  {"command": "solid.cylinder", "params": {"diameter": 3.3, "height": 13, "base": [0, 0, 5], "axis": "X", "operation": "cut", "targets": ["Collar"]}}
+]}
