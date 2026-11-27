@@ -1,0 +1,32 @@
+[
+ {
+  "id": "spacer",
+  "ask": "Make a spacer block 30 x 20 x 12 mm with a 5 mm hole straight down through the middle of the 30 x 20 face.",
+  "size_mm": [
+   30,
+   20,
+   12
+  ],
+  "volume_mm3": 6964.4
+ },
+ {
+  "id": "open-box",
+  "ask": "Make an open box 50 x 30 x 20 mm, open at the top, with 2 mm walls and a 2 mm floor and its four vertical outside corners rounded to 3 mm.",
+  "size_mm": [
+   50,
+   30,
+   20
+  ],
+  "volume_mm3": 8332.9
+ },
+ {
+  "id": "washer",
+  "ask": "Make a flat washer 20 mm across and 2 mm thick with an 8.4 mm hole in the middle.",
+  "size_mm": [
+   20,
+   20,
+   2
+  ],
+  "volume_mm3": 517.5
+ }
+]

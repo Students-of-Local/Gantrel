@@ -26,3 +26,16 @@ Gantrel adds its own task gates on top. A model only counts as working for Gantr
 ## Per-model instructions
 
 Each model that passes gets a folder in `models/<model>/` (copy `models/_template/`) with the prompt format, settings and skill wording that model needs, plus its own tests. Skills stay shared; only model-specific adjustments live here.
+
+## Results
+
+### SolidCraft parts (`/solid`)
+
+`benchmarks/solid/run.py` gives the model the solidcraft skill and one bash tool, then asks for three parts that are not in the skill (`benchmarks/solid/asks.json`). It rebuilds the design the model wrote, in a folder of its own, and scores four gates: it built, every print check passed, the size is within 0.1 mm and the volume within 1 percent. Temperature 0, 24 turns at most, 600 s for each reply.
+
+| Model | Host | Date | Spacer 30 x 20 x 12, 5 mm hole | Open box 50 x 30 x 20, 2 mm walls, r3 corners | Washer 20 x 2, 8.4 mm hole | Pass rate |
+|---|---|---|---|---|---|---|
+| LFM3-1.7B (`hf.co/LiquidAI/LFM3-1.7B-GGUF:Q4_K_M`) | abbey1, GTX 1650 SUPER 4 GB, Ollama 0.40.15 | 2026-11-27 | pass, 14 bash calls, 925 s | fail: no reply in 600 s, nothing written | pass, 7 bash calls, 848 s | 2/3 |
+
+Each result, its bash calls and a hash of its transcript are in `benchmarks/results/solidcraft/`. One run per ask, so these are not pass rates over repeats.
+
