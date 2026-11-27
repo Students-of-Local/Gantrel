@@ -15,8 +15,8 @@ from gantrel_printer.errors import ConfigError
 from gantrel_printer.model import printable
 
 MB = 1024 * 1024
-LIMITS = {"model": 200 * MB, "gcode": 500 * MB}
-NAMES = {"model": "model", "gcode": "sliced file"}
+LIMITS = {"model": 200 * MB, "gcode": 500 * MB, "design": 1 * MB}
+NAMES = {"model": "model", "gcode": "sliced file", "design": "design"}
 
 
 def roots() -> list[Path]:

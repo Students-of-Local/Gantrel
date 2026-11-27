@@ -1,7 +1,8 @@
 """Gantrel's MCP server, stdio only (docs/MCP.md).
 
-Read tools: printers, printer_status, filaments, jobs, camera_snapshot, plan, check.
-Safe write tools: slice, upload (never starts), pause, cancel, emergency_stop.
+Read tools: printers, printer_status, filaments, jobs, camera_snapshot, plan, check, solid_measure.
+Safe write tools: slice, upload (never starts), pause, cancel, emergency_stop, solid_build (never touches a
+printer).
 print_start and print_resume start or resume a print only after the person answers a Local Studio
 card (gantrel_mcp.start). Every tool returns JSON text; an error is one plain sentence.
 
@@ -13,6 +14,8 @@ from __future__ import annotations
 import functools
 import json
 import logging
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -32,6 +35,8 @@ SNAPSHOT_MAX = 8 * 1024 * 1024
 # refused before the printer is touched; the rest of the call is kept for connecting and reading back.
 SLICE_S = 45.0
 UPLOAD_SEND_S = 35.0
+# gantrel-solid build or measure longer than SOLID_S is stopped the same way.
+SOLID_S = 50.0
 GOALS = ("quality", "balanced", "speed")
 
 INSTRUCTIONS = """Gantrel: plan, slice, upload and watch 3D prints on the person's paired printers.
@@ -84,6 +89,23 @@ def plan_summary(p: dict) -> dict:
             "high_s": e.get("high_seconds"), "grams": e.get("filament_g"),
             "pass": sum(r["status"] == "pass" for r in c["rules"]), "warn": len(c["warns"]),
             "fail": len(c["fails"])}
+
+
+def solid(*args: str) -> dict:
+    """Run gantrel-solid in this Python and return its JSON line. A refusal (exit 2) is an error; a build that
+    failed a command or a print check is a result the model reads and fixes."""
+    try:
+        code, out, err = slicing.run_slicer([sys.executable, "-m", "gantrel_solid", *args], SOLID_S)
+    except subprocess.TimeoutExpired:
+        raise Refused(f"gantrel-solid {args[0]} took longer than {SOLID_S:.0f} s, so Gantrel stopped it",
+                      f"Run gantrel-solid {args[0]} in a terminal, where it has 120 s") from None
+    try:
+        data = json.loads(out.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        raise Refused(f"gantrel-solid {args[0]} printed no result: {err.strip()[-300:]}") from None
+    if code == 2:
+        raise Refused(data.get("error", "gantrel-solid refused"))
+    return data
 
 
 def build() -> MCPServer:
@@ -269,6 +291,32 @@ def build() -> MCPServer:
         adapter, _ = _printer(printer)
         did = adapter.emergency_stop()
         return dumps({"estop": adapter.cfg.name, "result": did, "next": "Tell the person what happened now"})
+
+    # ------------------------------------------------------------ SolidCraft parts: never touch a printer
+
+    @tool(WRITE)
+    def solid_build(design: str, job: str = "solid-job") -> str:
+        """Build a SolidCraft design (a JSON file of modeling commands, docs/SOLIDCRAFT.md) into part.step,
+        part.stl and part.3mf in <job>/build/, and run the print checks on the STL. job must be a folder inside
+        the working folder. A failing command comes back with its index; a failed check with its fix."""
+        r = solid("build", str(files.checked(design, "design")), "--job", job)
+        if r.get("ok"):
+            r["next"] = "solid_measure the part.step and compare size_mm with the asked sizes (within 0.1 mm)"
+        elif "index" in r:
+            r["next"] = f"Fix commands[{r['index']}] as the error says, write the design again and build again"
+        elif r.get("fixes"):
+            r["next"] = "Change the design as each fix says and build again"
+        else:
+            r["next"] = "Tell the person the error"
+        return dumps(r)
+
+    @tool(READ)
+    def solid_measure(path: str) -> str:
+        """Bounding box size in mm and volume of a STEP, STL or 3MF, to check a part against the asked sizes."""
+        r = solid("measure", str(files.checked(path, "model")))
+        r["next"] = ("Every size_mm value must be within 0.1 mm of the asked size; if one is not, fix the design"
+                     if r.get("ok") else "Tell the person the error")
+        return dumps(r)
 
     # ------------------------------------------------------------ start and resume: the person decides
     # These stay plain def: mcp 2.3 runs a sync tool on a worker thread, so a card held open here never
