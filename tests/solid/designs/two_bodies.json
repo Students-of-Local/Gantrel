@@ -1,0 +1,4 @@
+{"commands": [
+  {"command": "solid.box", "params": {"length": 10, "width": 10, "height": 5, "body_name": "A"}},
+  {"command": "solid.box", "params": {"length": 10, "width": 10, "height": 5, "corner": [20, 0, 0], "body_name": "B"}}
+]}

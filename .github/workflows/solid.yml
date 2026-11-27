@@ -17,6 +17,9 @@ jobs:
       - run: |
           uv run --python 3.12 gantrel-solid doctor --json | tee doctor.json
           grep -q '"pinned": true' doctor.json
+      # The print checks are smoothstone's, at the commit the plugin's skill pins (skills/plugin/smoothstone/UPSTREAM).
+      - run: uv tool install --python 3.12 "git+https://github.com/Students-of-Local/smoothstone@$(sed -n 2p skills/plugin/smoothstone/UPSTREAM)"
+      - run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: curl -fsSL -o "$RUNNER_TEMP/solidcraft.tar.gz" "$(uv run --python 3.12 python -c 'from gantrel_solid import pin; print(pin.RELEASE + "/" + pin.FILES["linux", "x86_64"][0])')"
       - name: tests/solid, none skipped
         shell: bash
@@ -24,5 +27,6 @@ jobs:
           GANTREL_SOLID_TARBALL: ${{ runner.temp }}/solidcraft.tar.gz
         run: |
           set -o pipefail
+          export GANTREL_SOLIDCRAFT="$HOME/.local/share/gantrel/solidcraft/0.50.0/solidcraft-cli"
           uv run --python 3.12 pytest tests/solid -v -rs | tee solid.log
           ! grep -q SKIPPED solid.log
