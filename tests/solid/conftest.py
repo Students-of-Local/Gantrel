@@ -52,15 +52,28 @@ def solid(run) -> Run:
 
 
 class Release:
-    """A release folder served on 127.0.0.1; requests lists every path asked for."""
+    """A release folder served on 127.0.0.1; requests lists every path asked for. before(path) runs before a
+    file is served, and a path in cut is sent with a Content-Length past its real end."""
 
     def __init__(self, root: Path):
-        self.root, self.requests = root, []
+        self.root, self.requests, self.before, self.cut = root, [], None, set()
         outer = self
 
         class Handler(SimpleHTTPRequestHandler):
             def log_message(self, *a):
                 outer.requests.append(self.path)
+
+            def do_GET(self):
+                if outer.before:
+                    outer.before(self.path)
+                if self.path not in outer.cut:
+                    return super().do_GET()
+                body = (outer.root / self.path.lstrip("/")).read_bytes()[:10]
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body) + 1000))
+                self.end_headers()
+                self.wfile.write(body)
+                self.close_connection = True
 
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), partial(Handler, directory=str(root)))
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
