@@ -14,6 +14,9 @@ toward that one part. All sizes are in millimeters.
    screw, a board), find its exact sizes on the maker's drawing or in the standard, and write each one
    with its source in the design's `"sources"` list. Never make up a size a part has to fit. When the
    request gives every size, use those sizes and skip this step.
+   A part that fits over, into or around a real thing needs clearance, because printed holes come
+   out small: make a hole 0.3 mm wider than the shaft, screw or pin it slides on, and an opening
+   0.5 mm wider each way than a board or phone it holds. Write each clearance in `"sources"`.
 2. Write the design to `solid-job/design.json` with one bash call:
 
    ```
@@ -30,7 +33,9 @@ toward that one part. All sizes are in millimeters.
    - `"fixes"`: the part built but a print check failed. Each fix says what to change. Change the
      design and build again.
 4. Run `gantrel-solid measure solid-job/build/part.step`. Every number in `size_mm` must be within
-   0.1 mm of the size asked for. If one is not, fix the design and go back to step 3.
+   0.1 mm of the part's whole size: the size asked for plus anything the request adds on top, such as
+   a lip. The enclosure below is asked as 60 x 40 x 30 with a 3 mm lip, so 60 x 40 x 33 is right. If
+   one is not, fix the design and go back to step 3.
 5. Run `gantrel-studio --job ./solid-job --detach` once. It prints `Give the person this link:
    [Open Gantrel Studio](...)`. Put that Markdown link in your reply exactly as printed. If the
    command is not found, skip this step.
@@ -99,13 +104,14 @@ thick and 3 mm tall around the top for a lid to sit on (33 mm tall with the lip)
 ]}
 ```
 
-A shaft collar for a 10 mm shaft, 24 mm across and 10 mm wide, with a 3.3 mm hole across one side
-for tapping an M4 set screw:
+A shaft collar for a 10 mm shaft, 24 mm across and 10 mm wide, with a 10.3 mm bore (the shaft plus
+0.3 mm clearance) and a 3.3 mm hole across one side for tapping an M4 set screw:
 
 ```json
-{"commands": [
+{"sources": ["shaft 10 mm from the request, bore 10.3 mm with 0.3 mm clearance for a sliding fit"],
+ "commands": [
   {"command": "solid.cylinder", "params": {"diameter": 24, "height": 10, "body_name": "Collar"}},
-  {"command": "solid.cylinder", "params": {"diameter": 10, "height": 10, "operation": "cut", "targets": ["Collar"]}},
+  {"command": "solid.cylinder", "params": {"diameter": 10.3, "height": 10, "operation": "cut", "targets": ["Collar"]}},
   {"command": "solid.cylinder", "params": {"diameter": 3.3, "height": 13, "base": [0, 0, 5], "axis": "X", "operation": "cut", "targets": ["Collar"]}}
 ]}
 ```
