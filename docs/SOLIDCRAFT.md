@@ -102,3 +102,11 @@ commands and return the same JSON plus a `next` field. The design file follows t
 (inside home or the working folder, 1 MB at most). A build or measure still running after 50 s is
 stopped and refused; run `gantrel-solid build` in a terminal for a part that takes longer. Neither tool
 touches a printer.
+
+## Benchmark
+
+`benchmarks/solid/run.py` runs the skill on a local model over three held-out asks
+(`benchmarks/solid/asks.json`) and scores what it built by rebuilding its design: it built, every
+check passed, the size within 0.1 mm and the volume within 1 percent. On LFM3-1.7B (abbey1, GTX 1650
+SUPER 4 GB) it passed the spacer and the washer and failed the open box, where the model gave no reply
+within 600 s. Results are in `benchmarks/results/solidcraft/` and [BENCHMARKS.md](../BENCHMARKS.md).

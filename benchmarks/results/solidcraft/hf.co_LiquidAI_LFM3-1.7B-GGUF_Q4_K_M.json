@@ -1,0 +1,104 @@
+{
+ "skill": "solidcraft",
+ "model": "hf.co/LiquidAI/LFM3-1.7B-GGUF:Q4_K_M",
+ "host": "abbey1 (GTX 1650 SUPER 4 GB, Ollama 0.40.15)",
+ "date": "2026-11-27",
+ "asks": 3,
+ "pass_rate": 0.6666666666666666,
+ "gate_pass_rate": {
+  "built": 0.6666666666666666,
+  "prints": 0.6666666666666666,
+  "size": 0.6666666666666666,
+  "volume": 0.6666666666666666
+ },
+ "results": [
+  {
+   "id": "spacer",
+   "ask": "Make a spacer block 30 x 20 x 12 mm with a 5 mm hole straight down through the middle of the 30 x 20 face.",
+   "gates": {
+    "built": true,
+    "prints": true,
+    "size": true,
+    "volume": true
+   },
+   "pass": true,
+   "size_mm": [
+    30.0,
+    20.0,
+    12.0
+   ],
+   "volume_mm3": 6964.4,
+   "fixes": [],
+   "ran_build": true,
+   "stopped": null,
+   "tool_calls": [
+    "mkdir -p solid-job && cat > solid-job/design.json <<'EOF'\n{\n  \"sources\": [\n    \"spacer block dimensions 30 x 20 x 12 mm and hole diameter 5 mm straight down through middle of 30x20 face\"\n  ],\n  \"commands\": [\n    {\n      \"command\": \"solid.box\",\n      \"params\": {\n        \"length\": 30,\n        \"width\": 20,\n        \"height\": 12,\n        \"corner\": [0, 0, 0],\n        \"body_name\": \"Spacer\"\n      }\n    },\n    {\n      \"command\": \"solid.cylinder\",\n      \"params\": {\n        \"diameter\": 5,\n        \"height\": 12,\n        \"base\": [15, 10, 0],\n        \"axis\": \"Z\",\n        \"operation\": \"cut\",\n        \"targets\": [\"Spacer\"]\n      }\n    }\n  ]\n}\nEOF",
+    "bash -c 'cd solid-job && gantrel-solid build --job ./solid-job'",
+    "cd <work>  # guess base? but we don't know.",
+    "cd solid-job && cat > design.json <<'EOF'\n{\n  \"sources\": [\n    \"spacer block dimensions 30 x 20 x 12 mm and a 5 mm hole straight down through the middle of the 30x20 face\"\n  ],\n  \"commands\": [\n    {\n      \"command\": \"solid.box\",\n      \"params\": {\n        \"length\": 30,\n        \"width\": 20,\n        \"height\": 12,\n        \"corner\": [0, 0, 0],\n        \"body_name\": \"Spacer\"\n      }\n    },\n    {\n      \"command\": \"solid.cylinder\",\n      \"params\": {\n        \"diameter\": 5,\n        \"height\": 12,\n        \"base\": [15, 10, 0],\n        \"axis\": \"Z\",\n        \"operation\": \"cut\",\n        \"targets\": [\"Spacer\"]\n      }\n    }\n  ]\n}\nEOF",
+    "cd solid-job && gantrel-solid build --job ./solid-job",
+    "pwd && ls -la solid-job",
+    "cd <work> && ls -R",
+    "cat <work>/solid-job/design.json",
+    "cd <work>/solid-job && gantrel-solid build --job ./solid-job",
+    "find <work> -type f",
+    "cd <work> && pwd && ls -la solid-job/",
+    "bash -c 'cd <work> && gantrel-solid build --job ./solid-job'",
+    "bash -c 'cd <work>/solid-job && gantrel-studio --job ./solid-job --detach'",
+    "cd <work>/solid-job/build && gantrel-solid measure part.step"
+   ],
+   "seconds": 925,
+   "log_sha256": "3844fd418db972e9821906d67edd79842d39b636925645cf0e3cb9f7f667f0c6"
+  },
+  {
+   "id": "open-box",
+   "ask": "Make an open box 50 x 30 x 20 mm, open at the top, with 2 mm walls and a 2 mm floor and its four vertical outside corners rounded to 3 mm.",
+   "gates": {
+    "built": false,
+    "prints": false,
+    "size": false,
+    "volume": false
+   },
+   "pass": false,
+   "size_mm": null,
+   "volume_mm3": null,
+   "fixes": null,
+   "ran_build": false,
+   "stopped": "no reply: timed out",
+   "tool_calls": [],
+   "seconds": 600,
+   "log_sha256": "0142787afca9d2652730bb452a58ce5bf80b8ddb8b1522110a83a58a69d037f2"
+  },
+  {
+   "id": "washer",
+   "ask": "Make a flat washer 20 mm across and 2 mm thick with an 8.4 mm hole in the middle.",
+   "gates": {
+    "built": true,
+    "prints": true,
+    "size": true,
+    "volume": true
+   },
+   "pass": true,
+   "size_mm": [
+    20.0,
+    20.0,
+    2.0
+   ],
+   "volume_mm3": 517.5,
+   "fixes": [],
+   "ran_build": true,
+   "stopped": null,
+   "tool_calls": [
+    "mkdir -p solid-job && cat > solid-job/design.json <<'EOF'\n{\n  \"sources\": [],\n  \"commands\": [\n    {\"command\": \"sketch.create\", \"params\": {\"plane\": \"XY\", \"name\": \"Washer\"}},\n    {\"command\": \"sketch.circle.center\", \"params\": {\"center\": [10, 10], \"diameter\": 20}},\n    {\"command\": \"sketch.finish\", \"params\": {}},\n    {\"command\": \"solid.extrude\", \"params\": {\"distance\": 2, \"body_name\": \"Washer\"}},\n    {\"command\": \"solid.cylinder\", \"params\": {\"diameter\": 8.4, \"height\": 2, \"base\": [10, 10, 0], \"axis\": \"Z\", \"operation\": \"cut\", \"targets\": [\"Washer\"]}}\n  ]\n}\nEOF",
+    "bash -c 'run_gantrel_solid_build() { command=\"gantrel-solid build --job ./solid-job\"; echo \\\"$command\\\"; }'",
+    "bash -c 'gantrel-solid build --job ./solid-job'",
+    "bash -c 'gantrel-studio --job ./solid-job --detach'",
+    "bash -c 'cat > solid-job/design.json <<EOF\n{\n  \"sources\": [\n    \"Request: washer 20 mm across\",\n    \"Request: thickness 2 mm\",\n    \"Request: hole diameter 8.4 mm\"\n  ],\n  \"commands\": [\n    {\"command\": \"sketch.create\", \"params\": {\"plane\": \"XY\", \"name\": \"Washer\"}},\n    {\"command\": \"sketch.circle.center\", \"params\": {\"center\": [10, 10], \"diameter\": 20}},\n    {\"command\": \"sketch.finish\", \"params\": {}},\n    {\"command\": \"solid.extrude\", \"params\": {\"distance\": 2, \"body_name\": \"Washer\"}},\n    {\"command\": \"solid.cylinder\", \"params\": {\"diameter\": 8.4, \"height\": 2, \"base\": [10, 10, 0], \"axis\": \"Z\", \"operation\": \"cut\", \"targets\": [\"Washer\"]}}\n  ]\n}\nEOF'",
+    "bash -c 'gantrel-solid build --job ./solid-job'",
+    "bash -c 'gantrel-solid measure ./solid-job/build/part.step'"
+   ],
+   "seconds": 848,
+   "log_sha256": "41696d2cd2f3aa0a672687d53bc7e6edc85a29af79bbead9f522c1ea7bf2c2dc"
+  }
+ ]
+}

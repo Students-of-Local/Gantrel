@@ -40,7 +40,9 @@ Not checked yet: the page inside Local Studio's own browser panel (WebKitGTK on 
 | Gantrel Studio shows a solid job's part, size and checks | `Studio(job).state()` after a real build. Its status line still reads "No part yet" (no recipe); not checked in a browser. |
 | The skill's worked designs are the tested ones, and its command table is what they use; `/solid` loads it | Tests. |
 
-Not checked yet: `fetch` on Linux aarch64, the by-hand steps on macOS and Windows, a part over the MCP tool's 50 s, `/solid` inside Local Studio, and the skill on a local model.
+- The skill on a real local model, LFM3-1.7B only, one run per ask ([BENCHMARKS.md](BENCHMARKS.md#solidcraft-parts-solid)): a spacer with a hole and a washer, each built, passing every check and within 0.1 mm and 1 percent volume. An open box with filleted corners failed: the model gave no reply within 600 s.
+
+Not checked yet: `fetch` on Linux aarch64, the by-hand steps on macOS and Windows, a part over the MCP tool's 50 s, `/solid` inside Local Studio, and any model other than LFM3-1.7B.
 
 ## Printer connections
 
