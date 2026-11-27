@@ -50,3 +50,11 @@ def test_studio_shows_a_solid_job(solid):
     assert state["part"] and state["part"]["size_mm"] == pytest.approx([80, 40, 5], abs=0.1)
     assert state["check"]["passed"] is True
     assert {r["name"] for r in state["check"]["results"]} >= {"watertight", "bodies", "plate"}
+
+
+def test_the_collar_cross_hole_follows_the_rule_the_skill_states():
+    body, _, cross = (c["params"] for c in json.loads((DESIGNS / "collar.json").read_text())["commands"])
+    assert cross["height"] > body["diameter"] / 2 and cross["base"][2] == body["height"] / 2
+    text = " ".join(SKILL.read_text().split())
+    assert f'{body["diameter"]:g} / 2 + 1 = {cross["height"]:g}' in text
+    assert f'{body["height"]:g} / 2 = {cross["base"][2]:g}' in text
