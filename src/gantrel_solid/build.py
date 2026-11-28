@@ -9,9 +9,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
 import shutil
+import stat
 import subprocess
-import tempfile
 from pathlib import Path
 
 from gantrel_printer.plan import mesh as meshes
@@ -100,14 +101,54 @@ def plate_check(size: list[float]) -> dict:
             "advice": "" if ok else f"make the part fit within {PLATE_MM:g} x {PLATE_MM:g} mm"}
 
 
+def clear(out: Path) -> None:
+    """Remove an earlier build's check.json first, then its design and parts, inside the checked build folder."""
+    try:
+        fd = os.open(out, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        return
+    try:
+        for f in ("check.json", "design.json", *PARTS):
+            try:
+                os.unlink(f, dir_fd=fd)
+            except FileNotFoundError:
+                pass
+    finally:
+        os.close(fd)
+
+
+def write_in(dir_fd: int, name: str, text: str) -> None:
+    fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=dir_fd)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(text)
+
+
+def read_in(dir_fd: int, name: str, limit: int) -> tuple[bytes, os.stat_result]:
+    fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd)
+    with os.fdopen(fd, "rb") as fh:
+        st = os.fstat(fh.fileno())
+        if not stat.S_ISREG(st.st_mode):
+            raise OSError(f"{name} is not a file")
+        if st.st_size > limit:
+            raise meshes.MeshError(f"{name} is over Gantrel's {limit // (1024 * 1024)} MB limit")
+        return fh.read(), st
+
+
+def is_file_in(dir_fd: int, name: str) -> bool:
+    try:
+        return stat.S_ISREG(os.stat(name, dir_fd=dir_fd, follow_symlinks=False).st_mode)
+    except FileNotFoundError:
+        return False
+
+
 def build(args) -> int:
     try:
         job = job_dir(args.job)
         out = job / "build"
-        if out.is_dir():
-            for f in ("design.json", *PARTS, "check.json"):
-                (out / f).unlink(missing_ok=True)
-        design = read_design(Path(args.design) if args.design else job / "design.json")
+        try:
+            design = read_design(Path(args.design) if args.design else job / "design.json")
+        finally:
+            clear(out)
         exe = find()
         if not exe:
             raise Refused(f"{CLI} is not installed; run gantrel-solid doctor")
@@ -126,11 +167,16 @@ def build(args) -> int:
         emit({"ok": False, "files": [], "error": f"cannot use the job folder {args.job}: {e}"})
         return 1
     try:
-        work = Path(tempfile.mkdtemp(prefix=".solid-", dir=out))
+        name = f".solid-{secrets.token_hex(6)}"
+        os.mkdir(name, 0o700, dir_fd=out_fd)
         try:
-            return _build(exe, design, work, out, out_fd)
+            work_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=out_fd)
+            try:
+                return _build(exe, design, out / name, work_fd, out, out_fd)
+            finally:
+                os.close(work_fd)
         finally:
-            shutil.rmtree(work, ignore_errors=True)
+            shutil.rmtree(name, dir_fd=out_fd, ignore_errors=True)
     except OSError as e:
         emit({"ok": False, "files": [], "error": f"could not write the parts into {out}: {e}"})
         return 1
@@ -138,8 +184,8 @@ def build(args) -> int:
         os.close(out_fd)
 
 
-def _build(exe: str, design: dict, work: Path, out: Path, out_fd: int) -> int:
-    (work / "design.json").write_text(json.dumps(design, indent=1) + "\n")
+def _build(exe: str, design: dict, work: Path, work_fd: int, out: Path, out_fd: int) -> int:
+    write_in(work_fd, "design.json", json.dumps(design, indent=1) + "\n")
     argv = [exe, "run", str(work / "design.json"), "--quiet", "--results", "--json-out", str(work / "results.json")]
     for f in PARTS:
         argv += ["--out", str(work / f)]
@@ -151,8 +197,8 @@ def _build(exe: str, design: dict, work: Path, out: Path, out_fd: int) -> int:
     if code != 0:
         failed = {}
         try:
-            failed = json.loads((work / "results.json").read_text()).get("error") or {}
-        except (OSError, ValueError, AttributeError):
+            failed = json.loads(read_in(work_fd, "results.json", 1 << 20)[0]).get("error") or {}
+        except (OSError, ValueError, AttributeError, meshes.MeshError):
             pass
         if not isinstance(failed, dict):
             err = f"{failed} {err}"
@@ -164,20 +210,24 @@ def _build(exe: str, design: dict, work: Path, out: Path, out_fd: int) -> int:
         else:
             emit({"ok": False, "files": [], "error": f"SolidCraft failed: {err.strip()[-300:]}"})
         return 1
-    missing = [f for f in PARTS if not (work / f).is_file()]
+    missing = [f for f in PARTS if not is_file_in(work_fd, f)]
     if missing:
         emit({"ok": False, "files": [], "error": f"SolidCraft wrote no {', '.join(missing)}"})
         return 1
     try:
-        size = [round(float(v), 3) for v in meshes.load(work / "part.stl").size]
+        data, st = read_in(work_fd, "part.stl", meshes.MAX_BYTES)
+        size = [round(float(v), 3) for v in meshes.read_stl(data).size]
         checks = stone_checks(work / "part.stl") + [plate_check(size)]
+        seen = os.stat(work / "part.stl")
+        if (seen.st_dev, seen.st_ino) != (st.st_dev, st.st_ino):
+            raise Refused(f"the build folder {out} changed during the run; nothing was written")
     except (Refused, meshes.MeshError) as e:
         emit({"ok": False, "files": [], "error": str(e)})
         return 1
     ok = all(c["ok"] for c in checks)
-    (work / "check.json").write_text(json.dumps({"results": checks, "size_mm": size, "passed": ok}, indent=1) + "\n")
+    write_in(work_fd, "check.json", json.dumps({"results": checks, "size_mm": size, "passed": ok}, indent=1) + "\n")
     for f in ("design.json", *PARTS, "check.json"):
-        os.replace(work / f, f, dst_dir_fd=out_fd)
+        os.replace(f, f, src_dir_fd=work_fd, dst_dir_fd=out_fd)
     fixes = [f"{c['name']}: {c['detail']}; {c['advice']}" for c in checks if not c["ok"]]
     emit({"ok": ok, "files": [str(out / f) for f in PARTS], "size_mm": size,
           "checks": {c["name"]: c["ok"] for c in checks}, "fixes": fixes})

@@ -75,8 +75,9 @@ It prints one JSON line:
   Then nothing is written;
 - `"ok": false` with `"error"` when it was refused (exit 2) or could not write the job folder.
 
-Once the job folder is accepted, the parts and `check.json` of an earlier build are removed, so a
-refused or failed build never leaves an old passing result in `<job>/build/`.
+Once the job folder is accepted and the design is read, the parts and `check.json` of an earlier build
+are removed (`check.json` first), so a refused or failed build never leaves an old passing result in
+`<job>/build/`. A rebuild from `<job>/build/design.json` works, since the design is read before that.
 
 `check.json` is what Gantrel Studio reads, so `gantrel-studio --job ./solid-job` shows the part, its
 size and its checks.
@@ -90,8 +91,8 @@ prints the bounding box size in mm, its corners and the volume in mm3 of a STEP 
 
 - The job folder must be inside the working folder: a `--job` with `..`, outside it, or through a
   symlink (also `<job>/build`) is refused. A path through a symlinked working folder (the shell's
-  `$PWD`) counts as inside it. The parts are moved into the `build` folder that was checked, even if
-  that name is swapped for a symlink during the run.
+  `$PWD`) counts as inside it. If that `build` folder is swapped for a symlink during the run, build
+  stops with an error and writes, moves and deletes nothing outside the folder it checked.
 - Only modeling commands run (`sketch.`, `solid.`, `construct.`, `face.`, `surface.`, `body.`,
   `parameters.change`, `material.`, `appearance.`, `plastic.`). A command that opens, saves, imports,
   exports or loads anything is refused, since `build` writes the files itself.

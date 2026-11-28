@@ -110,6 +110,16 @@ def test_a_refused_build_leaves_no_earlier_parts(run):
     assert list(out.iterdir()) == []
 
 
+def test_a_clear_that_fails_still_removes_the_earlier_passing_check(run):
+    out = run.work / "solid-job" / "build"
+    out.mkdir(parents=True)
+    (out / "check.json").write_text('{"passed": true}')
+    (out / "part.step").mkdir()
+    code, res = run("build", str(DESIGNS / "plate.json"))
+    assert code == 1 and res["ok"] is False and "cannot use the job folder" in res["error"], res
+    assert not (out / "check.json").exists()
+
+
 def cube_stl(path, mm=10.0):
     v = [(x, y, z) for x in (0, mm) for y in (0, mm) for z in (0, mm)]
     faces = [(0, 2, 1), (1, 2, 3), (4, 5, 6), (5, 7, 6), (0, 1, 4), (1, 5, 4),
@@ -144,17 +154,30 @@ def test_a_job_folder_that_is_a_file_prints_one_json_line(run, tmp_path):
     assert (run.work / "notes.txt").read_text() == "mine"
 
 
-def test_a_build_folder_swapped_for_a_symlink_during_the_run_gets_no_parts(run, tmp_path):
+def test_a_build_folder_swapped_for_a_symlink_during_the_run_gets_nothing(run, tmp_path):
     if not shutil.which("stone"):
         pytest.skip("stone (smoothstone) is not on PATH; build runs its print checks")
-    outside = tmp_path / "outside"
+    outside, victim = tmp_path / "outside", tmp_path / "victim.txt"
+    victim.write_text("mine")
     swap = (f'mv "$job/build" "$job/build.real"; mkdir -p {outside}; '
-            f'cp -r "$job/build.real/$(basename "$work")" {outside}/; ln -s {outside} "$job/build"')
+            f'cp -r "$job/build.real/$(basename "$work")" {outside}/; '
+            f'ln -s {victim} {outside}/"$(basename "$work")"/check.json; ln -s {outside} "$job/build"')
     run.env["GANTREL_SOLIDCRAFT"] = str(fake_solidcraft(tmp_path, swap))
     code, out = run("build", str(DESIGNS / "plate.json"))
-    assert out["size_mm"] == [10, 10, 10], out
-    assert not any(p.name.startswith("part.") for p in outside.iterdir())
-    assert {p.name for p in (run.work / "solid-job" / "build.real").iterdir()} >= set(solid_build.PARTS)
+    assert code == 1 and out["ok"] is False and out["files"] == [] and "changed during the run" in out["error"], out
+    assert victim.read_text() == "mine"
+    [planted] = outside.iterdir()
+    assert sorted(p.name for p in planted.iterdir()) == sorted(("check.json", "design.json", *solid_build.PARTS))
+    assert (planted / "check.json").is_symlink()
+    assert list((run.work / "solid-job" / "build.real").iterdir()) == []
+
+
+def test_a_rebuild_from_the_last_builds_own_design_succeeds(solid):
+    assert build(solid, "plate")[0] == 0
+    design = solid.work / "solid-job" / "build" / "design.json"
+    code, out = solid("build", str(design), "--job", "solid-job")
+    assert code == 0 and out["ok"], out
+    assert json.loads(design.read_text()) == json.loads((DESIGNS / "plate.json").read_text())
 
 
 def test_a_job_named_through_a_symlinked_working_folder_is_inside_it(run, tmp_path):
