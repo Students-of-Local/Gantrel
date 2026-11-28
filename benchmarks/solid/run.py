@@ -7,7 +7,9 @@ The model gets the skill the way Local Studio sends a plugin command (the skill,
 </skill>) and one bash tool. Each ask runs in a fresh scratch folder that is also its HOME, with only
 gantrel-solid and stone on PATH (no gantrel-studio, so no server is left running). Each ask is scored on
 what is on disk afterwards, never on the model's words: the job built, every print check passed, the
-part's size within 0.1 mm of the ask and its volume within 1 percent. Writes
+part's size within 0.1 mm of the ask, its volume within 1 percent, and its features where the ask
+puts them: each point in the ask's empty_mm must be outside the part and each in solid_mm inside it,
+measured from the part's lowest x, y and z corner. Writes
 benchmarks/results/solidcraft/<model>.json.
 
 This is a developer tool: it talks to a model server directly (such as Ollama), and the model's bash
@@ -29,6 +31,10 @@ import tempfile
 import time
 import urllib.request
 from pathlib import Path
+
+import numpy as np
+
+from gantrel_printer.plan import mesh as meshes
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -53,7 +59,7 @@ def chat(base: str, model: str, messages: list) -> dict:
 def bash(command: str, cwd: Path, env: dict) -> str:
     try:
         p = subprocess.run(["bash", "-c", command], cwd=cwd, env=env, capture_output=True, text=True,
-                           timeout=BASH_TIMEOUT, stdin=subprocess.DEVNULL)
+                           errors="replace", timeout=BASH_TIMEOUT, stdin=subprocess.DEVNULL)
         out = p.stdout + p.stderr + ("" if p.returncode == 0 else f"\n(exit {p.returncode})")
     except subprocess.TimeoutExpired:
         out = f"(stopped after {BASH_TIMEOUT} s)"
@@ -67,6 +73,35 @@ def solid(cwd: Path, env: dict, *args: str) -> dict | None:
         return json.loads(p.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):
         return None
+
+
+def inside(tris: np.ndarray, points: np.ndarray) -> list[bool]:
+    """Whether each point is inside the closed mesh: an odd number of triangles crossed by a ray from it."""
+    d = np.array([1.0, 0.0013, 0.0007])
+    v0, e1, e2 = tris[:, 0], tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0]
+    h = np.cross(d, e2)
+    a = (e1 * h).sum(1)
+    f = np.where(np.abs(a) > 1e-12, 1 / np.where(a == 0, 1, a), 0)
+    out = []
+    for p in points:
+        s = p - v0
+        u = f * (s * h).sum(1)
+        q = np.cross(s, e1)
+        v = f * (q @ d)
+        t = f * (e2 * q).sum(1)
+        out.append(bool(((f != 0) & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > 1e-9)).sum() % 2))
+    return out
+
+
+def features(ask: dict, stl: Path) -> bool:
+    try:
+        tris = meshes.load(stl).tris
+    except meshes.MeshError:
+        return False
+    lo = tris.reshape(-1, 3).min(0)
+    empty = inside(tris, lo + np.array(ask["empty_mm"], float).reshape(-1, 3))
+    solid = inside(tris, lo + np.array(ask["solid_mm"], float).reshape(-1, 3))
+    return not any(empty) and all(solid)
 
 
 def score(ask: dict, work: Path) -> dict:
@@ -88,6 +123,7 @@ def score(ask: dict, work: Path) -> dict:
         "prints": bool(built and built.get("ok")),
         "size": size is not None and all(abs(a - b) <= 0.1 for a, b in zip(size, sorted(ask["size_mm"]))),
         "volume": ok and abs(m["volume_mm3"] - ask["volume_mm3"]) <= 0.01 * ask["volume_mm3"],
+        "features": ok and features(ask, judge / "job" / "build" / "part.stl"),
     }
     shutil.rmtree(judge, ignore_errors=True)
     return {"gates": gates, "pass": all(gates.values()), "size_mm": m and m.get("size_mm"),
