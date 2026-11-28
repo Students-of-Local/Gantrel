@@ -31,11 +31,11 @@ Each model that passes gets a folder in `models/<model>/` (copy `models/_templat
 
 ### SolidCraft parts (`/solid`)
 
-`benchmarks/solid/run.py` gives the model the solidcraft skill and one bash tool, then asks for three parts that are not in the skill (`benchmarks/solid/asks.json`). It rebuilds the design the model wrote, in a folder of its own, and scores four gates: it built, every print check passed, the size is within 0.1 mm and the volume within 1 percent. Temperature 0, 24 turns at most, 600 s for each reply.
+`benchmarks/solid/run.py` gives the model the solidcraft skill and one bash tool, then asks for three parts that are not in the skill (`benchmarks/solid/asks.json`). It rebuilds the design the model wrote, in a folder of its own, and scores five gates: it built, every print check passed, the size is within 0.1 mm, the volume within 1 percent, and the features where the ask puts them (points on each hole's axis and in each opening must be empty, points in the material around them solid, measured from the part's lowest corner, with the part turned any way its size allows but never mirrored). `tests/solid/test_benchmark_score.py` checks the scorer: a spacer or box turned 90 degrees passes, and an off-center washer hole, a blind spacer hole and a box with two corners rounded fail only the feature gate. Temperature 0, 24 turns at most, 600 s for each reply.
 
 | Model | Host | Date | Spacer 30 x 20 x 12, 5 mm hole | Open box 50 x 30 x 20, 2 mm walls, r3 corners | Washer 20 x 2, 8.4 mm hole | Pass rate |
 |---|---|---|---|---|---|---|
 | LFM3-1.7B (`hf.co/LiquidAI/LFM3-1.7B-GGUF:Q4_K_M`) | abbey1, GTX 1650 SUPER 4 GB, Ollama 0.40.15 | 2026-11-27 | pass, 14 bash calls, 925 s | fail: no reply in 600 s, nothing written | pass, 7 bash calls, 848 s | 2/3 |
 
-Each result, its bash calls and a hash of its transcript are in `benchmarks/results/solidcraft/`. One run per ask, so these are not pass rates over repeats.
+Each result, its bash calls and a hash of its transcript are in `benchmarks/results/solidcraft/`. One run per ask, so these are not pass rates over repeats. The 2026-11-27 run was scored before the feature gate; its two passing designs, taken from the recorded bash calls, pass all five gates in `tests/solid/test_benchmark_score.py`.
 

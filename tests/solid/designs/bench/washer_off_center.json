@@ -1,0 +1,8 @@
+{"sources": ["Request: washer 20 mm across", "Request: thickness 2 mm", "Request: hole diameter 8.4 mm"],
+ "commands": [
+  {"command": "sketch.create", "params": {"plane": "XY", "name": "Washer"}},
+  {"command": "sketch.circle.center", "params": {"center": [10, 10], "diameter": 20}},
+  {"command": "sketch.finish", "params": {}},
+  {"command": "solid.extrude", "params": {"distance": 2, "body_name": "Washer"}},
+  {"command": "solid.cylinder", "params": {"diameter": 8.4, "height": 2, "base": [5, 10, 0], "axis": "Z", "operation": "cut", "targets": ["Washer"]}}
+]}

@@ -7,7 +7,10 @@ The model gets the skill the way Local Studio sends a plugin command (the skill,
 </skill>) and one bash tool. Each ask runs in a fresh scratch folder that is also its HOME, with only
 gantrel-solid and stone on PATH (no gantrel-studio, so no server is left running). Each ask is scored on
 what is on disk afterwards, never on the model's words: the job built, every print check passed, the
-part's size within 0.1 mm of the ask and its volume within 1 percent. Writes
+part's size within 0.1 mm of the ask, its volume within 1 percent, and its features where the ask
+puts them: each point in the ask's empty_mm must be outside the part and each in solid_mm inside it,
+measured from the part's lowest x, y and z corner, with the part turned any way that its size allows
+(never mirrored). Writes
 benchmarks/results/solidcraft/<model>.json.
 
 This is a developer tool: it talks to a model server directly (such as Ollama), and the model's bash
@@ -19,6 +22,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import hashlib
+import itertools
 import json
 import os
 import re
@@ -29,6 +33,10 @@ import tempfile
 import time
 import urllib.request
 from pathlib import Path
+
+import numpy as np
+
+from gantrel_printer.plan import mesh as meshes
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -53,7 +61,7 @@ def chat(base: str, model: str, messages: list) -> dict:
 def bash(command: str, cwd: Path, env: dict) -> str:
     try:
         p = subprocess.run(["bash", "-c", command], cwd=cwd, env=env, capture_output=True, text=True,
-                           timeout=BASH_TIMEOUT, stdin=subprocess.DEVNULL)
+                           errors="replace", timeout=BASH_TIMEOUT, stdin=subprocess.DEVNULL)
         out = p.stdout + p.stderr + ("" if p.returncode == 0 else f"\n(exit {p.returncode})")
     except subprocess.TimeoutExpired:
         out = f"(stopped after {BASH_TIMEOUT} s)"
@@ -67,6 +75,55 @@ def solid(cwd: Path, env: dict, *args: str) -> dict | None:
         return json.loads(p.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):
         return None
+
+
+def inside(tris: np.ndarray, points: np.ndarray) -> list[bool]:
+    """Whether each point is inside the closed mesh: an odd number of triangles crossed by a ray from it."""
+    d = np.array([1.0, 0.0013, 0.0007])
+    v0, e1, e2 = tris[:, 0], tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0]
+    h = np.cross(d, e2)
+    a = (e1 * h).sum(1)
+    f = np.where(np.abs(a) > 1e-12, 1 / np.where(a == 0, 1, a), 0)
+    out = []
+    for p in points:
+        s = p - v0
+        u = f * (s * h).sum(1)
+        q = np.cross(s, e1)
+        v = f * (q @ d)
+        t = f * (e2 * q).sum(1)
+        out.append(bool(((f != 0) & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > 1e-9)).sum() % 2))
+    return out
+
+
+def turns(ask_size: list[float], size: np.ndarray):
+    """The axis-aligned turns, never a mirror image, that put the ask's size onto the part's within 0.1 mm."""
+    for perm in itertools.permutations(range(3)):
+        if any(abs(size[i] - ask_size[perm[i]]) > 0.1 for i in range(3)):
+            continue
+        for flips in itertools.product((1, -1), repeat=3):
+            m = np.zeros((3, 3))
+            m[range(3), perm] = flips
+            if round(np.linalg.det(m)) == 1:
+                yield list(perm), np.array(flips)
+
+
+def features(ask: dict, stl: Path) -> bool:
+    try:
+        tris = meshes.load(stl).tris
+    except meshes.MeshError:
+        return False
+    lo, hi = tris.reshape(-1, 3).min(0), tris.reshape(-1, 3).max(0)
+    size = hi - lo
+
+    def place(points, perm, flips):
+        p = np.array(points, float).reshape(-1, 3)[:, perm]
+        return lo + np.where(flips > 0, p, size - p)
+
+    for perm, flips in turns(ask["size_mm"], size):
+        if not any(inside(tris, place(ask["empty_mm"], perm, flips))) and all(
+                inside(tris, place(ask["solid_mm"], perm, flips))):
+            return True
+    return False
 
 
 def score(ask: dict, work: Path) -> dict:
@@ -88,6 +145,7 @@ def score(ask: dict, work: Path) -> dict:
         "prints": bool(built and built.get("ok")),
         "size": size is not None and all(abs(a - b) <= 0.1 for a, b in zip(size, sorted(ask["size_mm"]))),
         "volume": ok and abs(m["volume_mm3"] - ask["volume_mm3"]) <= 0.01 * ask["volume_mm3"],
+        "features": ok and features(ask, judge / "job" / "build" / "part.stl"),
     }
     shutil.rmtree(judge, ignore_errors=True)
     return {"gates": gates, "pass": all(gates.values()), "size_mm": m and m.get("size_mm"),
@@ -151,6 +209,10 @@ def main() -> int:
     if not os.environ.get("GANTREL_SOLIDCRAFT"):
         sys.exit("set GANTREL_SOLIDCRAFT to solidcraft-cli (gantrel-solid fetch --yes puts it in ~/.local/share/gantrel)")
     asks = json.loads(Path(args.asks).read_text())
+    for ask in asks:
+        missing = [k for k in ("id", "ask", "size_mm", "volume_mm3", "empty_mm", "solid_mm") if k not in ask]
+        if missing:
+            sys.exit(f"{args.asks}: ask {ask.get('id', '?')} has no {', '.join(missing)}")
     RESULTS.mkdir(parents=True, exist_ok=True)
     dest = RESULTS / (re.sub(r"[^A-Za-z0-9.-]+", "_", args.model) + ".json")
     results = []

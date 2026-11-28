@@ -1,0 +1,5 @@
+{"sources": ["spacer block dimensions 30 x 20 x 12 mm and a 5 mm hole straight down through the middle of the 30x20 face"],
+ "commands": [
+  {"command": "solid.box", "params": {"length": 30, "width": 20, "height": 12, "corner": [0, 0, 0], "body_name": "Spacer"}},
+  {"command": "solid.cylinder", "params": {"diameter": 5, "height": 8.5, "base": [15, 10, 3.5], "axis": "Z", "operation": "cut", "targets": ["Spacer"]}}
+]}

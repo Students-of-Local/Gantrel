@@ -115,6 +115,7 @@ touches a printer.
 
 `benchmarks/solid/run.py` runs the skill on a local model over three held-out asks
 (`benchmarks/solid/asks.json`) and scores what it built by rebuilding its design: it built, every
-check passed, the size within 0.1 mm and the volume within 1 percent. On LFM3-1.7B (abbey1, GTX 1650
+check passed, the size within 0.1 mm, the volume within 1 percent, and each hole and opening where the
+ask puts it. On LFM3-1.7B (abbey1, GTX 1650
 SUPER 4 GB) it passed the spacer and the washer and failed the open box, where the model gave no reply
 within 600 s. Results are in `benchmarks/results/solidcraft/` and [BENCHMARKS.md](../BENCHMARKS.md).

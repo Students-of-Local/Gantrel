@@ -1,0 +1,6 @@
+{"sources": ["every size is in the request"],
+ "commands": [
+  {"command": "solid.box", "params": {"length": 30, "width": 50, "height": 20, "corner": [0, 0, 0], "body_name": "Box"}},
+  {"command": "solid.fillet", "params": {"edges": [[0, 0, 10], [30, 0, 10], [30, 50, 10], [0, 50, 10]], "radius": 3, "body": "Box"}},
+  {"command": "solid.shell", "params": {"faces": [[15, 25, 20]], "thickness": 2, "body": "Box"}}
+]}
