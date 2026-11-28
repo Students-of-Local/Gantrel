@@ -1,0 +1,58 @@
+{
+  "summary": {
+    "skill": "skills/runtime/parametric-cad-dfm/SKILL.md",
+    "date": "2026-11-27",
+    "checker": "theon/experiments/gantrel_checker.py (--mode cad-dfm, OpenSCAD 2026.10.11 --backend=manifold + pure-NumPy cad_verify)",
+    "checker_selftest": "20/20 reference parts pass, 6/6 bad mutants caught",
+    "locked_heldout_sha256": "d84e1ce25d0f22332728b14e2f908d90197efd7e2439cd07f5d75f6e1ead48f8",
+    "vet_scan_strict": "PASS (0 findings, 0 blocking)",
+    "promoted_generation": "gen-004 (LFM3-1.7B, 128 lines, 0 heldout regressions)",
+    "frontier_bar": 0.85,
+    "passes_frontier_bar_on_small_local": false,
+    "open_status": "Band C (1.5B-1.7B) raw OpenSCAD authoring improved monotonically from 0/10 to 5/10 public and 0/10 to 1/10 heldout (+10.0pp, 0 regressions) on LFM3-1.7B, but remains open below the 85% frontier bar; Band B LFM2.5-8B-A1B and qwen3-vl:4b truncated inside Ollama <think> past 2048 tokens on raw CAD prompts. print-plan evolution stopped honestly at STOP_PLATEAU_OPEN (live Gen 0 5/6=83.3% heldout beat Gen 1-2 4/6; print-plan/SKILL.md left unchanged)."
+  },
+  "tracks": {
+    "parametric_cad_dfm_lfm3_1p7b": {
+      "model": "hf.co/LiquidAI/LFM3-1.7B-GGUF:Q4_K_M",
+      "band": "C",
+      "stop_state": "STOP_BUDGET_REACHED",
+      "best_gen": 4,
+      "baseline": {"public": "0/10", "heldout": "0/10", "lines": 28},
+      "best_c1_single_shot": {"public": "5/10", "heldout": "1/10", "delta_pp": 10.0, "regressions": 0, "lines": 128},
+      "best_c2_two_attempt": {"public": "5/10", "heldout": "1/10"},
+      "generations": [
+        {"gen": 0, "decision": "BASELINE", "lines": 28, "public": "0/10", "heldout": "0/10", "regr": 0},
+        {"gen": 1, "decision": "REVERT", "lines": 116, "public": "2/10", "heldout": "0/10", "regr": 0},
+        {"gen": 2, "decision": "KEEP", "lines": 129, "public": "4/10", "heldout": "1/10", "regr": 0},
+        {"gen": 3, "decision": "REVERT", "lines": 126, "public": "4/10", "heldout": "1/10", "regr": 1},
+        {"gen": 4, "decision": "KEEP", "lines": 128, "public": "5/10", "heldout": "1/10", "regr": 0},
+        {"gen": 5, "decision": "REVERT", "lines": 128, "public": "2/10", "heldout": "2/10", "regr": 1},
+        {"gen": 6, "decision": "REVERT", "lines": 128, "public": "2/10", "heldout": "0/10", "regr": 1}
+      ]
+    },
+    "parametric_cad_dfm_qwen2p5_1p5b": {
+      "model": "qwen2.5:1.5b",
+      "band": "C_15",
+      "stop_state": "STOP_PLATEAU_OPEN",
+      "best_gen": 0,
+      "baseline": {"public": "0/10", "heldout": "1/10", "lines": 28},
+      "peak_public": {"gen": 2, "public": "3/10", "heldout": "1/10", "regr": 1, "decision": "REVERT"}
+    },
+    "parametric_cad_dfm_lfm2p5_8b": {
+      "model": "hf.co/LiquidAI/LFM2.5-8B-A1B-GGUF:Q4_K_M",
+      "band": "B",
+      "stop_state": "OPEN_THINKING_TRUNCATION",
+      "baseline": {"public": "0/10", "heldout": "0/10"},
+      "gen1": {"decision": "REVERT", "public": "0/10", "heldout": "0/10", "note": "9/10 truncated inside <think> past 2048 tokens"}
+    },
+    "print_plan_lfm2p5_8b": {
+      "model": "hf.co/LiquidAI/LFM2.5-8B-A1B-GGUF:Q4_K_M",
+      "band": "B",
+      "stop_state": "STOP_PLATEAU_OPEN",
+      "promoted": false,
+      "baseline": {"public": "1/6", "heldout": "5/6", "lines": 102},
+      "gen1": {"decision": "REVERT", "public": "3/6", "heldout": "4/6", "regr": 2},
+      "gen2": {"decision": "REVERT", "public": "4/6", "heldout": "4/6", "regr": 1}
+    }
+  }
+}
