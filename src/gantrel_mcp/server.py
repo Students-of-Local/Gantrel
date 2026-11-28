@@ -14,6 +14,7 @@ from __future__ import annotations
 import functools
 import json
 import logging
+import os
 import subprocess
 import sys
 import tempfile
@@ -94,15 +95,18 @@ def plan_summary(p: dict) -> dict:
 def solid(*args: str) -> dict:
     """Run gantrel-solid in this Python and return its JSON line. A refusal (exit 2) is an error; a build that
     failed a command or a print check is a result the model reads and fixes."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("LOCAL_STUDIO_ASK")}
     try:
-        code, out, err = slicing.run_slicer([sys.executable, "-m", "gantrel_solid", *args], SOLID_S)
+        code, out, err = slicing.run_slicer([sys.executable, "-m", "gantrel_solid", *args], SOLID_S, env=env)
     except subprocess.TimeoutExpired:
         raise Refused(f"gantrel-solid {args[0]} took longer than {SOLID_S:.0f} s, so Gantrel stopped it",
-                      f"Run gantrel-solid {args[0]} in a terminal, where it has 120 s") from None
+                      f"Run gantrel-solid {args[0]} in a terminal, where the MCP time limit does not apply") from None
     try:
         data = json.loads(out.strip().splitlines()[-1])
     except (ValueError, IndexError):
-        raise Refused(f"gantrel-solid {args[0]} printed no result: {err.strip()[-300:]}") from None
+        data = None
+    if not isinstance(data, dict):
+        raise PrinterError(f"gantrel-solid {args[0]} printed no result (exit {code})", err.strip()[-300:])
     if code == 2:
         raise Refused(data.get("error", "gantrel-solid refused"))
     return data

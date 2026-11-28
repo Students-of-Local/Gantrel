@@ -14,8 +14,9 @@ release's `SHA256SUMS.txt`.
 
     gantrel-solid doctor
 
-finds `solidcraft-cli` (`GANTREL_SOLIDCRAFT`, then `PATH`, then
-`~/.local/share/gantrel/solidcraft/0.50.0/`) and prints its path and version. When it is missing, it
+finds `solidcraft-cli` (`GANTREL_SOLIDCRAFT`, then `PATH` when that one is 0.50.0, then
+`~/.local/share/gantrel/solidcraft/0.50.0/`, then `PATH` at any version) and prints its path and
+version. On Windows the file is `solidcraft-cli.exe`. When it is missing, it
 prints the steps for this computer: the pinned file's URL and its SHA256. It installs nothing.
 
     gantrel-solid fetch --yes
@@ -23,7 +24,7 @@ prints the steps for this computer: the pinned file's URL and its SHA256. It ins
 on Linux (x86_64 or aarch64) downloads the pinned tarball, checks its SHA256 against the pin and the
 release's `SHA256SUMS.txt`, unpacks only `bin/solidcraft-cli` into
 `~/.local/share/gantrel/solidcraft/0.50.0/` and runs `solidcraft-cli --version`. A file that doesn't
-match is refused and nothing is left behind. Without `--yes` it downloads nothing. It never runs an
+match, a broken download or a bad release URL is refused, and only what fetch made is removed. Without `--yes` it downloads nothing. It never runs an
 installer, asks for sudo or sets up the desktop app. On macOS and Windows, `doctor` prints the steps
 to do by hand: the macOS file is the CLI-only `solidcraft-cli-0.50.0-macos-universal.zip`.
 
