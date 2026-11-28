@@ -546,11 +546,11 @@ class SliceTimeout(PrinterError):
     code = "timeout"
 
 
-def run_slicer(argv: list[str], timeout: float) -> tuple[int, str, str]:
+def run_slicer(argv: list[str], timeout: float, env: dict | None = None) -> tuple[int, str, str]:
     """Run a slicer in its own process group. On a timeout, kill the whole group (a flatpak or AppImage
     slicer runs as a child of what we start) and raise SliceTimeout. Returns (exit code, stdout, stderr)."""
     proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL,
-                            text=True, start_new_session=True)
+                            text=True, start_new_session=True, env=env)
     try:
         out, err = proc.communicate(timeout=timeout)
     except BaseException:
