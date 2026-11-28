@@ -33,18 +33,24 @@ toward that one part. All sizes are in millimeters.
      command, write the design again and build again.
    - `"fixes"`: the part built but a print check failed. Each fix says what to change. Change the
      design and build again.
+   - Stop and ask the person when a fix would change a size they asked for (a 250 mm plate never
+     fits the 220 mm plate check), or after three builds that fail the same way. Say which check
+     fails and why. Never change an asked size without saying so.
 4. Run `gantrel-solid measure solid-job/build/part.step`. Every number in `size_mm` must be within
    0.1 mm of the part's whole size: the size asked for plus anything the request adds on top, such as
    a lip. The enclosure below is asked as 60 x 40 x 30 with a 3 mm lip, so 60 x 40 x 33 is right. If
-   one is not, fix the design and go back to step 3.
+   one is not, fix the design and go back to step 3. The same stop rule applies.
 5. Run `gantrel-studio --job ./solid-job --detach` once. It prints `Give the person this link:
    [Open Gantrel Studio](...)`. Put that Markdown link in your reply exactly as printed. If the
    command is not found, skip this step.
 6. Tell the person the part is ready: its size, the three files in `solid-job/build/` (`part.step`
    for CAD, `part.stl` and `part.3mf` for the slicer) and the sources you used.
 
-If bash prints `gantrel-solid: command not found`, or build says `solidcraft-cli is not installed`,
-tell the person to run `gantrel-solid doctor`, which prints the install steps, then stop. Never
+If bash prints `gantrel-solid: command not found`, Gantrel's tools are not installed: tell the person
+to follow step 2 of the install in Gantrel's README
+(`uv tool install git+https://github.com/Students-of-Local/Gantrel`), then stop. If build says
+`solidcraft-cli is not installed`, tell them to run `gantrel-solid doctor`, which prints the install
+steps, then stop. Never
 install anything yourself. `gantrel-solid fetch --yes` downloads SolidCraft only after the person
 says yes.
 
@@ -116,6 +122,10 @@ A shaft collar for a 10 mm shaft, 24 mm across and 10 mm wide, with a 10.3 mm bo
   {"command": "solid.cylinder", "params": {"diameter": 3.3, "height": 13, "base": [0, 0, 5], "axis": "X", "operation": "cut", "targets": ["Collar"]}}
 ]}
 ```
+
+The cross hole's `height` must be more than the collar's outer radius (24 / 2 + 1 = 13 here) so it
+breaks through the outside, and its `base` z must be half the collar's width (10 / 2 = 5 here) so it
+sits in the middle. Change both when you change the collar's size.
 
 A hole is a cylinder that cuts: for a vertical hole use `axis` `"Z"` and `base` `[x, y, 0]`; for a
 hole across a part use `axis` `"X"` or `"Y"`.

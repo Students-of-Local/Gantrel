@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import os
 import platform
@@ -46,16 +47,23 @@ def data_dir() -> Path:
     return Path.home() / ".local" / "share" / "gantrel" / "solidcraft" / pin.VERSION
 
 
+def cli_name() -> str:
+    return f"{CLI}.exe" if target()[0] == "windows" else CLI
+
+
 def find() -> str | None:
-    """GANTREL_SOLIDCRAFT, then solidcraft-cli on PATH, then the folder fetch fills."""
+    """GANTREL_SOLIDCRAFT, then solidcraft-cli on PATH if it is the pinned version, then the folder fetch
+    fills, then solidcraft-cli on PATH at any version."""
     env = os.environ.get("GANTREL_SOLIDCRAFT")
     if env:
         return env if Path(env).is_file() else shutil.which(env)
     found = shutil.which(CLI)
-    if found:
+    own = data_dir() / cli_name()
+    if not own.is_file():
         return found
-    own = data_dir() / CLI
-    return str(own) if own.is_file() else None
+    if found and version_of(found) == pin.VERSION:
+        return found
+    return str(own)
 
 
 def version_of(exe: str) -> str | None:
@@ -81,7 +89,7 @@ def install_steps() -> dict:
                  f"unpack bin/{CLI} from it into {data_dir()}"]
     else:
         steps = [f"download {url}", f"check its SHA256 is {sha}",
-                 f"put {CLI} from it in {data_dir()}, or set GANTREL_SOLIDCRAFT to its path"]
+                 f"put {cli_name()} from it in {data_dir()}, or set GANTREL_SOLIDCRAFT to its path"]
     return {"url": url, "sha256": sha, "steps": steps}
 
 
@@ -127,8 +135,7 @@ def release_sum(name: str) -> str | None:
 
 def unpack_cli(tarball: Path, dest: Path) -> None:
     with tarfile.open(tarball, "r:gz") as tf:
-        member = next((m for m in tf if m.isfile() and m.name.endswith(f"/bin/{CLI}")
-                       and ".." not in m.name.split("/")), None)
+        member = next((m for m in tf if m.isfile() and m.name.endswith(f"/bin/{CLI}")), None)
         if member is None:
             raise Refused(f"the release file has no bin/{CLI}")
         src = tf.extractfile(member)
@@ -149,10 +156,11 @@ def fetch(args) -> int:
               "url": f"{release_base()}/{name}", "sha256": sha})
         return 2
     final = data_dir()
-    made = next((p for p in reversed((final, *final.parents)) if not p.exists()), None)
-    final.mkdir(parents=True, exist_ok=True)
-    work = Path(tempfile.mkdtemp(prefix=".fetch-", dir=final))
+    made = [p for p in (final, *final.parents) if not p.exists()]
+    work = None
     try:
+        final.mkdir(parents=True, exist_ok=True)
+        work = Path(tempfile.mkdtemp(prefix=".fetch-", dir=final))
         listed = release_sum(name)
         if listed != sha:
             raise Refused(f"the release's {pin.SUMS} lists {listed} for {name}, not the pinned {sha}")
@@ -164,13 +172,17 @@ def fetch(args) -> int:
         if version != pin.VERSION:
             raise Refused(f"the unpacked {CLI} reports version {version}, not {pin.VERSION}")
         os.replace(work / CLI, final / CLI)
-    except (Refused, OSError, tarfile.TarError) as e:
-        shutil.rmtree(work, ignore_errors=True)
-        if made:
-            shutil.rmtree(made, ignore_errors=True)
+    except (Refused, OSError, tarfile.TarError, http.client.HTTPException, ValueError) as e:
         emit({"ok": False, "error": str(e)})
         return 1
-    shutil.rmtree(work)
+    finally:
+        if work:
+            shutil.rmtree(work, ignore_errors=True)
+        for p in made:
+            try:
+                p.rmdir()
+            except OSError:
+                break
     emit({"ok": True, "path": str(final / CLI), "version": pin.VERSION, "sha256": sha})
     return 0
 
