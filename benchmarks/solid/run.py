@@ -9,7 +9,8 @@ gantrel-solid and stone on PATH (no gantrel-studio, so no server is left running
 what is on disk afterwards, never on the model's words: the job built, every print check passed, the
 part's size within 0.1 mm of the ask, its volume within 1 percent, and its features where the ask
 puts them: each point in the ask's empty_mm must be outside the part and each in solid_mm inside it,
-measured from the part's lowest x, y and z corner. Writes
+measured from the part's lowest x, y and z corner, with the part turned any way that its size allows
+(never mirrored). Writes
 benchmarks/results/solidcraft/<model>.json.
 
 This is a developer tool: it talks to a model server directly (such as Ollama), and the model's bash
@@ -21,6 +22,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import hashlib
+import itertools
 import json
 import os
 import re
@@ -93,15 +95,35 @@ def inside(tris: np.ndarray, points: np.ndarray) -> list[bool]:
     return out
 
 
+def turns(ask_size: list[float], size: np.ndarray):
+    """The axis-aligned turns, never a mirror image, that put the ask's size onto the part's within 0.1 mm."""
+    for perm in itertools.permutations(range(3)):
+        if any(abs(size[i] - ask_size[perm[i]]) > 0.1 for i in range(3)):
+            continue
+        for flips in itertools.product((1, -1), repeat=3):
+            m = np.zeros((3, 3))
+            m[range(3), perm] = flips
+            if round(np.linalg.det(m)) == 1:
+                yield list(perm), np.array(flips)
+
+
 def features(ask: dict, stl: Path) -> bool:
     try:
         tris = meshes.load(stl).tris
     except meshes.MeshError:
         return False
-    lo = tris.reshape(-1, 3).min(0)
-    empty = inside(tris, lo + np.array(ask["empty_mm"], float).reshape(-1, 3))
-    solid = inside(tris, lo + np.array(ask["solid_mm"], float).reshape(-1, 3))
-    return not any(empty) and all(solid)
+    lo, hi = tris.reshape(-1, 3).min(0), tris.reshape(-1, 3).max(0)
+    size = hi - lo
+
+    def place(points, perm, flips):
+        p = np.array(points, float).reshape(-1, 3)[:, perm]
+        return lo + np.where(flips > 0, p, size - p)
+
+    for perm, flips in turns(ask["size_mm"], size):
+        if not any(inside(tris, place(ask["empty_mm"], perm, flips))) and all(
+                inside(tris, place(ask["solid_mm"], perm, flips))):
+            return True
+    return False
 
 
 def score(ask: dict, work: Path) -> dict:
@@ -187,6 +209,10 @@ def main() -> int:
     if not os.environ.get("GANTREL_SOLIDCRAFT"):
         sys.exit("set GANTREL_SOLIDCRAFT to solidcraft-cli (gantrel-solid fetch --yes puts it in ~/.local/share/gantrel)")
     asks = json.loads(Path(args.asks).read_text())
+    for ask in asks:
+        missing = [k for k in ("id", "ask", "size_mm", "volume_mm3", "empty_mm", "solid_mm") if k not in ask]
+        if missing:
+            sys.exit(f"{args.asks}: ask {ask.get('id', '?')} has no {', '.join(missing)}")
     RESULTS.mkdir(parents=True, exist_ok=True)
     dest = RESULTS / (re.sub(r"[^A-Za-z0-9.-]+", "_", args.model) + ".json")
     results = []

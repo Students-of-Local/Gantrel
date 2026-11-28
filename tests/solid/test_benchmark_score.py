@@ -19,8 +19,12 @@ ASKS = {a["id"]: a for a in json.loads((ROOT / "benchmarks" / "solid" / "asks.js
 
 @pytest.mark.parametrize("ask, design, failed", [
     ("spacer", "spacer", []),
+    ("spacer", "spacer_turned", []),
+    ("spacer", "spacer_blind", ["features"]),
     ("washer", "washer", []),
     ("open-box", "open-box", []),
+    ("open-box", "open-box_turned", []),
+    ("open-box", "open-box_two_corners", ["features"]),
     ("washer", "washer_off_center", ["features"]),
     ("washer", "washer_6mm", ["features", "volume"]),
 ])
@@ -39,3 +43,14 @@ def test_score_fails_exactly_the_gates_a_design_breaks(solid, tmp_path, monkeypa
 def test_bash_output_that_is_not_utf8_reaches_the_model(tmp_path):
     out = bench.bash(r"printf 'part\377\376'", tmp_path, {"PATH": "/usr/bin:/bin"})
     assert out.startswith("part") and "�" in out
+
+
+def test_an_asks_file_without_feature_points_stops_before_any_model(tmp_path, monkeypatch):
+    asks = tmp_path / "asks.json"
+    asks.write_text('[{"id": "old", "ask": "a cube", "size_mm": [1, 1, 1], "volume_mm3": 1}]')
+    monkeypatch.setenv("GANTREL_SOLIDCRAFT", "unused")
+    monkeypatch.setattr("sys.argv", ["run.py", "--url", "http://127.0.0.1:9", "--model", "m", "--host", "h",
+                                     "--asks", str(asks)])
+    monkeypatch.setattr(bench, "run_ask", lambda *a: pytest.fail("a model ran"))
+    with pytest.raises(SystemExit, match="ask old has no empty_mm, solid_mm"):
+        bench.main()
